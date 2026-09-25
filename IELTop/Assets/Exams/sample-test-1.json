@@ -1,0 +1,75 @@
+{
+  "title": "IELTop Sample Test 1",
+  "source": "IELTop original sample content, released with the app. Replace with licensed exam material.",
+  "parts": [
+    {
+      "id": "L1",
+      "skill": "Listening",
+      "title": "Listening Part 1: Campus Library",
+      "minutes": 8,
+      "instructions": "Listen to the conversation, then choose the correct answer for each question.",
+      "material": "Transcript placeholder. Add an audio file and transcript under Assets/Exams. A student asks a librarian about opening hours and how to borrow a laptop.",
+      "questions": [
+        {
+          "number": 1,
+          "prompt": "What time does the library open on weekdays?",
+          "options": [
+            { "key": "A", "text": "7:00" },
+            { "key": "B", "text": "8:00" },
+            { "key": "C", "text": "9:00" }
+          ],
+          "correctKey": "B"
+        },
+        {
+          "number": 2,
+          "prompt": "How long can a student borrow a laptop?",
+          "options": [
+            { "key": "A", "text": "Two hours" },
+            { "key": "B", "text": "One day" },
+            { "key": "C", "text": "One week" }
+          ],
+          "correctKey": "A"
+        }
+      ]
+    },
+    {
+      "id": "R1",
+      "skill": "Reading",
+      "title": "Reading Passage 1: Urban Green Spaces",
+      "minutes": 12,
+      "instructions": "Read the passage, then answer the questions below.",
+      "material": "Many cities now treat parks as essential infrastructure rather than decoration. Research suggests that access to green space is linked to lower stress and better concentration. Planners who once measured success by road capacity increasingly measure it by how quickly a resident can reach a park on foot.",
+      "questions": [
+        {
+          "number": 3,
+          "prompt": "How do some planners now measure success?",
+          "options": [
+            { "key": "A", "text": "By road capacity" },
+            { "key": "B", "text": "By walking distance to a park" },
+            { "key": "C", "text": "By the number of shops" }
+          ],
+          "correctKey": "B"
+        },
+        {
+          "number": 4,
+          "prompt": "What is green space linked to in the passage?",
+          "options": [
+            { "key": "A", "text": "Lower stress and better focus" },
+            { "key": "B", "text": "Higher rent" },
+            { "key": "C", "text": "Longer commutes" }
+          ],
+          "correctKey": "A"
+        }
+      ]
+    },
+    {
+      "id": "W1",
+      "skill": "Writing",
+      "title": "Writing Task 1: Short Opinion",
+      "minutes": 20,
+      "instructions": "Write at least 120 words. State your view, give two reasons, and finish with a short conclusion.",
+      "material": "Some people believe public transport should be free in large cities. To what extent do you agree or disagree?",
+      "questions": []
+    }
+  ]
+}

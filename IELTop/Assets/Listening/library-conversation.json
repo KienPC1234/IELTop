@@ -1,0 +1,40 @@
+{
+  "id": "L-LIBRARY",
+  "title": "Campus Library Conversation",
+  "source": "IELTop original sample content, released with the app. Replace with licensed material and audio.",
+  "level": "Intermediate",
+  "audioFile": "library-conversation.wav",
+  "transcript": "Student: Excuse me, what time does the library open on weekdays? Librarian: We open at eight every weekday morning, and at ten on weekends. Student: Great. Can I borrow a laptop? Librarian: Yes, you can borrow one for two hours at a time. If you need it longer, just renew it at the desk.",
+  "questions": [
+    {
+      "number": 1,
+      "prompt": "What time does the library open on weekdays?",
+      "options": [
+        { "key": "A", "text": "7:00" },
+        { "key": "B", "text": "8:00" },
+        { "key": "C", "text": "9:00" }
+      ],
+      "correctKey": "B"
+    },
+    {
+      "number": 2,
+      "prompt": "How long can a student borrow a laptop?",
+      "options": [
+        { "key": "A", "text": "Two hours" },
+        { "key": "B", "text": "One day" },
+        { "key": "C", "text": "One week" }
+      ],
+      "correctKey": "A"
+    },
+    {
+      "number": 3,
+      "prompt": "What should a student do to keep a laptop longer?",
+      "options": [
+        { "key": "A", "text": "Renew it at the desk" },
+        { "key": "B", "text": "Pay a fine" },
+        { "key": "C", "text": "Return it and queue again" }
+      ],
+      "correctKey": "A"
+    }
+  ]
+}

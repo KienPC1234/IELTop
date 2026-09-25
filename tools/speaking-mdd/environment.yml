@@ -1,0 +1,22 @@
+# Moi truong conda cho export model MDD, dat trong thu muc nay (.venv).
+# Chay tung lenh sau tu thu muc tools/speaking-mdd:
+#   conda env create -p .venv -f environment.yml
+#   conda activate .\.venv
+#   python export_onnx.py --model facebook/wav2vec2-base-960h --out ./models
+# Muon bat loi am vi (khuyen nghi): thay --model bang checkpoint
+# wav2vec2 CTC da fine-tune tren du lieu am vi (vi du L2-ARCTIC, SpeechOcean762).
+name: ieltop-speaking-mdd
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - --extra-index-url https://download.pytorch.org/whl/cpu
+    - torch
+    - transformers>=4.40
+    - optimum[onnxruntime]>=1.19
+    - onnx>=1.16
+    - onnxruntime>=1.18
+    - numpy
+    - soundfile

@@ -1,0 +1,24 @@
+# IELTop: ignore large models, local database, and Python environments
+*.onnx
+*.onnxtmp
+*.bin
+*.pt
+*.sqlite
+*.db
+settings.json
+**/Assets/Models/*.onnx
+**/Assets/Models/*.vocab
+**/Assets/Models/*.txt
+!**/Assets/Models/README.md
+!**/Assets/Models/.gitkeep
+!**/Assets/Models/phoneme-map.json
+**/Assets/Audio/*.wav
+**/Assets/Audio/*.mp3
+**/Assets/Audio/*.m4a
+# Conda environment for tools, created with: conda env create -p .venv
+**/tools/**/.venv/
+**/tools/**/models/
+__pycache__/
+bin/
+obj/
+.vs/
