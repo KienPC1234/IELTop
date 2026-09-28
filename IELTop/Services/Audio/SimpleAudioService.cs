@@ -10,6 +10,7 @@ namespace IELTop.Services.Audio;
 public interface IAudioService : IDisposable
 {
     bool IsRecording { get; }
+    double Volume { get; set; }
     Task PlayAsync(string filePath, CancellationToken ct = default);
     Task<string> RecordAsync(int seconds = 5, CancellationToken ct = default);
     void StopRecording();
@@ -25,6 +26,8 @@ public sealed class SimpleAudioService : IAudioService
 
     public bool IsRecording => _capture is not null;
 
+    public double Volume { get; set; } = 0.8;
+
     public async Task PlayAsync(string filePath, CancellationToken ct = default)
     {
         StopPlayback();
@@ -32,7 +35,7 @@ public sealed class SimpleAudioService : IAudioService
         var done = new TaskCompletionSource();
         using var registration = ct.Register(() => done.TrySetCanceled());
 
-        _player = new WaveOutEvent();
+        _player = new WaveOutEvent { Volume = (float)Math.Clamp(Volume, 0, 1) };
         _player.Init(reader);
         _player.PlaybackStopped += (_, _) => done.TrySetResult();
         _player.Play();

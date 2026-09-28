@@ -8,19 +8,26 @@ Every entry is a real, downloadable model. All run on CPU.
 
 | Slot | Files | Skill | Source | License |
 |------|-------|-------|--------|---------|
-| vocab-embeddings | `all-MiniLM-L6-v2.onnx` + `vocab.txt` | Vocabulary | Qdrant/all-MiniLM-L6-v2-onnx | Apache-2.0 |
 | mdd-wav2vec2-base | `mdd-wav2vec2-base-int8.onnx` + `mdd-labels.json` | Speaking | bobboyms/wav2vec2-base-en-phoneme-ctc-41h, exported by `tools/speaking-mdd` | Apache-2.0 |
-| whisper-tiny-encoder | `whisper-tiny-encoder.onnx` + `whisper-tiny-tokens.txt` | Speaking | openai/whisper-tiny, exported with Optimum | MIT |
-| whisper-tiny-decoder | `whisper-tiny-decoder.onnx` + `whisper-tiny-tokens.txt` | Speaking | openai/whisper-tiny, exported with Optimum | MIT |
-| listening-vad | `silero-vad.onnx` | Listening | onnx-community/silero-vad | MIT |
-| grammar-gec | `grammar-gec-t5-small.onnx` + `spiece.model` | Writing | vennify/t5-base-grammar-correction, exported with Optimum | CC-BY-NC-SA-4.0 |
+| stt-whisper-tiny-en | `stt-whisper-tiny-en-encoder-int8.onnx` + `stt-whisper-tiny-en-decoder-int8.onnx` + `stt-whisper-tiny-en-vocab.json` | Speaking | openai/whisper-tiny.en, exported by `tools/speech-stt` | MIT |
+| gec-t5-small | `gec-t5-small-encoder-int8.onnx` + `gec-t5-small-decoder-int8.onnx` + `gec-t5-spiece.model` | Writing | Unbabel/gec-t5_small, exported by `tools/writing-gec` | Apache-2.0 |
+| tts-piper-lessac | `tts-piper-lessac-medium.onnx` + `tts-piper-lessac-medium.onnx.json` + folder `espeak-ng/` | Speaking, Listening | rhasspy/piper-voices en_US-lessac-medium, fetched by `tools/speaking-tts` | MIT |
 
 ## Notes
 
-- `grammar-gec` is licensed for non-commercial use. Remove it or replace it if
-  you plan to sell the app.
 - The pronunciation model is the one that makes the Speaking section score
   sounds. Build it with the steps in `tools/speaking-mdd/README.md`.
+- The transcription model turns Speaking recordings into text for AI
+  marking. Build it with `tools/speech-stt/README.md`. Without it,
+  speaking answers fall back to a typed transcript.
+- The grammar model corrects Writing sentence by sentence and caps the
+  grammar band from measured errors. Build it with
+  `tools/writing-gec/README.md`. Without it, Writing falls back to AI
+  marking alone.
+- The examiner voice reads Speaking cues and Listening transcripts.
+  Fetch it with `tools/speaking-tts/README.md`. It needs the portable
+  `espeak-ng/` folder next to it for phonemes. Without it, the built-in
+  Windows voice reads instead.
 - `phoneme-map.json` (committed) is a word to IPA table used to build the target
   pronunciation without a full G2P library. The model emits IPA, so this map
   must use IPA too. After exporting a model, run

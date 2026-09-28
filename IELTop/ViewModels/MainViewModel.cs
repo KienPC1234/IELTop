@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -16,6 +17,7 @@ public sealed partial class ModelSlotViewModel : ObservableObject
 
     [ObservableProperty] private string _state = "Missing";
     [ObservableProperty] private string _message = string.Empty;
+    [ObservableProperty] private string _fileDetail = string.Empty;
 
     public string Name { get; }
     public string Skill { get; }
@@ -23,8 +25,11 @@ public sealed partial class ModelSlotViewModel : ObservableObject
     public string License { get; }
     public string Origin { get; }
     public string FileName { get; }
+    public string? ExtraFileName { get; }
 
     public bool IsReady => OnnxModelRegistry.IsComplete(Name);
+
+    public string FullPath => OnnxModelRegistry.PathOf(Name);
 
     public ModelSlotViewModel(OnnxModelSlot slot, IOnnxService onnx)
     {
@@ -35,20 +40,43 @@ public sealed partial class ModelSlotViewModel : ObservableObject
         License = slot.License;
         Origin = slot.Source;
         FileName = slot.FileName;
+        ExtraFileName = slot.ExtraFile;
         Refresh();
     }
 
     public void Refresh()
     {
         State = IsReady ? "Ready" : "Missing";
+        FileDetail = BuildFileDetail();
         OnPropertyChanged(nameof(IsReady));
+        OnPropertyChanged(nameof(FullPath));
+    }
+
+    /// <summary>
+    /// Debug line for release and publish checks: exact file state on disk,
+    /// with sizes, so a missing model is easy to tell apart from a broken one.
+    /// </summary>
+    private string BuildFileDetail()
+    {
+        var main = DescribeFile(OnnxModelRegistry.PathOf(Name));
+        if (string.IsNullOrEmpty(ExtraFileName))
+            return main;
+        return $"{main} | companion {ExtraFileName}: {DescribeFile(OnnxModelRegistry.PathOfExtra(Name))}";
+    }
+
+    private static string DescribeFile(string path)
+    {
+        if (!File.Exists(path))
+            return "missing";
+        var mb = new FileInfo(path).Length / 1048576.0;
+        return $"{mb:0.0} MB present";
     }
 
     [RelayCommand]
     private void Load()
     {
         if (_onnx.TryLoad(Name, out var error))
-            Message = "Loaded.";
+            Message = $"Loaded. {BuildFileDetail()}";
         else
             Message = error;
         Refresh();
@@ -66,43 +94,30 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _wordCount;
     [ObservableProperty] private int _wordsDue;
     [ObservableProperty] private int _attemptCount;
+    [ObservableProperty] private int _examCount;
+    [ObservableProperty] private string _lastBand = "No test yet";
     [ObservableProperty] private string _averageAccuracy = "0";
     [ObservableProperty] private string _modelsSummary = "0 of 0";
     [ObservableProperty] private string _llmSummary = "Not set";
 
-    public SpeakingViewModel Speaking { get; }
     public ExamViewModel Exam { get; }
-    public VocabularyViewModel Vocabulary { get; }
-    public WritingViewModel Writing { get; }
-    public ReadingViewModel Reading { get; }
-    public ListeningViewModel Listening { get; }
     public SettingsViewModel Settings { get; }
-    public ContentViewModel Content { get; }
+    public ResultsViewModel Results { get; }
 
     public ObservableCollection<ModelSlotViewModel> Models { get; } = new();
 
     public MainViewModel(
         IOnnxService onnx,
         IStatsService stats,
-        SpeakingViewModel speaking,
         ExamViewModel exam,
-        VocabularyViewModel vocabulary,
-        WritingViewModel writing,
-        ReadingViewModel reading,
-        ListeningViewModel listening,
         SettingsViewModel settings,
-        ContentViewModel content)
+        ResultsViewModel results)
     {
         _onnx = onnx;
         _stats = stats;
-        Speaking = speaking;
         Exam = exam;
-        Vocabulary = vocabulary;
-        Writing = writing;
-        Reading = reading;
-        Listening = listening;
         Settings = settings;
-        Content = content;
+        Results = results;
 
         Exam.Load();
         BuildModels();
@@ -118,10 +133,7 @@ public sealed partial class MainViewModel : ObservableObject
     private void OnSettingsChanged()
     {
         RefreshStats();
-        Vocabulary.RefreshAiState();
-        Writing.RefreshAiState();
-        Speaking.RefreshAiState();
-        Content.RefreshAiState();
+        Exam.RefreshAiState();
         OnPropertyChanged(nameof(LlmSummary));
     }
 
@@ -137,6 +149,20 @@ public sealed partial class MainViewModel : ObservableObject
         AverageAccuracy = $"{s.AverageAccuracy:0.#}%";
         ModelsSummary = $"{s.ModelsReady} of {s.ModelsTotal}";
         LlmSummary = s.LlmConfigured ? s.LlmModel : "Not set";
+
+        try
+        {
+            using var db = new Data.AppDbContext();
+            var list = db.ExamAttempts.OrderByDescending(x => x.CreatedAt).Take(20).ToList();
+            ExamCount = db.ExamAttempts.Count();
+            var last = list.FirstOrDefault();
+            LastBand = last is null ? "No test yet" : $"{last.BandLow:0.0} to {last.BandHigh:0.0}";
+        }
+        catch
+        {
+            ExamCount = 0;
+            LastBand = "No test yet";
+        }
 
         foreach (var model in Models)
             model.Refresh();

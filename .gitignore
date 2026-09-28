@@ -7,8 +7,13 @@
 *.db
 settings.json
 **/Assets/Models/*.onnx
+**/Assets/Models/mdd-labels.json
 **/Assets/Models/*.vocab
 **/Assets/Models/*.txt
+**/Assets/Models/*.model
+**/Assets/Models/*vocab.json
+**/Assets/Models/tts-*.json
+**/Assets/Models/espeak-ng/
 !**/Assets/Models/README.md
 !**/Assets/Models/.gitkeep
 !**/Assets/Models/phoneme-map.json

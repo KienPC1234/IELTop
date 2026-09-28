@@ -30,6 +30,25 @@ public sealed class StudyRecord
 }
 
 /// <summary>
+/// A scored mock test attempt, kept so the student can track progress.
+/// Bands are stored as a range, because examiners vary. They are practice
+/// estimates, never official IELTS scores.
+/// </summary>
+public sealed class ExamAttempt
+{
+    public int Id { get; set; }
+    public string PaperTitle { get; set; } = string.Empty;
+    public string Scope { get; set; } = string.Empty;
+    public string Strictness { get; set; } = string.Empty;
+    public double BandLow { get; set; }
+    public double BandHigh { get; set; }
+    public int Correct { get; set; }
+    public int Total { get; set; }
+    public string Summary { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
 /// A scored speaking attempt, kept so the student can track progress.
 /// </summary>
 public sealed class SpeakingAttempt

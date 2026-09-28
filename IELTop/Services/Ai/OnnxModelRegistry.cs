@@ -20,54 +20,40 @@ public sealed record OnnxModelSlot(
 
 /// <summary>
 /// The offline models this app supports. Every entry points to a real,
-/// downloadable model with a recorded source and license. Not all are wired to
-/// a feature yet: the MDD slot drives Speaking scoring today, the others are
-/// loadable and reserved for vocabulary, dictation and grammar features.
-/// All run on CPU. Large files are never committed to git.
+/// downloadable model with a recorded source and license, and every entry is
+/// loaded by a feature: MDD drives the old pronunciation check, STT feeds
+/// speaking transcripts to AI marking, GEC grounds writing grammar bands,
+/// and the Piper voice reads prompts aloud. All run on CPU.
+/// Large files are never committed to git.
 /// </summary>
 public static class OnnxModelRegistry
 {
     public static IReadOnlyList<OnnxModelSlot> Slots { get; } = new List<OnnxModelSlot>
     {
-        new("vocab-embeddings", "all-MiniLM-L6-v2.onnx",
-            "Vocabulary",
-            "Embed words and sentences so the app can suggest related vocabulary",
-            "Apache-2.0",
-            "Qdrant/all-MiniLM-L6-v2-onnx on HuggingFace",
-            ExtraFile: "vocab.txt"),
-
         new("mdd-wav2vec2-base", "mdd-wav2vec2-base-int8.onnx",
             "Speaking",
             "Recognize spoken phonemes so the app can find pronunciation errors",
             "Apache-2.0",
             "bobboyms/wav2vec2-base-en-phoneme-ctc-41h, exported by tools/speaking-mdd",
             ExtraFile: "mdd-labels.json"),
-
-        new("whisper-tiny-encoder", "whisper-tiny-encoder.onnx",
+        new("stt-whisper-tiny-en", "stt-whisper-tiny-en-encoder-int8.onnx",
             "Speaking",
-            "Turn speech into text, encoder half",
+            "Transcribe recorded speech so AI marking can read what was said",
             "MIT",
-            "openai/whisper-tiny, exported with Optimum ONNX",
-            ExtraFile: "whisper-tiny-tokens.txt"),
-        new("whisper-tiny-decoder", "whisper-tiny-decoder.onnx",
-            "Speaking",
-            "Turn speech into text, decoder half",
-            "MIT",
-            "openai/whisper-tiny, exported with Optimum ONNX",
-            ExtraFile: "whisper-tiny-tokens.txt"),
-
-        new("listening-vad", "silero-vad.onnx",
-            "Listening",
-            "Find the speech parts of a clip so silence can be skipped",
-            "MIT",
-            "onnx-community/silero-vad on HuggingFace"),
-
-        new("grammar-gec", "grammar-gec-t5-small.onnx",
+            "openai/whisper-tiny.en, exported by tools/speech-stt",
+            ExtraFile: "stt-whisper-tiny-en-decoder-int8.onnx"),
+        new("gec-t5-small", "gec-t5-small-encoder-int8.onnx",
             "Writing",
-            "Suggest grammar fixes for a sentence",
-            "CC-BY-NC-SA-4.0 (not for commercial use)",
-            "vennify/t5-base-grammar-correction, exported with Optimum ONNX",
-            ExtraFile: "spiece.model"),
+            "Find grammar errors so Writing marking stays strict",
+            "Apache-2.0",
+            "Unbabel/gec-t5_small, exported by tools/writing-gec",
+            ExtraFile: "gec-t5-small-decoder-int8.onnx"),
+        new("tts-piper-lessac", "tts-piper-lessac-medium.onnx",
+            "Speaking, Listening",
+            "Read prompts and transcripts aloud with a neural voice",
+            "MIT",
+            "rhasspy/piper-voices en_US-lessac-medium, fetched by tools/speaking-tts",
+            ExtraFile: "tts-piper-lessac-medium.onnx.json"),
     };
 
     public static string ModelsDir =>

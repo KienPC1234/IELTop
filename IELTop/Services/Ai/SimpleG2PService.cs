@@ -13,7 +13,16 @@ public interface IG2PService
     string[] ToPhonemes(string word);
     string[] SentenceToPhonemes(string sentence);
     string ToDisplay(IEnumerable<string> phonemes);
+
+    /// <summary>Target words split for scoring, with the phonemes of each word.</summary>
+    IReadOnlyList<WordPhonemes> SentenceToWords(string sentence);
+
+    /// <summary>Words with no entry in the map. They are skipped in scoring.</summary>
+    string[] UnknownWords(string sentence);
 }
+
+/// <summary>One target word and its canonical sounds.</summary>
+public sealed record WordPhonemes(string Word, string[] Phonemes);
 
 public sealed class SimpleG2PService : IG2PService
 {
@@ -44,15 +53,38 @@ public sealed class SimpleG2PService : IG2PService
     {
         var key = word.Trim().ToLowerInvariant().Trim('\'', '"', '.', ',', '!', '?', ';', ':');
         if (key.Length == 0) return Array.Empty<string>();
+        if (key.Length == 1 && DigitWords.TryGetValue(key[0], out var digit))
+            key = digit;
         return _map.TryGetValue(key, out var p) ? p : BuildFallback(key);
     }
 
     public string[] SentenceToPhonemes(string sentence)
     {
         var result = new List<string>();
-        foreach (var raw in sentence.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-            result.AddRange(ToPhonemes(raw));
+        foreach (var word in SentenceToWords(sentence))
+            result.AddRange(word.Phonemes);
         return result.ToArray();
+    }
+
+    public IReadOnlyList<WordPhonemes> SentenceToWords(string sentence)
+    {
+        var result = new List<WordPhonemes>();
+        // Hyphenated compounds are spoken as separate words.
+        var cleaned = sentence.Replace('-', ' ').Replace('/', ' ');
+        foreach (var raw in cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            result.Add(new WordPhonemes(raw, ToPhonemes(raw)));
+        return result;
+    }
+
+    public string[] UnknownWords(string sentence)
+    {
+        var unknown = new List<string>();
+        foreach (var word in SentenceToWords(sentence))
+        {
+            if (word.Phonemes.Length == 0 && !unknown.Contains(word.Word, StringComparer.OrdinalIgnoreCase))
+                unknown.Add(word.Word);
+        }
+        return unknown.ToArray();
     }
 
     public string ToDisplay(IEnumerable<string> phonemes)
@@ -88,4 +120,10 @@ public sealed class SimpleG2PService : IG2PService
     /// than guessing, so a missing word cannot create fake pronunciation errors.
     /// </summary>
     private static string[] BuildFallback(string word) => Array.Empty<string>();
+
+    private static readonly Dictionary<char, string> DigitWords = new()
+    {
+        ['0'] = "zero", ['1'] = "one", ['2'] = "two", ['3'] = "three", ['4'] = "four",
+        ['5'] = "five", ['6'] = "six", ['7'] = "seven", ['8'] = "eight", ['9'] = "nine"
+    };
 }

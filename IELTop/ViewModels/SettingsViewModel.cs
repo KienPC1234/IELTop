@@ -28,6 +28,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private bool _isValid = true;
     [ObservableProperty] private string _checkSummary = "Fill in the fields, then press Check.";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDebugDetails))]
+    private string _debugDetails = string.Empty;
 
     public ObservableCollection<string> Problems { get; } = new();
 
@@ -137,11 +140,32 @@ public sealed partial class SettingsViewModel : ObservableObject
             StatusMessage = result.Success
                 ? $"Connected. The model replied: {Truncate(result.Text, 80)}"
                 : result.Error;
+            DebugDetails = BuildDebugDetails(result);
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    public bool HasDebugDetails => !string.IsNullOrWhiteSpace(DebugDetails);
+
+    /// <summary>
+    /// Technical details of the last connection test. The API key value is
+    /// never included, only whether one was sent.
+    /// </summary>
+    private string BuildDebugDetails(LlmResult result)
+    {
+        var endpoint = string.IsNullOrWhiteSpace(result.Endpoint)
+            ? $"{BaseUrl.Trim().TrimEnd('/')}/chat/completions"
+            : result.Endpoint;
+        var status = result.StatusCode == 0 ? "no response" : $"HTTP {result.StatusCode}";
+        return $"Endpoint: {endpoint}\n" +
+               $"Model: {Model.Trim()}\n" +
+               $"API key: {(string.IsNullOrWhiteSpace(ApiKey) ? "empty" : "set")}\n" +
+               $"Vision: {(VisionEnabled ? "on" : "off")}, streaming: {(UseStreaming ? "on" : "off")}\n" +
+               $"Result: {(result.Success ? "ok" : "failed")}, {status}, {result.ElapsedMs} ms\n" +
+               $"Tested at: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
     }
 
     private static string Truncate(string text, int max)

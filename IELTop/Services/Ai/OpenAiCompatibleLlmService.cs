@@ -29,8 +29,16 @@ public sealed record LlmMessage(string Role, string Content, IReadOnlyList<LlmIm
 
 /// <summary>
 /// Result of a chat call. When streaming is used, <see cref="Text"/> holds the full reply.
+/// StatusCode, ElapsedMs and Endpoint are debug details for the Settings test.
+/// The API key is never included here.
 /// </summary>
-public sealed record LlmResult(bool Success, string Text, string Error)
+public sealed record LlmResult(
+    bool Success,
+    string Text,
+    string Error,
+    int StatusCode = 0,
+    long ElapsedMs = 0,
+    string Endpoint = "")
 {
     public static LlmResult Fail(string error) => new(false, string.Empty, error);
 }
@@ -69,43 +77,51 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
 
     public bool VisionEnabled => _settings.Current.LlmVisionEnabled;
 
-    public async Task<LlmResult> TestConnectionAsync(CancellationToken ct = default)
-    {
-        var reply = await CompleteAsync(
+    public Task<LlmResult> TestConnectionAsync(CancellationToken ct = default)
+        => CompleteAsync(
             new[] { LlmMessage.User("Reply with the single word: ok") }, ct);
-        return reply.Success
-            ? new LlmResult(true, reply.Text, string.Empty)
-            : reply;
-    }
 
     public async Task<LlmResult> CompleteAsync(
         IReadOnlyList<LlmMessage> messages, CancellationToken ct = default)
     {
         if (!IsConfigured) return LlmResult.Fail(NotConfiguredMessage);
 
+        var endpoint = $"{_settings.Current.LlmBaseUrl.TrimEnd('/')}/chat/completions";
+        var watch = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             using var request = BuildRequest(messages, stream: false);
             using var response = await _http.SendAsync(request, ct);
             var body = await response.Content.ReadAsStringAsync(ct);
+            watch.Stop();
 
             if (!response.IsSuccessStatusCode)
-                return LlmResult.Fail(DescribeHttpError(response.StatusCode, body));
+                return new LlmResult(false, string.Empty,
+                    DescribeHttpError(response.StatusCode, body),
+                    (int)response.StatusCode, watch.ElapsedMilliseconds, endpoint);
 
             var text = ExtractContent(body);
             return string.IsNullOrEmpty(text)
-                ? LlmResult.Fail("The model returned an empty reply.")
-                : new LlmResult(true, text, string.Empty);
+                ? new LlmResult(false, string.Empty,
+                    "The model returned an empty reply.",
+                    (int)response.StatusCode, watch.ElapsedMilliseconds, endpoint)
+                : new LlmResult(true, text, string.Empty,
+                    (int)response.StatusCode, watch.ElapsedMilliseconds, endpoint);
         }
         catch (TaskCanceledException)
         {
-            return LlmResult.Fail("The request timed out. Check the server and try again.");
+            watch.Stop();
+            return new LlmResult(false, string.Empty,
+                "The request timed out. Check the server and try again.",
+                0, watch.ElapsedMilliseconds, endpoint);
         }
         catch (HttpRequestException)
         {
+            watch.Stop();
             // The raw socket message is not useful to a student. Give the cause and the fix.
-            return LlmResult.Fail(
-                "Could not reach the model server. Check that it is running and that the base URL in Settings is correct.");
+            return new LlmResult(false, string.Empty,
+                "Could not reach the model server. Check that it is running and that the base URL in Settings is correct.",
+                0, watch.ElapsedMilliseconds, endpoint);
         }
     }
 

@@ -26,6 +26,8 @@ public sealed record MddResult(
     string HeardPhonemes,
     string ExpectedPhonemes,
     IReadOnlyList<PhonemeEdit> Edits,
+    IReadOnlyList<WordPronunciation> Words,
+    IReadOnlyList<string> SkippedWords,
     int Substitutions,
     int Omissions,
     int Insertions,
@@ -36,7 +38,19 @@ public sealed record MddResult(
     public double Accuracy => Total == 0 ? 0 : Math.Round(Correct * 100.0 / Total, 1);
 
     public static MddResult Fail(string error, string expected)
-        => new(false, error, string.Empty, expected, Array.Empty<PhonemeEdit>(), 0, 0, 0, 0);
+        => new(false, error, string.Empty, expected,
+            Array.Empty<PhonemeEdit>(), Array.Empty<WordPronunciation>(), Array.Empty<string>(),
+            0, 0, 0, 0);
+}
+
+/// <summary>One target word with the mistakes found inside it.</summary>
+public sealed record WordPronunciation(
+    string Word,
+    string Expected,
+    string Heard,
+    IReadOnlyList<PhonemeEdit> Edits)
+{
+    public bool HasErrors => Edits.Any(e => e.Type != PhonemeErrorType.Correct);
 }
 
 public interface IMddPhonemeService
@@ -71,8 +85,14 @@ public sealed class MddPhonemeService : IMddPhonemeService
 
     public async Task<MddResult> AssessAsync(string wavPath, string targetText, CancellationToken ct = default)
     {
-        var expected = _g2p.SentenceToPhonemes(targetText);
+        var targetWords = _g2p.SentenceToWords(targetText);
+        var expected = targetWords.SelectMany(w => w.Phonemes).ToArray();
         var expectedDisplay = _g2p.ToDisplay(expected);
+        var skipped = targetWords
+            .Where(w => w.Phonemes.Length == 0)
+            .Select(w => w.Word)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         if (!IsModelAvailable())
             return MddResult.Fail("The pronunciation model is not installed. See Assets/Models for setup.", expectedDisplay);
@@ -98,8 +118,62 @@ public sealed class MddPhonemeService : IMddPhonemeService
             int omi = edits.Count(x => x.Type == PhonemeErrorType.Omission);
             int ins = edits.Count(x => x.Type == PhonemeErrorType.Insertion);
             int ok = edits.Count(x => x.Type == PhonemeErrorType.Correct);
-            return new MddResult(true, string.Empty, display, expectedDisplay, edits, sub, omi, ins, ok);
+            var words = GroupByWord(targetWords, edits);
+            return new MddResult(true, string.Empty, display, expectedDisplay, edits, words, skipped, sub, omi, ins, ok);
         }, ct);
+    }
+
+    /// <summary>
+    /// Puts every edit inside its target word, so mistakes read as
+    /// "in 'think': ..." instead of a bare phoneme position.
+    /// Insertions sit between sounds, so they join the word on their left.
+    /// </summary>
+    private static IReadOnlyList<WordPronunciation> GroupByWord(
+        IReadOnlyList<WordPhonemes> targetWords, IReadOnlyList<PhonemeEdit> edits)
+    {
+        var starts = new List<int>(targetWords.Count);
+        int at = 0;
+        foreach (var w in targetWords)
+        {
+            starts.Add(at);
+            at += w.Phonemes.Length;
+        }
+
+        var buckets = targetWords.Select(_ => new List<PhonemeEdit>()).ToList();
+        foreach (var edit in edits)
+        {
+            int word = edit.Expected is null
+                ? WordAt(starts, targetWords, edit.Position - 1)
+                : WordAt(starts, targetWords, edit.Position);
+            if (word >= 0)
+                buckets[word].Add(edit);
+        }
+
+        var result = new List<WordPronunciation>(targetWords.Count);
+        for (int i = 0; i < targetWords.Count; i++)
+        {
+            var heard = buckets[i]
+                .Where(e => e.Heard is not null)
+                .Select(e => e.Heard!);
+            result.Add(new WordPronunciation(
+                targetWords[i].Word,
+                string.Join(" ", targetWords[i].Phonemes.Select(p => $"/{p}/")),
+                string.Join(" ", heard.Select(p => $"/{p}/")),
+                buckets[i]));
+        }
+        return result;
+    }
+
+    /// <summary>Index of the word owning an expected sound position, or -1.</summary>
+    private static int WordAt(List<int> starts, IReadOnlyList<WordPhonemes> words, int position)
+    {
+        for (int i = 0; i < words.Count; i++)
+        {
+            int end = starts[i] + words[i].Phonemes.Length;
+            if (position >= starts[i] && position < end)
+                return i;
+        }
+        return words.Count > 0 && position < 0 ? 0 : -1;
     }
 
     private string[] LoadLabels()

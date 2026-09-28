@@ -10,6 +10,7 @@ public sealed class AppDbContext : DbContext
     public DbSet<VocabularyWord> Words => Set<VocabularyWord>();
     public DbSet<StudyRecord> StudyRecords => Set<StudyRecord>();
     public DbSet<SpeakingAttempt> SpeakingAttempts => Set<SpeakingAttempt>();
+    public DbSet<ExamAttempt> ExamAttempts => Set<ExamAttempt>();
 
     private readonly string _dbPath;
 

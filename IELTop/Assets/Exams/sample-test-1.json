@@ -6,9 +6,12 @@
       "id": "L1",
       "skill": "Listening",
       "title": "Listening Part 1: Campus Library",
+      "topic": "Campus life",
+      "taskType": "Part 1",
       "minutes": 8,
-      "instructions": "Listen to the conversation, then choose the correct answer for each question.",
-      "material": "Transcript placeholder. Add an audio file and transcript under Assets/Exams. A student asks a librarian about opening hours and how to borrow a laptop.",
+      "instructions": "Listen to the conversation, then choose the correct answer for each question. The clip plays once.",
+      "material": "Good morning, campus library, how can I help you? Hi, I am a new student. Could you tell me your opening hours on weekdays? Of course. From Monday to Friday we open at 8 in the morning and close at 10 at night. On weekends we open later, at 9. Great. And can I borrow a laptop? My own computer is being repaired. Yes, students can borrow a laptop for two hours at a time. Just bring your student card to the front desk. Two hours is enough for my class. Thank you very much. You are welcome. Enjoy your first week.",
+      "audioFile": "",
       "questions": [
         {
           "number": 1,
@@ -36,6 +39,8 @@
       "id": "R1",
       "skill": "Reading",
       "title": "Reading Passage 1: Urban Green Spaces",
+      "topic": "Cities and nature",
+      "taskType": "Passage 1",
       "minutes": 12,
       "instructions": "Read the passage, then answer the questions below.",
       "material": "Many cities now treat parks as essential infrastructure rather than decoration. Research suggests that access to green space is linked to lower stress and better concentration. Planners who once measured success by road capacity increasingly measure it by how quickly a resident can reach a park on foot.",
@@ -48,7 +53,8 @@
             { "key": "B", "text": "By walking distance to a park" },
             { "key": "C", "text": "By the number of shops" }
           ],
-          "correctKey": "B"
+          "correctKey": "B",
+          "explanation": "The passage says planners increasingly measure success by how quickly a resident can reach a park on foot."
         },
         {
           "number": 4,
@@ -58,17 +64,43 @@
             { "key": "B", "text": "Higher rent" },
             { "key": "C", "text": "Longer commutes" }
           ],
-          "correctKey": "A"
+          "correctKey": "A",
+          "explanation": "The passage links green space to lower stress and better concentration."
         }
       ]
     },
     {
       "id": "W1",
       "skill": "Writing",
-      "title": "Writing Task 1: Short Opinion",
-      "minutes": 20,
-      "instructions": "Write at least 120 words. State your view, give two reasons, and finish with a short conclusion.",
+      "title": "Writing Task 2: Free Public Transport",
+      "topic": "Cities and transport",
+      "taskType": "Task 2 Opinion",
+      "minutes": 40,
+      "instructions": "Write at least 250 words. State your view, give two reasons with examples, and finish with a short conclusion.",
       "material": "Some people believe public transport should be free in large cities. To what extent do you agree or disagree?",
+      "questions": []
+    },
+    {
+      "id": "S1",
+      "skill": "Speaking",
+      "title": "Speaking Part 1: Hometown",
+      "topic": "Hometown",
+      "taskType": "Part 1",
+      "minutes": 2,
+      "instructions": "Answer in 2 to 3 sentences per question. Speak for about 60 seconds, no pause.",
+      "material": "Where are you from? What do you like most about your hometown? Has it changed much in recent years?",
+      "questions": []
+    },
+    {
+      "id": "S2",
+      "skill": "Speaking",
+      "title": "Speaking Part 2: Cue Card",
+      "topic": "A useful skill",
+      "taskType": "Part 2 Cue Card",
+      "minutes": 2,
+      "prepSeconds": 60,
+      "instructions": "You have 1 minute to prepare, then speak for 1 to 2 minutes without pause.",
+      "material": "Describe a skill you would like to learn. You should say what it is, why you want to learn it, how you would learn it, and how it would help you.",
       "questions": []
     }
   ]

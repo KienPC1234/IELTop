@@ -22,28 +22,22 @@ namespace IELTop
                 {
                     services.AddSingleton<ISettingsStore, SettingsStore>();
                     services.AddSingleton<IStatsService, StatsService>();
-                    services.AddSingleton<IFileTextExtractor, FileTextExtractor>();
-                    services.AddSingleton<IFileDialogService, FileDialogService>();
-                    services.AddSingleton<IContentImportService, ContentImportService>();
-                    services.AddSingleton<IPaperExporter, PaperExporter>();
                     services.AddSingleton<IOnnxService, OnnxService>();
                     services.AddSingleton<IAudioService, SimpleAudioService>();
+                    services.AddSingleton<WindowsTtsService>();
+                    services.AddSingleton<ITtsService, PiperTtsService>();
+                    services.AddSingleton<ISttService, SttService>();
+                    services.AddSingleton<IGecService, GecService>();
                     services.AddSingleton<IG2PService, SimpleG2PService>();
                     services.AddSingleton<IMddPhonemeService, MddPhonemeService>();
                     services.AddSingleton<IExamRepository, ExamRepository>();
-                    services.AddSingleton<IPracticeRepository, PracticeRepository>();
                     services.AddSingleton<ILlmService, OpenAiCompatibleLlmService>();
                     services.AddSingleton<IIeltsAiService, IeltsAiService>();
 
                     services.AddSingleton<MainViewModel>();
-                    services.AddSingleton<SpeakingViewModel>();
                     services.AddSingleton<ExamViewModel>();
-                    services.AddSingleton<VocabularyViewModel>();
-                    services.AddSingleton<WritingViewModel>();
-                    services.AddSingleton<ReadingViewModel>();
-                    services.AddSingleton<ListeningViewModel>();
                     services.AddSingleton<SettingsViewModel>();
-                    services.AddSingleton<ContentViewModel>();
+                    services.AddSingleton<ResultsViewModel>();
 
                     services.AddTransient<MainWindow>();
                 })

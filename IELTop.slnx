@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="IELTop/IELTop.csproj" />
+  <Project Path="IELTop_Content_Server/IELTop_Content_Server.csproj" Id="942a150b-2799-47d4-b9a3-8d4d09086415" />
 </Solution>
