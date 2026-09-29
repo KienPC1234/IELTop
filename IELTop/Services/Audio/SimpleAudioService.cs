@@ -31,7 +31,7 @@ public sealed class SimpleAudioService : IAudioService
     public async Task PlayAsync(string filePath, CancellationToken ct = default)
     {
         StopPlayback();
-        using var reader = new AudioFileReader(filePath);
+        using WaveStream reader = OpenReader(filePath);
         var done = new TaskCompletionSource();
         using var registration = ct.Register(() => done.TrySetCanceled());
 
@@ -40,6 +40,23 @@ public sealed class SimpleAudioService : IAudioService
         _player.PlaybackStopped += (_, _) => done.TrySetResult();
         _player.Play();
         await done.Task;
+    }
+
+    /// <summary>
+    /// Opens a real exam clip. WAV, MP3, and AIFF are read directly.
+    /// M4A, Opus, and other containers go through Media Foundation, which
+    /// decodes them on Windows. A synthetic voice is never used for Listening.
+    /// </summary>
+    private static WaveStream OpenReader(string filePath)
+    {
+        var extension = Path.GetExtension(filePath).ToLowerInvariant();
+        return extension switch
+        {
+            ".wav" => new WaveFileReader(filePath),
+            ".mp3" => new Mp3FileReader(filePath),
+            ".aiff" or ".aif" => new AiffFileReader(filePath),
+            _ => new MediaFoundationReader(filePath)
+        };
     }
 
     public Task<string> RecordAsync(int seconds = 5, CancellationToken ct = default)

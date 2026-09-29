@@ -169,6 +169,11 @@ public sealed partial class MainViewModel : ObservableObject
             if (e.PropertyName == nameof(ExamViewModel.IsRunning))
                 OnPropertyChanged(nameof(IsExamRunning));
         };
+
+        // A quiet update check on startup, off by default in the store only
+        // when the user says so, and never blocking the first screen.
+        if (Settings.UpdateCheckOnStartup)
+            _ = Settings.CheckForUpdatesCommand.ExecuteAsync(null);
     }
 
     /// <summary>True while the Mock Test page runs a test. Pins the exam bars.</summary>

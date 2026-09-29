@@ -7,144 +7,6 @@
         MinHeight="640" MinWidth="1040"
         Background="{StaticResource BgBrush}"
         WindowStartupLocation="CenterScreen">
-    <Window.Resources>
-        <Style x:Key="PaletteButton" TargetType="Button">
-            <Setter Property="Background" Value="#F5F6FA"/>
-            <Setter Property="Foreground" Value="#6B7280"/>
-            <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Margin" Value="0,0,6,6"/>
-            <Setter Property="Width" Value="36"/>
-            <Setter Property="Height" Value="32"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Cursor" Value="Hand"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8"
-                                TextElement.Foreground="{TemplateBinding Foreground}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding IsAnswered}" Value="True">
-                    <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-                    <Setter Property="Foreground" Value="White"/>
-                    <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding IsFlagged}" Value="True">
-                    <Setter Property="BorderBrush" Value="#F59E0B"/>
-                    <Setter Property="BorderThickness" Value="2"/>
-                </DataTrigger>
-            </Style.Triggers>
-        </Style>
-
-        <DataTemplate x:Key="ExamQuestionTemplate">
-            <Border Style="{StaticResource Card}" Margin="0,0,0,10" Padding="16">
-                <StackPanel>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{Binding NumberLabel}" FontWeight="SemiBold" FontSize="12"
-                                   Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center"/>
-                        <CheckBox Grid.Column="1" Content="{Binding FlagLabel}" FontSize="12"
-                                  IsChecked="{Binding IsFlagged}"/>
-                    </Grid>
-                    <TextBlock Text="{Binding Prompt}" TextWrapping="Wrap" Margin="0,4,0,10"
-                               FontSize="{Binding DataContext.Exam.FontScale, RelativeSource={RelativeSource AncestorType=ScrollViewer}, Converter={StaticResource ScaleFont}, ConverterParameter=14}"/>
-                    <StackPanel Visibility="{Binding ShowOptions, Converter={StaticResource Bool2Visibility}}">
-                        <ItemsControl ItemsSource="{Binding Options}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <RadioButton Content="{Binding Text}" Margin="0,3"
-                                                 FontSize="{Binding DataContext.Exam.FontScale, RelativeSource={RelativeSource AncestorType=ScrollViewer}, Converter={StaticResource ScaleFont}, ConverterParameter=14}"
-                                                 GroupName="{Binding GroupName}"
-                                                 IsChecked="{Binding IsSelected, Mode=TwoWay}"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                    <StackPanel Visibility="{Binding IsGap, Converter={StaticResource Bool2Visibility}}">
-                        <TextBox Text="{Binding Answer, UpdateSourceTrigger=PropertyChanged}"
-                                 Padding="8" FontSize="14" MaxLength="60"
-                                 hc:InfoElement.Placeholder="Type your answer here."/>
-                        <TextBlock Text="Write no more than the word limit in the instructions. Spelling must be correct."
-                                   FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                    </StackPanel>
-                    <StackPanel Visibility="{Binding IsMatch, Converter={StaticResource Bool2Visibility}}">
-                        <TextBlock Text="Drag each item into its gap." FontSize="11"
-                                   Foreground="{StaticResource MutedBrush}" Margin="0,0,0,6"/>
-                        <ItemsControl ItemsSource="{Binding Bank}" Margin="0,0,0,6">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="#EEF2FF" BorderBrush="#C7D2FE" BorderThickness="1"
-                                            CornerRadius="8" Padding="10,6" Margin="0,0,6,6">
-                                        <TextBlock Text="{Binding}" FontSize="13" Cursor="Hand"
-                                                   PreviewMouseMove="BankItem_PreviewMouseMove"/>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <ItemsControl ItemsSource="{Binding MatchRows}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Grid Margin="0,4">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                            <ColumnDefinition Width="Auto"/>
-                                        </Grid.ColumnDefinitions>
-                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13"
-                                                   VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,8,0"/>
-                                        <Border Grid.Column="1" AllowDrop="True" Drop="Gap_Drop"
-                                                MinWidth="140" MinHeight="32" CornerRadius="8" Padding="8,4"
-                                                Background="#F9FAFB" BorderBrush="{StaticResource LineBrush}" BorderThickness="1">
-                                            <TextBlock Text="{Binding Selected}" FontSize="13" VerticalAlignment="Center"/>
-                                        </Border>
-                                        <Button Grid.Column="2" Style="{StaticResource GhostButton}" Content="x"
-                                                Margin="6,0,0,0" Padding="10,4" Click="ClearRow_Click"/>
-                                    </Grid>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-        </DataTemplate>
-
-        <!-- One focused question with jump palette, like the real test -->
-        <DataTemplate x:Key="QuestionNavigator">
-            <StackPanel>
-                <TextBlock Text="{Binding ProgressLabel}" FontSize="12"
-                           Foreground="{StaticResource MutedBrush}" Margin="0,0,0,6"/>
-                <ContentControl Content="{Binding FocusedQuestion}"
-                                ContentTemplate="{StaticResource ExamQuestionTemplate}"/>
-                <WrapPanel Margin="0,2,0,0">
-                    <Button Style="{StaticResource GhostButton}" Content="Previous question" Margin="0,0,8,8"
-                            Command="{Binding DataContext.Exam.PreviousQuestionCommand,
-                                RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
-                            IsEnabled="{Binding CanQuestionBack}"/>
-                    <Button Style="{StaticResource GhostButton}" Content="Next question" Margin="0,0,8,8"
-                            Command="{Binding DataContext.Exam.NextQuestionCommand,
-                                RelativeSource={RelativeSource AncestorType=ScrollViewer}}"
-                            IsEnabled="{Binding CanQuestionNext}"/>
-                </WrapPanel>
-            </StackPanel>
-        </DataTemplate>
-    </Window.Resources>
-
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="252"/>
@@ -282,66 +144,10 @@
 
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- Sticky test chrome: timer, strict badge and submit stay put -->
-            <StackPanel Grid.Row="0" Margin="28,16,28,0"
-                        Visibility="{Binding IsExamRunning, Converter={StaticResource Bool2Visibility}}">
-                <Border Background="{StaticResource SidebarBrush}" CornerRadius="12" Padding="14,10" Margin="0,0,0,10">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="{Binding Exam.CurrentPart.Title}" Foreground="White"
-                                   FontWeight="SemiBold" FontSize="14" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="Time left  " Foreground="#9CA3AF" FontSize="12" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding Exam.CurrentPart.RemainingLabel}"
-                                       FontSize="22" FontWeight="Bold" VerticalAlignment="Center">
-                                <TextBlock.Style>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="White"/>
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding Exam.CurrentPart.IsLowTime}" Value="True">
-                                                <Setter Property="Foreground" Value="#FBBF24"/>
-                                            </DataTrigger>
-                                            <DataTrigger Binding="{Binding Exam.CurrentPart.IsCriticalTime}" Value="True">
-                                                <Setter Property="Foreground" Value="#F87171"/>
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </TextBlock.Style>
-                            </TextBlock>
-                        </StackPanel>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"
-                                    Visibility="{Binding Exam.CurrentPart.IsListening, Converter={StaticResource Bool2Visibility}}">
-                            <TextBlock Text="Volume  " Foreground="#9CA3AF" FontSize="12" VerticalAlignment="Center"/>
-                            <Slider Width="120" Minimum="0" Maximum="100" Value="{Binding Exam.Volume}" VerticalAlignment="Center"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,0,0">
-                            <Border Background="#7F1D1D" CornerRadius="12" Padding="8,3" Margin="0,0,8,0"
-                                    Visibility="{Binding Exam.StrictMode, Converter={StaticResource Bool2Visibility}}">
-                                <TextBlock Text="Strict" Foreground="White" FontSize="12" FontWeight="SemiBold"/>
-                            </Border>
-                            <Button Style="{StaticResource PrimaryButton}" Content="Submit" Padding="14,6"
-                                    Command="{Binding Exam.SubmitExamCommand}"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-                <Border Background="#7F1D1D" CornerRadius="12" Padding="14,8" Margin="0,0,0,10"
-                        Visibility="{Binding Exam.HasViolations, Converter={StaticResource Bool2Visibility}}">
-                    <TextBlock Text="{Binding Exam.ViolationLabel}" Foreground="White"
-                               FontSize="12" FontWeight="SemiBold"/>
-                </Border>
-            </StackPanel>
-
-            <ScrollViewer Grid.Row="1" Padding="28,12" VerticalScrollBarVisibility="Auto">
+            <ScrollViewer Grid.Row="0" Padding="28,16" VerticalScrollBarVisibility="Auto">
                 <StackPanel MaxWidth="920">
 
                 <!-- ===================== Overview ===================== -->
@@ -393,35 +199,71 @@
                     <Border Style="{StaticResource Card}" Margin="0,0,0,12">
                         <StackPanel>
                             <TextBlock Text="Step 1: Choose what to take" Style="{StaticResource SectionTitle}"/>
-                            <Grid>
+                            <TextBlock Text="Tick a skill. One skill runs alone, or tick several for a mixed test. Listening needs another skill too."
+                                       FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                            <TextBlock Text="Paper" FontSize="12" Foreground="{StaticResource MutedBrush}"/>
+                            <ComboBox ItemsSource="{Binding Exam.Papers}" SelectedItem="{Binding Exam.SelectedPaper}"
+                                      DisplayMemberPath="Title" Padding="8" Margin="0,2,0,4"
+                                      hc:InfoElement.Placeholder="Choose a test paper"/>
+                            <TextBlock FontSize="11" Margin="0,0,0,12">
+                                <Run Text="{Binding Exam.PaperCountLabel, Mode=OneWay}" Foreground="{StaticResource MutedBrush}"/>
+                                <Run Text=" "/>
+                                <Hyperlink Command="{Binding GoLibraryCommand}">Manage in Library</Hyperlink>
+                            </TextBlock>
+
+                            <TextBlock Text="Skills" FontSize="12" Foreground="{StaticResource MutedBrush}" Margin="0,0,0,4"/>
+                            <ItemsControl ItemsSource="{Binding Exam.SkillOptions}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#F9FAFB" BorderBrush="{StaticResource LineBrush}" BorderThickness="1"
+                                                CornerRadius="8" Padding="12,8" Margin="0,0,8,8" MinWidth="180">
+                                            <StackPanel>
+                                                <CheckBox IsChecked="{Binding IsSelected}" IsEnabled="{Binding HasParts}"
+                                                          Content="{Binding Name}" FontSize="14" FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding CountLabel}" FontSize="11"
+                                                           Foreground="{StaticResource MutedBrush}" Margin="24,2,0,0"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Grid Margin="0,4,0,0"
+                                  Visibility="{Binding Exam.TaskTypeOptions.Count, Converter={StaticResource Count2Visibility}}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-                                <StackPanel Grid.Column="0" Margin="0,0,8,0">
-                                    <TextBlock Text="Paper" FontSize="12" Foreground="{StaticResource MutedBrush}"/>
-                                    <ComboBox ItemsSource="{Binding Exam.Papers}" SelectedItem="{Binding Exam.SelectedPaper}"
-                                              DisplayMemberPath="Title" Padding="8" Margin="0,2,0,4"
-                                              hc:InfoElement.Placeholder="Choose a test paper"/>
-                                    <TextBlock FontSize="11" Margin="0,0,0,8">
-                                        <Run Text="{Binding Exam.PaperCountLabel, Mode=OneWay}" Foreground="{StaticResource MutedBrush}"/>
-                                        <Run Text=" "/>
-                                        <Hyperlink Command="{Binding GoLibraryCommand}">Manage in Library</Hyperlink>
-                                    </TextBlock>
-                                    <TextBlock Text="Scope" FontSize="12" Foreground="{StaticResource MutedBrush}"/>
-                                    <ComboBox ItemsSource="{Binding Exam.Scopes}" SelectedItem="{Binding Exam.SelectedScope}"
-                                              Padding="8" Margin="0,2,0,0"/>
-                                </StackPanel>
-                                <StackPanel Grid.Column="1" Margin="8,0,0,0">
-                                    <TextBlock Text="Task type" FontSize="12" Foreground="{StaticResource MutedBrush}"/>
-                                    <ComboBox ItemsSource="{Binding Exam.TaskTypes}" SelectedItem="{Binding Exam.SelectedTaskType}"
-                                              Padding="8" Margin="0,2,0,8"/>
-                                    <CheckBox Content="Mix parts from all papers" Margin="0,2,0,0"
-                                              IsChecked="{Binding Exam.MixAllPapers}"/>
-                                    <TextBlock Text="Listening only runs inside a full test, because its audio cannot be split."
-                                               FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                                </StackPanel>
+                                <TextBlock Grid.Column="0" Text="Task types (advanced, leave all ticked for no filter)"
+                                           FontSize="12" Foreground="{StaticResource MutedBrush}"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Exam.SelectedTaskTypesLabel}"
+                                           FontSize="11" Foreground="{StaticResource MutedBrush}"/>
                             </Grid>
+                            <ItemsControl ItemsSource="{Binding Exam.TaskTypeOptions}" Margin="0,4,0,0">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsSelected}" Content="{Binding Name}"
+                                                  FontSize="13" Margin="0,0,16,6"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <CheckBox Content="Mix parts from all papers" Margin="0,6,0,0"
+                                      IsChecked="{Binding Exam.MixAllPapers}"/>
+                            <TextBlock Text="{Binding Exam.SelectedSkillsLabel}"
+                                       FontSize="12" Foreground="{StaticResource AccentBrush}" Margin="0,8,0,0"
+                                       TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
 
@@ -467,13 +309,11 @@
                                 </StackPanel>
                                 <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Bottom">
                                     <Button Style="{StaticResource PrimaryButton}" Content="Start test" Margin="0,0,0,8"
-                                            HorizontalAlignment="Stretch"
+                                            HorizontalAlignment="Stretch" Padding="14,12" FontSize="15"
                                             Command="{Binding Exam.StartExamCommand}"
-                                            IsEnabled="{Binding Exam.IsRunning, Converter={StaticResource InverseBool}}"/>
-                                    <Button Style="{StaticResource PrimaryButton}" Content="Submit" Margin="0,0,0,8"
-                                            HorizontalAlignment="Stretch"
-                                            Command="{Binding Exam.SubmitExamCommand}"
-                                            IsEnabled="{Binding Exam.IsRunning}"/>
+                                            IsEnabled="{Binding Exam.CanStartSetup}"/>
+                                    <TextBlock Text="The test opens in its own window with a timer, part tabs, and a question palette."
+                                               FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Grid>
                             <WrapPanel Margin="0,8,0,0">
@@ -542,251 +382,6 @@
                         <TextBlock Text="{Binding Exam.MaterialWarning}" FontSize="12" TextWrapping="Wrap"/>
                     </Border>
 
-                    <StackPanel Visibility="{Binding Exam.IsRunning, Converter={StaticResource Bool2Visibility}}">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-
-                            <StackPanel>
-                                <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Exam.CurrentPart.HeaderLine}" FontSize="12" Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{Binding Exam.CurrentPart.Instructions}" Foreground="{StaticResource MutedBrush}"
-                                                   FontSize="12" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                                        <TextBlock Text="Speaking runs without pause. Record once, then finish the part."
-                                                   FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"
-                                                   Visibility="{Binding Exam.CurrentPart.IsSpeaking, Converter={StaticResource Bool2Visibility}}"/>
-                                        <TextBlock Text="The clip plays once and does not replay, like the real test."
-                                                   FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,8,0,0"
-                                                   Visibility="{Binding Exam.CurrentPart.IsListening, Converter={StaticResource Bool2Visibility}}"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <!-- Reading split screen: passage on the left, questions on the right -->
-                                <Grid Margin="0,0,0,10"
-                                      Visibility="{Binding Exam.CurrentPart.IsReading, Converter={StaticResource Bool2Visibility}}">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Style="{StaticResource Card}" Margin="0,0,7,0">
-                                        <StackPanel>
-                                            <WrapPanel Margin="0,0,0,8">
-                                                <Button Style="{StaticResource GhostButton}" Content="Highlight" Margin="0,0,8,0"
-                                                        Padding="10,4" Click="HighlightButton_Click"/>
-                                                <Button Style="{StaticResource GhostButton}" Content="Clear" Margin="0,0,8,0"
-                                                        Padding="10,4" Click="ClearHighlightButton_Click"/>
-                                            </WrapPanel>
-                                            <RichTextBox x:Name="PassageBox" local:RichText.Text="{Binding Exam.CurrentPart.Material}"
-                                                         IsReadOnly="True" BorderThickness="0" Background="Transparent"
-                                                         FontSize="{Binding DataContext.Exam.FontScale, RelativeSource={RelativeSource AncestorType=ScrollViewer}, Converter={StaticResource ScaleFont}, ConverterParameter=13}" MaxHeight="420"
-                                                         VerticalScrollBarVisibility="Auto">
-                                                <RichTextBox.ContextMenu>
-                                                    <ContextMenu>
-                                                        <MenuItem Header="Highlight" Click="HighlightButton_Click"/>
-                                                        <MenuItem Header="Clear highlights" Click="ClearHighlightButton_Click"/>
-                                                    </ContextMenu>
-                                                </RichTextBox.ContextMenu>
-                                                <RichTextBox.Resources>
-                                                    <Style TargetType="Paragraph">
-                                                        <Setter Property="Margin" Value="0,0,0,8"/>
-                                                    </Style>
-                                                </RichTextBox.Resources>
-                                            </RichTextBox>
-                                        </StackPanel>
-                                    </Border>
-                                    <StackPanel Grid.Column="1" Margin="7,0,0,0">
-                                        <ContentControl Content="{Binding Exam.CurrentPart}"
-                                                        ContentTemplate="{StaticResource QuestionNavigator}"
-                                                        Visibility="{Binding Exam.CurrentPart.HasQuestions, Converter={StaticResource Bool2Visibility}}"/>
-                                    </StackPanel>
-                                </Grid>
-
-                                <!-- Listening audio card: no transcript on screen while it plays -->
-                                <Border Style="{StaticResource Card}" Margin="0,0,0,10"
-                                        Visibility="{Binding Exam.CurrentPart.IsListening, Converter={StaticResource Bool2Visibility}}">
-                                    <StackPanel>
-                                        <TextBlock Text="Audio" Style="{StaticResource SectionTitle}"/>
-                                        <WrapPanel Margin="0,0,0,8"
-                                                   Visibility="{Binding Exam.CurrentPart.ShowStartNow, Converter={StaticResource Bool2Visibility}}">
-                                            <Button Style="{StaticResource PrimaryButton}" Content="Start now" Margin="0,0,8,0"
-                                                    Command="{Binding Exam.SkipPrepCommand}"/>
-                                        </WrapPanel>
-                                        <TextBlock Text="{Binding Exam.CurrentPart.AudioStatus}" FontSize="12"
-                                                   Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
-                                        <Border Background="#F3F4F6" CornerRadius="8" Padding="12" Margin="0,10,0,0"
-                                                Visibility="{Binding Exam.CurrentPart.NoAudioFallback, Converter={StaticResource Bool2Visibility}}">
-                                            <TextBlock Text="{Binding Exam.CurrentPart.Material}" TextWrapping="Wrap"
-                                                       FontSize="{Binding Exam.FontScale, Converter={StaticResource ScaleFont}, ConverterParameter=13}"/>
-                                        </Border>
-                                        <TextBlock Text="Listen carefully. The transcript appears in the review after submit."
-                                                   FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <Border Style="{StaticResource Card}" Margin="0,0,0,10"
-                                        Visibility="{Binding Exam.CurrentPart.IsWriting, Converter={StaticResource Bool2Visibility}}">
-                                    <StackPanel>
-                                        <TextBlock Text="Your answer" Style="{StaticResource SectionTitle}"/>
-                                        <TextBox Text="{Binding Exam.CurrentPart.Essay, UpdateSourceTrigger=PropertyChanged}"
-                                                 AcceptsReturn="True" MinHeight="250" TextWrapping="Wrap" Padding="10"
-                                                 VerticalScrollBarVisibility="Auto"
-                                                 FontSize="{Binding Exam.FontScale, Converter={StaticResource ScaleFont}, ConverterParameter=14}"
-                                                 hc:InfoElement.Placeholder="Write your answer here."/>
-                                        <TextBlock Text="{Binding Exam.CurrentPart.WordCountLabel}" FontSize="12"
-                                                   Foreground="{StaticResource MutedBrush}" Margin="0,6,0,0"/>
-                                        <TextBlock Text="Writing is marked by AI after submit. Bands are ranges for practice."
-                                                   FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <Border Style="{StaticResource Card}" Margin="0,0,0,10"
-                                        Visibility="{Binding Exam.CurrentPart.IsSpeaking, Converter={StaticResource Bool2Visibility}}">
-                                    <StackPanel>
-                                        <TextBlock Text="Your speech" Style="{StaticResource SectionTitle}"/>
-                                        <WrapPanel>
-                                            <Button Style="{StaticResource PrimaryButton}" Content="Record answer" Margin="0,0,8,8"
-                                                    Command="{Binding Exam.RecordSpeakingCommand}"/>
-                                            <Button Style="{StaticResource GhostButton}" Content="Finish part" Margin="0,0,8,8"
-                                                    Command="{Binding Exam.FinishSpeakingPartCommand}"/>
-                                        </WrapPanel>
-                                        <TextBlock Text="{Binding Exam.CurrentPart.AudioStatus}" FontSize="12"
-                                                   Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0"
-                                                    Visibility="{Binding Exam.CurrentPart.IsRecording, Converter={StaticResource Bool2Visibility}}">
-                                            <Ellipse Width="10" Height="10" Fill="#DC2626" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                            <TextBlock Text="Recording now. Speak clearly." FontSize="12"
-                                                       Foreground="#B91C1C" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                        <TextBlock Text="To get AI feedback, type what you just said. Skip this if transcription already filled it in." FontSize="12" Foreground="{StaticResource MutedBrush}" Margin="0,8,0,0" TextWrapping="Wrap"/>
-                                        <TextBox Text="{Binding Exam.CurrentPart.Transcript, UpdateSourceTrigger=PropertyChanged}"
-                                                 AcceptsReturn="True" MinHeight="120" TextWrapping="Wrap" Padding="10"
-                                                 VerticalScrollBarVisibility="Auto"
-                                                 FontSize="{Binding Exam.FontScale, Converter={StaticResource ScaleFont}, ConverterParameter=14}"
-                                                 hc:InfoElement.Placeholder="Example: I come from Hanoi. I like my hometown because..."/>
-                                        <TextBlock Text="{Binding Exam.CurrentPart.TranscriptWordCount}" FontSize="12"
-                                                   Foreground="{StaticResource MutedBrush}" Margin="0,4,0,0"/>
-                                    </StackPanel>
-                                </Border>
-
-                                <StackPanel Visibility="{Binding Exam.CurrentPart.IsReading, Converter={StaticResource InverseBool2Visibility}}">
-                                    <ContentControl Content="{Binding Exam.CurrentPart}"
-                                                    ContentTemplate="{StaticResource QuestionNavigator}"
-                                                    Visibility="{Binding Exam.CurrentPart.HasQuestions, Converter={StaticResource Bool2Visibility}}"/>
-                                </StackPanel>
-
-                                <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                                    <StackPanel>
-                                        <TextBlock Text="Notes" Style="{StaticResource SectionTitle}"/>
-                                        <TextBox Text="{Binding Exam.CurrentPart.Notes, UpdateSourceTrigger=PropertyChanged}"
-                                                 AcceptsReturn="True" MinHeight="70" TextWrapping="Wrap" Padding="10"
-                                                 VerticalScrollBarVisibility="Auto" FontSize="13"
-                                                 hc:InfoElement.Placeholder="Scratch notes, like the notes feature of the real test."/>
-                                    </StackPanel>
-                                </Border>
-                            </StackPanel>
-                        </Grid>
-
-                        <!-- Bottom palette lives in the sticky row below. -->
-
-                    </StackPanel>
-
-                    <Border Style="{StaticResource Card}" Margin="0,14,0,0"
-                            Visibility="{Binding Exam.ShowResult, Converter={StaticResource Bool2Visibility}}">
-                        <StackPanel>
-                            <TextBlock Text="Result" Style="{StaticResource SectionTitle}"/>
-                            <TextBlock Text="{Binding Exam.BandLabel, StringFormat=Band range: {0}}" FontSize="24" FontWeight="Bold"
-                                       Foreground="{StaticResource AccentBrush}"
-                                       Visibility="{Binding Exam.HasBand, Converter={StaticResource Bool2Visibility}}"/>
-                            <TextBlock Text="{Binding Exam.ResultText}" TextWrapping="Wrap" FontSize="13" Margin="0,6,0,0"/>
-                            <TextBlock Text="{Binding Exam.CriteriaHint}" FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
-                            <WrapPanel Margin="0,12,0,0">
-                                <Button Style="{StaticResource PrimaryButton}" Content="Grade with AI" Margin="0,0,8,8"
-                                        Command="{Binding Exam.GradeWithAiCommand}"
-                                        IsEnabled="{Binding Exam.CanUseAi}"/>
-                                <Button Style="{StaticResource GhostButton}" Content="Stop" Margin="0,0,8,8"
-                                        Command="{Binding Exam.CancelGradingCommand}"
-                                        IsEnabled="{Binding Exam.IsGrading}"/>
-                                <Button Style="{StaticResource GhostButton}" Content="Copy feedback" Margin="0,0,8,8"
-                                        Command="{Binding Exam.CopyFeedbackCommand}"
-                                        IsEnabled="{Binding Exam.HasAiFeedback}"/>
-                                <Button Style="{StaticResource GhostButton}" Content="Show answer review" Margin="0,0,8,8"
-                                        Command="{Binding Exam.ToggleReviewCommand}"/>
-                                <Button Style="{StaticResource GhostButton}" Content="Back to setup" Margin="0,0,8,8"
-                                        Command="{Binding Exam.BackToSetupCommand}"/>
-                                <hc:LoadingCircle IsRunning="{Binding Exam.IsGrading}"
-                                                  Visibility="{Binding Exam.IsGrading, Converter={StaticResource Bool2Visibility}}"
-                                                  Width="22" Height="22" Margin="0,0,0,8"/>
-                            </WrapPanel>
-                            <TextBlock Text="Grade with AI marks Writing and Speaking with bands, and explains each wrong Listening and Reading answer."
-                                       FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
-                            <Border Background="#EEF2FF" BorderBrush="#C7D2FE" BorderThickness="1" CornerRadius="8"
-                                    Padding="14" Margin="0,10,0,0"
-                                    Visibility="{Binding Exam.IsGrading, Converter={StaticResource Bool2Visibility}}">
-                                <StackPanel Orientation="Horizontal">
-                                    <hc:LoadingCircle IsRunning="{Binding Exam.IsGrading}" Width="22" Height="22" Margin="0,0,10,0"/>
-                                    <StackPanel>
-                                        <TextBlock Text="{Binding Exam.LoadingLabel}" FontSize="13" FontWeight="SemiBold"/>
-                                        <TextBlock Text="{Binding Exam.ModelModeLabel}" FontSize="11"
-                                                   Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Border>
-                            <TextBlock Text="{Binding Exam.ModelModeLabel}" FontSize="11"
-                                       Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0"
-                                       Visibility="{Binding Exam.HasAiFeedback, Converter={StaticResource Bool2Visibility}}"/>
-                            <TextBlock Text="Add a language model in Settings for detailed AI bands."
-                                       FontSize="12" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
-                                       Visibility="{Binding Exam.ShowAiHint, Converter={StaticResource Bool2Visibility}}"/>
-                            <ItemsControl ItemsSource="{Binding Exam.AiFeedbackLines}" Margin="0,10,0,0"
-                                          Visibility="{Binding Exam.HasAiFeedback, Converter={StaticResource Bool2Visibility}}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <TextBlock Text="{Binding}" TextWrapping="Wrap" FontSize="13" Margin="0,2"/>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <ItemsControl ItemsSource="{Binding Exam.ReviewItems}" Margin="0,10,0,0"
-                                          Visibility="{Binding Exam.ShowReview, Converter={StaticResource Bool2Visibility}}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="0,2">
-                                            <Path Width="12" Height="12" Margin="0,0,8,0" Stretch="Uniform"
-                                                  Stroke="#15803D" StrokeThickness="2" VerticalAlignment="Center"
-                                                  Data="M4,12 L10,18 L20,6">
-                                                <Path.Style>
-                                                    <Style TargetType="Path">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsGood}" Value="True">
-                                                                <Setter Property="Visibility" Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Path.Style>
-                                            </Path>
-                                            <Path Width="12" Height="12" Margin="0,0,8,0" Stretch="Uniform"
-                                                  Stroke="#B91C1C" StrokeThickness="2" VerticalAlignment="Center"
-                                                  Data="M6,6 L18,18 M18,6 L6,18">
-                                                <Path.Style>
-                                                    <Style TargetType="Path">
-                                                        <Setter Property="Visibility" Value="Collapsed"/>
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsGood}" Value="False">
-                                                                <Setter Property="Visibility" Value="Visible"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Path.Style>
-                                            </Path>
-                                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="13"/>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </Border>
                 </StackPanel>
 
                 <!-- ===================== Library ===================== -->
@@ -1619,6 +1214,12 @@
                                       Padding="8" Margin="0,2,0,0" MaxWidth="220" HorizontalAlignment="Left"/>
                             <TextBlock Text="Large makes test passages, questions and answers bigger, like the real test setting."
                                        FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            <CheckBox Content="Open a test in full screen" Margin="0,12,0,0"
+                                      IsChecked="{Binding Settings.FullscreenOnStart}"/>
+                            <TextBlock Text="{Binding Settings.FullscreenSummary}"
+                                       FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                            <TextBlock Text="Strict mode is a separate choice in Mock Test step 2. It locks the window and blocks risky keys."
+                                       FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,6,0,0"/>
                         </StackPanel>
                     </Border>
 
@@ -1639,6 +1240,41 @@
                             </WrapPanel>
                             <TextBlock Text="Compact removes old speaking attempts and shrinks the database file. Results history is kept."
                                        FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Card}" Margin="0,12,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Updates" Style="{StaticResource SectionTitle}"/>
+                            <TextBlock Text="{Binding Settings.InstallKindLabel}" FontSize="12"
+                                       Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"/>
+                            <TextBlock Text="{Binding Settings.AppVersionLabel}" FontSize="12"
+                                       Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,2,0,8"/>
+                            <TextBlock Text="Update feed URL, optional" FontSize="12" Foreground="{StaticResource MutedBrush}"/>
+                            <TextBox Margin="0,2,0,4" Padding="8"
+                                     hc:InfoElement.Placeholder="https://example.com/ieltop/updates or a GitHub Releases URL"
+                                     Text="{Binding Settings.UpdateFeedUrl, UpdateSourceTrigger=PropertyChanged}"/>
+                            <TextBlock Text="Static folder of Velopack release files, or a GitHub Releases page. Empty keeps updates off."
+                                       FontSize="11" Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                            <CheckBox Content="Check for updates when the app starts" Margin="0,0,0,8"
+                                      IsChecked="{Binding Settings.UpdateCheckOnStartup}"/>
+                            <WrapPanel>
+                                <Button Style="{StaticResource GhostButton}" Content="Check for updates" Margin="0,0,8,8"
+                                        Command="{Binding Settings.CheckForUpdatesCommand}"
+                                        IsEnabled="{Binding Settings.IsBusy, Converter={StaticResource InverseBool}}"/>
+                                <Button Style="{StaticResource GhostButton}" Content="Download update" Margin="0,0,8,8"
+                                        Visibility="{Binding Settings.UpdateAvailable, Converter={StaticResource Bool2Visibility}}"
+                                        Command="{Binding Settings.DownloadUpdateCommand}"
+                                        IsEnabled="{Binding Settings.IsBusy, Converter={StaticResource InverseBool}}"/>
+                                <Button Style="{StaticResource PrimaryButton}" Content="Restart to update" Margin="0,0,8,8"
+                                        Visibility="{Binding Settings.UpdateDownloaded, Converter={StaticResource Bool2Visibility}}"
+                                        Command="{Binding Settings.RestartToUpdateCommand}"/>
+                                <hc:LoadingCircle IsRunning="{Binding Settings.IsBusy}"
+                                                  Visibility="{Binding Settings.IsBusy, Converter={StaticResource Bool2Visibility}}"
+                                                  Width="22" Height="22" Margin="0,0,0,8"/>
+                            </WrapPanel>
+                            <TextBlock Text="{Binding Settings.UpdateStatus}" FontSize="12"
+                                       Foreground="{StaticResource AccentBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         </StackPanel>
                     </Border>
 
@@ -1699,75 +1335,6 @@
 
             </StackPanel>
         </ScrollViewer>
-
-            <!-- Sticky bottom palette, like the real test navigation -->
-            <StackPanel Grid.Row="2" Margin="28,0,28,16"
-                        Visibility="{Binding IsExamRunning, Converter={StaticResource Bool2Visibility}}">
-                <Border Style="{StaticResource Card}" Padding="12">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <ScrollViewer Grid.Column="0" HorizontalScrollBarVisibility="Auto"
-                                      VerticalScrollBarVisibility="Disabled" Margin="0,0,10,0">
-                            <ItemsControl ItemsSource="{Binding Exam.Parts}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal"/>
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <StackPanel Orientation="Horizontal" Margin="0,0,14,0" VerticalAlignment="Center">
-                                            <Button Content="{Binding TabLabel}" Margin="0,0,6,0"
-                                                    Padding="10,6" Command="{Binding DataContext.Exam.GoToPartCommand,
-                                                        RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}">
-                                                <Button.Style>
-                                                    <Style TargetType="Button" BasedOn="{StaticResource GhostButton}">
-                                                        <Style.Triggers>
-                                                            <DataTrigger Binding="{Binding IsCurrent}" Value="True">
-                                                                <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-                                                                <Setter Property="Foreground" Value="White"/>
-                                                                <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
-                                                            </DataTrigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Button.Style>
-                                            </Button>
-                                            <ItemsControl ItemsSource="{Binding Questions}" VerticalAlignment="Center">
-                                                <ItemsControl.ItemsPanel>
-                                                    <ItemsPanelTemplate>
-                                                        <StackPanel Orientation="Horizontal"/>
-                                                    </ItemsPanelTemplate>
-                                                </ItemsControl.ItemsPanel>
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Button Style="{StaticResource PaletteButton}"
-                                                                Content="{Binding Model.Number}"
-                                                                Command="{Binding DataContext.Exam.GoToGlobalCommand,
-                                                                    RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                CommandParameter="{Binding}"/>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </StackPanel>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Style="{StaticResource GhostButton}" Content="◀" Margin="0,0,6,0"
-                                    Padding="12,6" Command="{Binding Exam.PreviousPartCommand}"
-                                    IsEnabled="{Binding Exam.CanGoBack}"/>
-                            <Button Style="{StaticResource GhostButton}" Content="▶" Padding="12,6"
-                                    Command="{Binding Exam.NextPartCommand}"
-                                    IsEnabled="{Binding Exam.CanGoNext}"/>
-                        </StackPanel>
-                    </Grid>
-                </Border>
-            </StackPanel>
         </Grid>
     </Grid>
 </Window>

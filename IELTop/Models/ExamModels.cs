@@ -55,6 +55,7 @@ public sealed class ExamPart
     public string Material { get; set; } = string.Empty;   // passage text or transcript
     public string Instructions { get; set; } = string.Empty;
     public string AudioFile { get; set; } = string.Empty;
+    public string ImageFile { get; set; } = string.Empty;  // Writing Task 1 chart or diagram
     public int Minutes { get; set; } = 10;
     public int PrepSeconds { get; set; }
     public List<ExamQuestion> Questions { get; set; } = new();

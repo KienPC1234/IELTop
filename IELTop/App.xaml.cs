@@ -3,15 +3,30 @@ using IELTop.Data;
 using IELTop.Services.Ai;
 using IELTop.Services.Audio;
 using IELTop.Services.Storage;
+using IELTop.Services.Update;
 using IELTop.ViewModels;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Velopack;
 
 namespace IELTop
 {
     public partial class App : Application
     {
         private IHost? _host;
+
+        /// <summary>
+        /// Custom entry point so Velopack can bootstrap before any WPF work.
+        /// Velopack applies updates and restarts here, without loading the UI.
+        /// </summary>
+        [STAThread]
+        private static void Main(string[] args)
+        {
+            VelopackApp.Build().Run();
+            var app = new App();
+            app.InitializeComponent();
+            app.Run();
+        }
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -36,6 +51,7 @@ namespace IELTop
                     services.AddSingleton<IContentServerClient, ContentServerClient>();
                     services.AddSingleton<ILlmService, OpenAiCompatibleLlmService>();
                     services.AddSingleton<IIeltsAiService, IeltsAiService>();
+                    services.AddSingleton<IUpdateService, UpdateService>();
 
                     services.AddSingleton<MainViewModel>();
                     services.AddSingleton<ExamViewModel>();

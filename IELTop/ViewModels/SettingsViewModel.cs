@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using IELTop.Services.Ai;
 using IELTop.Services.Storage;
+using IELTop.Services.Update;
 
 namespace IELTop.ViewModels;
 
@@ -16,6 +17,7 @@ public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly ISettingsStore _store;
     private readonly IIeltsAiService _ai;
+    private readonly IUpdateService _updates;
 
     [ObservableProperty] private string _baseUrl = string.Empty;
     [ObservableProperty] private string _model = string.Empty;
@@ -28,7 +30,11 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private bool _useStreaming = true;
     [ObservableProperty] private bool _visionEnabled;
     [ObservableProperty] private bool _modelAutoLoad;
+    [ObservableProperty] private string _updateFeedUrl = string.Empty;
+    [ObservableProperty] private bool _updateCheckOnStartup = true;
+    [ObservableProperty] private string _updateStatus = string.Empty;
     [ObservableProperty] private string _selectedTextSize = "Normal";
+    [ObservableProperty] private bool _fullscreenOnStart;
     [ObservableProperty] private string _statusMessage = "Not checked yet.";
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private bool _isValid = true;
@@ -41,10 +47,11 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public IReadOnlyList<string> TextSizeOptions { get; } = new[] { "Normal", "Large" };
 
-    public SettingsViewModel(ISettingsStore store, IIeltsAiService ai)
+    public SettingsViewModel(ISettingsStore store, IIeltsAiService ai, IUpdateService updates)
     {
         _store = store;
         _ai = ai;
+        _updates = updates;
 
         var s = store.Current;
         BaseUrl = s.LlmBaseUrl;
@@ -59,6 +66,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         VisionEnabled = s.LlmVisionEnabled;
         ModelAutoLoad = s.ModelAutoLoad;
         SelectedTextSize = s.UiTextSize == "Large" ? "Large" : "Normal";
+        FullscreenOnStart = s.FullscreenOnStart;
+        UpdateFeedUrl = s.UpdateFeedUrl;
+        UpdateCheckOnStartup = s.UpdateCheckOnStartup;
 
         RunChecks();
     }
@@ -79,6 +89,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         VisionEnabled = s.LlmVisionEnabled;
         ModelAutoLoad = s.ModelAutoLoad;
         SelectedTextSize = s.UiTextSize == "Large" ? "Large" : "Normal";
+        FullscreenOnStart = s.FullscreenOnStart;
+        UpdateFeedUrl = s.UpdateFeedUrl;
+        UpdateCheckOnStartup = s.UpdateCheckOnStartup;
         StatusMessage = "Settings reloaded from disk.";
         RunChecks();
     }
@@ -108,6 +121,34 @@ public sealed partial class SettingsViewModel : ObservableObject
     partial void OnApiKeyChanged(string value) => OnPropertyChanged(nameof(ShowApiKeyHint));
 
     partial void OnModelAutoLoadChanged(bool value) => OnPropertyChanged(nameof(ModelModeSummary));
+
+        /// <summary>Writes the full screen choice to settings, so it sticks even
+        /// if the user does not press Save on the Settings page.</summary>
+        partial void OnFullscreenOnStartChanged(bool value)
+        {
+            OnPropertyChanged(nameof(FullscreenSummary));
+            PersistFullscreenPreference();
+        }
+
+        private void PersistFullscreenPreference()
+        {
+            var s = _store.Current;
+            if (s.FullscreenOnStart == FullscreenOnStart) return;
+            s.FullscreenOnStart = FullscreenOnStart;
+            try
+            {
+                _store.Save();
+            }
+            catch (Exception)
+            {
+                // A failed save must not break the toggle in the current session.
+            }
+        }
+
+    /// <summary>Plain line about what the full screen start option does.</summary>
+    public string FullscreenSummary => FullscreenOnStart
+        ? "A test opens full screen on its own. You can still leave full screen from the test."
+        : "A test opens in a normal window. Use the full screen button in the test if you want to focus.";
 
     partial void OnBaseUrlChanged(string value) => RunChecks();
     partial void OnModelChanged(string value) => RunChecks();
@@ -169,10 +210,14 @@ public sealed partial class SettingsViewModel : ObservableObject
         s.LlmVisionEnabled = VisionEnabled;
         s.ModelAutoLoad = ModelAutoLoad;
         s.UiTextSize = SelectedTextSize;
+        s.FullscreenOnStart = FullscreenOnStart;
+        s.UpdateFeedUrl = UpdateFeedUrl.Trim();
+        s.UpdateCheckOnStartup = UpdateCheckOnStartup;
         _store.Save();
         StatusMessage = "Saved.";
         Saved?.Invoke(this, EventArgs.Empty);
     }
+
     /// <summary>Raised after a successful save so the shell can refresh its status line.</summary>
     public event EventHandler? Saved;
 
@@ -231,6 +276,9 @@ public sealed partial class SettingsViewModel : ObservableObject
         s.LlmVisionEnabled = VisionEnabled;
         s.ModelAutoLoad = ModelAutoLoad;
         s.UiTextSize = SelectedTextSize;
+        s.FullscreenOnStart = FullscreenOnStart;
+        s.UpdateFeedUrl = UpdateFeedUrl.Trim();
+        s.UpdateCheckOnStartup = UpdateCheckOnStartup;
         _store.Save();
 
         IsBusy = true;
@@ -275,5 +323,68 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         var clean = text.Replace('\n', ' ').Trim();
         return clean.Length <= max ? clean : clean[..max] + "...";
+    }
+
+    // ---- Auto update (Velopack) ----
+
+    [ObservableProperty] private bool _updateAvailable;
+    [ObservableProperty] private bool _updateDownloaded;
+
+    public string AppVersionLabel => $"IELTop version {_updates.CurrentVersion}";
+    public bool IsPackagedBuild => _updates.IsInstalled;
+    public string InstallKindLabel => _updates.IsInstalled
+        ? "Installed build. Auto update works here."
+        : "Development build. Auto update works after a Velopack install.";
+
+    [RelayCommand]
+    private async Task CheckForUpdatesAsync()
+    {
+        IsBusy = true;
+        UpdateStatus = "Checking for updates.";
+        try
+        {
+            // Save the feed first so the check uses what the user sees.
+            SaveCurrentToStore();
+            var result = await _updates.CheckAsync();
+            UpdateStatus = result.Message;
+            UpdateAvailable = result.Success && result.UpdateAvailable;
+            UpdateDownloaded = false;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task DownloadUpdateAsync()
+    {
+        IsBusy = true;
+        UpdateStatus = "Downloading the update.";
+        try
+        {
+            var result = await _updates.DownloadAsync();
+            UpdateStatus = result.Message;
+            UpdateDownloaded = result.Success && result.UpdateAvailable;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    [RelayCommand]
+    private void RestartToUpdate()
+    {
+        if (!UpdateDownloaded) return;
+        _updates.ApplyAndRestart();
+    }
+
+    private void SaveCurrentToStore()
+    {
+        var s = _store.Current;
+        s.UpdateFeedUrl = UpdateFeedUrl.Trim();
+        s.UpdateCheckOnStartup = UpdateCheckOnStartup;
+        _store.Save();
     }
 }

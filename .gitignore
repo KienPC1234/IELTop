@@ -27,3 +27,8 @@ __pycache__/
 bin/
 obj/
 .vs/
+# Velopack build output
+publish/
+releases/
+*.nupkg
+RELEASES

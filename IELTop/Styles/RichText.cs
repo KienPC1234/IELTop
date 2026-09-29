@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Media;
 
 namespace IELTop.Styles;
 
@@ -29,7 +30,9 @@ public static class RichText
 
     public static FlowDocument Build(string text)
     {
-        var document = new FlowDocument();
+        // Page background stays white. The foreground is inherited from the
+        // RichTextBox, so contrast mode (yellow on black) still applies.
+        var document = new FlowDocument { Background = Brushes.Transparent };
         document.Blocks.Add(new Paragraph(new Run(text)));
         return document;
     }

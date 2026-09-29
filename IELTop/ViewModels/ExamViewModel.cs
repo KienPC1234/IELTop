@@ -78,6 +78,7 @@ public sealed partial class ExamQuestionViewModel : ObservableObject
     [ObservableProperty] private string _selectedKey = string.Empty;
     [ObservableProperty] private string _answer = string.Empty;
     [ObservableProperty] private bool _isFlagged;
+    [ObservableProperty] private bool _isFocused;
 
     public ObservableCollection<ExamOptionViewModel> Options { get; } = new();
     public ObservableCollection<MatchRowViewModel> MatchRows { get; } = new();
@@ -88,7 +89,7 @@ public sealed partial class ExamQuestionViewModel : ObservableObject
     public string Prompt => Model.Prompt;
     public string Explanation => Model.Explanation;
     public bool HasExplanation => !string.IsNullOrWhiteSpace(Model.Explanation);
-    public string FlagLabel => IsFlagged ? "Flagged" : "Flag";
+    public string FlagLabel => IsFlagged ? "Marked for review" : "Review";
     public bool IsGap => string.Equals(Model.Kind, "gap", StringComparison.OrdinalIgnoreCase);
     public bool IsMatch => string.Equals(Model.Kind, "match", StringComparison.OrdinalIgnoreCase);
     public bool ShowOptions => !IsGap && !IsMatch;
@@ -247,6 +248,10 @@ public sealed partial class ExamPartViewModel : ObservableObject
     [ObservableProperty] private int _focusedIndex;
     [ObservableProperty] private int _spokenSeconds;
     [ObservableProperty] private bool _isCurrent;
+    [ObservableProperty] private bool _timerHidden;
+    [ObservableProperty] private bool _notesOpen;
+    [ObservableProperty] private bool _contrastOn;
+    [ObservableProperty] private string _selectedMaterialWord = string.Empty;
 
     /// <summary>Owning paper, set when a test mixes parts from many papers.</summary>
     public string PaperName { get; set; } = string.Empty;
@@ -269,6 +274,32 @@ public sealed partial class ExamPartViewModel : ObservableObject
     public bool IsReading => string.Equals(Skill, "Reading", StringComparison.OrdinalIgnoreCase);
     public bool HasAudio => !string.IsNullOrWhiteSpace(AudioFile);
     public bool ShowStartNow => IsListening && !AudioPlayedOnce;
+
+    // Writing Task 1 often comes with a chart or diagram. The paper points
+    // to a file name, the same way Listening points to its audio clip.
+    public bool IsWritingTask1 => IsWriting
+        && (TaskType.Contains("Task 1", StringComparison.OrdinalIgnoreCase)
+            || Title.Contains("Task 1", StringComparison.OrdinalIgnoreCase));
+    public bool HasWritingTask1Image => IsWritingTask1 && !string.IsNullOrWhiteSpace(WritingImageName);
+    public string WritingImageName => Model.ImageFile;
+    public string WritingImagePath
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(WritingImageName)) return string.Empty;
+            var userPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "IELTop", "content", "Images", WritingImageName);
+            if (File.Exists(userPath)) return userPath;
+            return Path.Combine(AppContext.BaseDirectory, "Assets", "Images", WritingImageName);
+        }
+    }
+    public bool HasWritingImageFile => HasWritingTask1Image && File.Exists(WritingImagePath);
+    public bool ShowMissingImageHint => HasWritingTask1Image && !HasWritingImageFile;
+    public bool ShowNoImageNote => IsWritingTask1 && !HasWritingTask1Image;
+    public string ImageHint => HasWritingTask1Image
+        ? $"Chart image: {WritingImageName}"
+        : "Task 1 chart: paste or read the data from the question, no image is attached.";
 
     public string HeaderLine
     {
@@ -294,6 +325,24 @@ public sealed partial class ExamPartViewModel : ObservableObject
     public string WordCountLabel => $"{CountWords(Essay)} words";
     public string TranscriptWordCount => $"{CountWords(Transcript)} words said";
 
+    // Speaking helpers, so the page can guide the student step by step.
+    public bool HasTranscript => !string.IsNullOrWhiteSpace(Transcript);
+    public bool IsPrepPhase => IsSpeaking && Model.PrepSeconds > 0 && !AudioPlayedOnce && !IsRecording;
+    public string SpeakingCue => Model.Material;
+    public string RecordingHint => $"Speak for about {SpeakingSeconds} seconds, then the recording stops on its own.";
+    public string SpeakingStepLabel
+    {
+        get
+        {
+            if (!IsSpeaking) return string.Empty;
+            if (IsRecording) return "Step 3: Recording. Speak now, no pause.";
+            if (HasTranscript) return "Step 4: Check your transcript, then finish the part.";
+            return Model.PrepSeconds > 0
+                ? "Step 1: Read the cue card. Step 2: Record when you are ready."
+                : "Step 1: Read the question. Step 2: Record your answer.";
+        }
+    }
+
     public ExamPartViewModel(ExamPart model)
     {
         Model = model;
@@ -302,10 +351,24 @@ public sealed partial class ExamPartViewModel : ObservableObject
         int index = 0;
         foreach (var q in model.Questions)
             Questions.Add(new ExamQuestionViewModel(q, index++, prefix));
+        if (Questions.Count > 0)
+            Questions[0].IsFocused = true;
     }
 
     partial void OnEssayChanged(string value) => OnPropertyChanged(nameof(WordCountLabel));
-    partial void OnTranscriptChanged(string value) => OnPropertyChanged(nameof(TranscriptWordCount));
+
+    partial void OnTranscriptChanged(string value)
+    {
+        OnPropertyChanged(nameof(TranscriptWordCount));
+        OnPropertyChanged(nameof(HasTranscript));
+        OnPropertyChanged(nameof(SpeakingStepLabel));
+    }
+
+    partial void OnIsRecordingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(SpeakingStepLabel));
+        OnPropertyChanged(nameof(IsPrepPhase));
+    }
 
     public void Tick()
     {
@@ -314,6 +377,8 @@ public sealed partial class ExamPartViewModel : ObservableObject
         else
             IsTimerRunning = false;
     }
+
+    public void ToggleTimer() => TimerHidden = !TimerHidden;
 
     public string RemainingLabel
     {
@@ -332,7 +397,7 @@ public sealed partial class ExamPartViewModel : ObservableObject
     public int FlaggedCount => Questions.Count(q => q.IsFlagged);
 
     public string ProgressLabel => HasQuestions
-        ? $"Answered {AnsweredCount} of {ScoredCount}, flagged {FlaggedCount}."
+        ? $"Answered {AnsweredCount} of {ScoredCount}, marked for review {FlaggedCount}."
         : string.Empty;
 
     /// <summary>Orange under 10 minutes, like the real test warning.</summary>
@@ -346,6 +411,8 @@ public sealed partial class ExamPartViewModel : ObservableObject
 
     partial void OnFocusedIndexChanged(int value)
     {
+        for (int i = 0; i < Questions.Count; i++)
+            Questions[i].IsFocused = i == value;
         OnPropertyChanged(nameof(FocusedQuestion));
         OnPropertyChanged(nameof(CanQuestionBack));
         OnPropertyChanged(nameof(CanQuestionNext));
@@ -399,12 +466,30 @@ public sealed partial class ExamPartViewModel : ObservableObject
 /// <summary>One review line with a verdict for its icon.</summary>
 public sealed record ReviewItem(string Text, bool? IsGood);
 
+/// <summary>A checkbox option in the test setup, for skills and task types.</summary>
+public sealed partial class SelectableOption : ObservableObject
+{
+    [ObservableProperty] private bool _isSelected;
+
+    public string Name { get; }
+    public int PartCount { get; }
+
+    public SelectableOption(string name, bool selected, int partCount)
+    {
+        Name = name;
+        IsSelected = selected;
+        PartCount = partCount;
+    }
+
+    public string CountLabel => PartCount > 0 ? $"{PartCount} part(s)" : "none in this paper";
+    public bool HasParts => PartCount > 0;
+}
+
 public sealed partial class ExamViewModel : ObservableObject
 {
     private readonly IExamRepository _repository;
     private readonly IIeltsAiService _ai;
     private readonly IAudioService _audio;
-    private readonly ITtsService _tts;
     private readonly ISttService _stt;
     private readonly IGecService _gec;
     private readonly IModelLoadCoordinator _models;
@@ -437,12 +522,21 @@ public sealed partial class ExamViewModel : ObservableObject
     [ObservableProperty] private double _volume = 80;
     [ObservableProperty] private int _strictViolations;
     [ObservableProperty] private double _fontScale = 1.0;
+    [ObservableProperty] private bool _isFullscreen;
 
     public ObservableCollection<ExamPaper> Papers { get; } = new();
     public ObservableCollection<PaperRow> PaperRows { get; } = new();
     public ObservableCollection<ReviewItem> ReviewItems { get; } = new();
     public ObservableCollection<string> AiFeedbackLines { get; } = new();
     public ObservableCollection<string> TaskTypes { get; } = new();
+
+    /// <summary>Skill checkboxes for the setup. One skill can run alone.</summary>
+    public ObservableCollection<SelectableOption> SkillOptions { get; } = new();
+
+    /// <summary>Task type checkboxes, filled from the chosen paper(s).</summary>
+    public ObservableCollection<SelectableOption> TaskTypeOptions { get; } = new();
+
+    private bool _syncingOptions;
 
     /// <summary>Raised after papers change, so the Library list can reload.</summary>
     public Action? PapersChanged { get; set; }
@@ -462,12 +556,11 @@ public sealed partial class ExamViewModel : ObservableObject
     /// <summary>Questions with no answer yet, for the submit warning.</summary>
     public int UnansweredCount => _parts.Sum(p => p.Questions.Count(q => !q.IsAnswered));
 
-    public ExamViewModel(IExamRepository repository, IIeltsAiService ai, IAudioService audio, ITtsService tts, ISttService stt, IGecService gec, IModelLoadCoordinator models)
+    public ExamViewModel(IExamRepository repository, IIeltsAiService ai, IAudioService audio, ISttService stt, IGecService gec, IModelLoadCoordinator models)
     {
         _repository = repository;
         _ai = ai;
         _audio = audio;
-        _tts = tts;
         _stt = stt;
         _gec = gec;
         _models = models;
@@ -491,6 +584,33 @@ public sealed partial class ExamViewModel : ObservableObject
     public bool ShowResult => !IsRunning && !string.IsNullOrWhiteSpace(ResultText);
 
     public string PaperCountLabel => $"{Papers.Count} test paper(s) available.";
+
+    /// <summary>Summary of the checked skills, shown next to Start test.</summary>
+    public string SelectedSkillsLabel
+    {
+        get
+        {
+            var picked = SkillOptions.Where(o => o.IsSelected).Select(o => o.Name).ToList();
+            if (picked.Count == 0) return "No skill selected. Tick at least one.";
+            if (picked.Count == SkillOptions.Count) return "Full test, all four skills.";
+            return string.Join(" + ", picked);
+        }
+    }
+
+    public string SelectedTaskTypesLabel
+    {
+        get
+        {
+            var all = TaskTypeOptions.Count;
+            var picked = TaskTypeOptions.Count(o => o.IsSelected);
+            if (all == 0) return "No task type filter.";
+            if (picked == 0 || picked == all) return "All task types.";
+            return $"{picked} of {all} task types.";
+        }
+    }
+
+    /// <summary>True when the chosen skills can actually start a test.</summary>
+    public bool CanStartSetup => SkillOptions.Any(o => o.IsSelected && o.HasParts);
 
     public string MaterialWarning =>
         $"No test papers found. Add a .json paper under {_repository.ExamsDir}.";
@@ -520,11 +640,13 @@ public sealed partial class ExamViewModel : ObservableObject
             Papers.Add(paper);
         SelectedPaper ??= Papers.FirstOrDefault();
 
+        RebuildSkillOptions();
         RebuildTaskTypes();
         RebuildPaperRows();
         OnPropertyChanged(nameof(HasPapers));
         OnPropertyChanged(nameof(ShowNoPaperWarning));
         OnPropertyChanged(nameof(PaperCountLabel));
+        OnPropertyChanged(nameof(CanStartSetup));
     }
 
     /// <summary>Every paper with its origin, so downloaded ones can be deleted.</summary>
@@ -574,27 +696,129 @@ public sealed partial class ExamViewModel : ObservableObject
             return;
         }
         SelectedPaper = paper;
-        SelectedScope = "Full test";
-        StatusMessage = $"Using {paper.Title}. Pick a scope and press Start test.";
+        StatusMessage = $"Using {paper.Title}. Tick a skill and press Start test.";
     }
 
     partial void OnSelectedPaperChanged(ExamPaper? value) => RebuildTaskTypes();
     partial void OnMixAllPapersChanged(bool value) => RebuildTaskTypes();
 
+    /// <summary>
+    /// Fills the skill checkboxes with the part count of the chosen paper(s),
+    /// so the user sees which skills have work. Keeps current ticks when the
+    /// skill still exists, so switching paper stays predictable.
+    /// </summary>
+    private void RebuildSkillOptions()
+    {
+        var source = MixAllPapers ? Papers.SelectMany(p => p.Parts) : SelectedPaper?.Parts ?? Enumerable.Empty<ExamPart>();
+        var counts = source
+            .Where(p => !string.IsNullOrWhiteSpace(p.Skill))
+            .GroupBy(p => p.Skill, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+
+        var previous = SkillOptions.Where(o => o.IsSelected).Select(o => o.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool firstFill = SkillOptions.Count == 0;
+
+        _syncingOptions = true;
+        try
+        {
+            SkillOptions.Clear();
+            foreach (var skill in new[] { "Listening", "Reading", "Writing", "Speaking" })
+            {
+                counts.TryGetValue(skill, out int count);
+                // Listening cannot run alone, so never tick it by itself.
+                bool selected = firstFill
+                    ? skill != "Listening" && count > 0
+                    : previous.Contains(skill) && count > 0;
+                SkillOptions.Add(new SelectableOption(skill, selected, count));
+            }
+        }
+        finally
+        {
+            _syncingOptions = false;
+        }
+        foreach (var option in SkillOptions)
+            option.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(SelectableOption.IsSelected)) OnSkillToggled();
+            };
+        OnPropertyChanged(nameof(SelectedSkillsLabel));
+        OnPropertyChanged(nameof(CanStartSetup));
+    }
+
     /// <summary>Every task type on the candidate papers, for the type filter.</summary>
     private void RebuildTaskTypes()
     {
-        var keep = SelectedTaskType;
-        TaskTypes.Clear();
-        TaskTypes.Add("All types");
-        var source = MixAllPapers ? Papers.SelectMany(p => p.Parts) : SelectedPaper?.Parts ?? Enumerable.Empty<ExamPart>();
-        foreach (var type in source
+        var previous = TaskTypeOptions.Where(o => o.IsSelected).Select(o => o.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        bool firstFill = TaskTypeOptions.Count == 0;
+
+        var types = (MixAllPapers ? Papers.SelectMany(p => p.Parts) : SelectedPaper?.Parts ?? Enumerable.Empty<ExamPart>())
+            .Where(p => SkillOptions.Count == 0 || SkillOptions.Any(o => o.IsSelected
+                && string.Equals(o.Name, p.Skill, StringComparison.OrdinalIgnoreCase)))
             .Select(p => p.TaskType)
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
-            TaskTypes.Add(type);
-        SelectedTaskType = TaskTypes.Contains(keep) ? keep : "All types";
+            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _syncingOptions = true;
+        try
+        {
+            TaskTypeOptions.Clear();
+            foreach (var type in types)
+            {
+                bool selected = firstFill || previous.Count == 0 || previous.Contains(type);
+                TaskTypeOptions.Add(new SelectableOption(type, selected, 0));
+            }
+        }
+        finally
+        {
+            _syncingOptions = false;
+        }
+
+        // Legacy single-select list stays in sync for any remaining binding.
+        var keep = SelectedTaskType;
+        TaskTypes.Clear();
+        TaskTypes.Add("All types");
+        foreach (var type in types) TaskTypes.Add(type);
+
+        OnPropertyChanged(nameof(SelectedTaskTypesLabel));
+        RebuildSkillOptions();
+    }
+
+    /// <summary>Called when any skill checkbox flips, to refresh the counts.</summary>
+    private void OnSkillToggled()
+    {
+        if (_syncingOptions) return;
+        OnPropertyChanged(nameof(SelectedSkillsLabel));
+        OnPropertyChanged(nameof(CanStartSetup));
+        // Task types follow the chosen skills, so the list stays relevant.
+        RebuildTaskTypeOptionsKeepingTicks();
+    }
+
+    private void RebuildTaskTypeOptionsKeepingTicks()
+    {
+        var types = (MixAllPapers ? Papers.SelectMany(p => p.Parts) : SelectedPaper?.Parts ?? Enumerable.Empty<ExamPart>())
+            .Where(p => SkillOptions.Count == 0 || SkillOptions.Any(o => o.IsSelected
+                && string.Equals(o.Name, p.Skill, StringComparison.OrdinalIgnoreCase)))
+            .Select(p => p.TaskType)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        _syncingOptions = true;
+        try
+        {
+            var keep = TaskTypeOptions.Where(o => o.IsSelected).Select(o => o.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            TaskTypeOptions.Clear();
+            foreach (var type in types)
+                TaskTypeOptions.Add(new SelectableOption(type, keep.Count == 0 || keep.Contains(type), 0));
+        }
+        finally
+        {
+            _syncingOptions = false;
+        }
+        OnPropertyChanged(nameof(SelectedTaskTypesLabel));
     }
 
     public void RefreshAiState()
@@ -619,13 +843,22 @@ public sealed partial class ExamViewModel : ObservableObject
         IEnumerable<ExamPaper> papers = MixAllPapers
             ? Papers
             : SelectedPaper is null ? Enumerable.Empty<ExamPaper>() : new[] { SelectedPaper };
+
+        // Tick boxes drive the filter. No tick means every skill with work.
+        var wantedSkills = SkillOptions.Where(o => o.IsSelected).Select(o => o.Name).ToList();
+        var wantedTypes = TaskTypeOptions.Where(o => o.IsSelected).Select(o => o.Name).ToList();
+        bool filterTypes = TaskTypeOptions.Count > 0 && wantedTypes.Count > 0
+            && wantedTypes.Count < TaskTypeOptions.Count;
+
         foreach (var paper in papers)
         {
             foreach (var part in paper.Parts)
             {
-                if (SelectedScope != "Full test" && !string.Equals(part.Skill, SelectedScope, StringComparison.OrdinalIgnoreCase))
+                if (wantedSkills.Count > 0 && !wantedSkills.Any(s =>
+                    string.Equals(s, part.Skill, StringComparison.OrdinalIgnoreCase)))
                     continue;
-                if (SelectedTaskType != "All types" && !string.Equals(part.TaskType, SelectedTaskType, StringComparison.OrdinalIgnoreCase))
+                if (filterTypes && !wantedTypes.Any(t =>
+                    string.Equals(t, part.TaskType, StringComparison.OrdinalIgnoreCase)))
                     continue;
                 yield return (paper, part);
             }
@@ -657,12 +890,19 @@ public sealed partial class ExamViewModel : ObservableObject
         var chosen = FilteredParts().ToList();
         if (chosen.Count == 0)
         {
-            ResultText = MixAllPapers || SelectedScope == "Full test"
-                ? "No parts match this setup. Loosen the scope or type filter."
-                : $"This paper has no {SelectedScope} part. Pick another scope or paper.";
+            ResultText = "No parts match this setup. Tick a skill that has parts, or loosen the task types.";
             BandLabel = string.Empty;
             IsRunning = false;
             IsFinished = false;
+            return;
+        }
+        if (chosen.All(c => string.Equals(c.Part.Skill, "Listening", StringComparison.OrdinalIgnoreCase)))
+        {
+            ResultText = "Listening cannot run alone. Tick Reading, Writing, or Speaking too, then start again.";
+            BandLabel = string.Empty;
+            IsRunning = false;
+            IsFinished = false;
+            StatusMessage = ResultText;
             return;
         }
 
@@ -733,6 +973,7 @@ public sealed partial class ExamViewModel : ObservableObject
         foreach (var paper in fresh)
             Papers.Add(paper);
         SelectedPaper = Papers.FirstOrDefault();
+        RebuildSkillOptions();
         RebuildTaskTypes();
         RebuildPaperRows();
 
@@ -757,6 +998,15 @@ public sealed partial class ExamViewModel : ObservableObject
         OnPropertyChanged(nameof(Parts));
         ResultText = string.Empty;
         BandLabel = string.Empty;
+        foreach (var part in _parts)
+        {
+            part.TimerHidden = false;
+            part.NotesOpen = false;
+            part.ContrastOn = false;
+        }
+        // Full screen is decided per run by the window, so a stale toggle from
+        // a past test does not carry over.
+        IsFullscreen = false;
         var intro = StrictMode
             ? "Strict mode is on. Full screen, no other apps, finish the test."
             : "Test started. Answer every part, then submit.";
@@ -908,9 +1158,72 @@ public sealed partial class ExamViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Timer click, like the real test: hide the clock when it causes stress,
+    /// click again to bring it back.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleTimer() => CurrentPart?.ToggleTimer();
+
+    /// <summary>
+    /// Raised when the student wants full screen on or off. The window is the
+    /// only place that can change its own window state, so it listens.
+    /// </summary>
+    public event EventHandler? FullscreenToggleRequested;
+
+    public event EventHandler? StrictToggleRequested;
+
+    /// <summary>
+    /// Full screen without the strict rules. It is a focus aid, not an exam
+    /// lock, so it can be left at any time.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleFullscreen() => FullscreenToggleRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Turns strict mode off and on from inside the test window.</summary>
+    [RelayCommand]
+    private void ToggleStrict() => StrictToggleRequested?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Text size buttons in the exam settings strip.</summary>
+    [RelayCommand]
+    private void BiggerText()
+    {
+        FontScale = Math.Min(1.6, Math.Round(FontScale + 0.1, 2));
+    }
+
+    [RelayCommand]
+    private void SmallerText()
+    {
+        FontScale = Math.Max(0.9, Math.Round(FontScale - 0.1, 2));
+    }
+
+    /// <summary>
+    /// Yellow on black, the high contrast mode the real test offers. Applies
+    /// to the reading passage and the writing answer box.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleContrast()
+    {
+        if (CurrentPart is null) return;
+        CurrentPart.ContrastOn = !CurrentPart.ContrastOn;
+    }
+
+    /// <summary>
+    /// Opens the side notes panel. When the student has selected text in the
+    /// passage, that text is quoted at the top of the notes box, so a note
+    /// stays attached to the sentence it belongs to.
+    /// </summary>
+    [RelayCommand]
+    private void OpenNotes(string? selectedText)
+    {
+        if (CurrentPart is null) return;
+        CurrentPart.SelectedMaterialWord = (selectedText ?? string.Empty).Trim();
+        CurrentPart.NotesOpen = true;
+    }
+
+    /// <summary>
     /// Plays the Listening clip exactly once when its part opens, like the
-    /// real test. Uses the shipped audio file when present, otherwise the
-    /// Windows voice reads the transcript, so a part never stays silent.
+    /// real test. The audio must be a real exam recording in the part file,
+    /// so a missing clip shows a clear message instead of a synthetic voice.
     /// </summary>
     private async Task PlayListeningOnceAsync(ExamPartViewModel part, CancellationToken ct)
     {
@@ -938,20 +1251,11 @@ public sealed partial class ExamViewModel : ObservableObject
 
         if (path is null)
         {
-            if (!_tts.IsAvailable || string.IsNullOrWhiteSpace(part.Material))
-            {
-                part.AudioStatus = "No audio for this part. Read the transcript and answer.";
-                part.NoAudioFallback = true;
-                return;
-            }
-            part.AudioStatus = $"Reading the transcript aloud ({_tts.VoiceName}).";
-            path = await _tts.SpeakToFileAsync(part.Material, ct);
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                part.AudioStatus = "Voice playback failed. Read the transcript and answer.";
-                part.NoAudioFallback = true;
-                return;
-            }
+            // No clip in the paper. Show the transcript to read, never a
+            // synthesized voice, so Listening stays real exam audio only.
+            part.AudioStatus = "No audio file for this part. Read the transcript and answer.";
+            part.NoAudioFallback = true;
+            return;
         }
 
         try
@@ -968,7 +1272,7 @@ public sealed partial class ExamViewModel : ObservableObject
         }
         catch (Exception)
         {
-            part.AudioStatus = "Could not play this clip. Check your speakers.";
+            part.AudioStatus = "Could not play this clip. Check the file and your speakers.";
         }
     }
 
@@ -1503,6 +1807,12 @@ public sealed partial class ExamViewModel : ObservableObject
         OnPropertyChanged(nameof(CanGoNext));
     }
 
+    /// <summary>
+    /// Raised when the student asks to leave the exam window, for example
+    /// Back to setup or Close. The shell listens and closes the window.
+    /// </summary>
+    public event EventHandler? ExamWindowCloseRequested;
+
     /// <summary>Clears the result screen so a new test can be set up.</summary>
     [RelayCommand]
     private void BackToSetup()
@@ -1516,6 +1826,35 @@ public sealed partial class ExamViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowResult));
         OnPropertyChanged(nameof(HasBand));
         OnPropertyChanged(nameof(HasAiFeedback));
+        ExamWindowCloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>Closes the exam window without touching a running test.</summary>
+    [RelayCommand]
+    private void CloseExam()
+    {
+        ExamWindowCloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// Stops a running test without saving it, used when the student closes
+    /// the exam window. Answers in the current run are dropped.
+    /// </summary>
+    public void CancelRunningTest()
+    {
+        _timer.Stop();
+        _gradingCts?.Cancel();
+        _speakingCts?.Cancel();
+        _listeningCts?.Cancel();
+        _prepCts?.Cancel();
+        _audio.StopPlayback();
+        _audio.StopRecording();
+        IsRunning = false;
+        IsFinished = false;
+        ResultText = string.Empty;
+        BandLabel = string.Empty;
+        OnPropertyChanged(nameof(ShowResult));
+        OnPropertyChanged(nameof(HasBand));
     }
 
     [RelayCommand]

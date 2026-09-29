@@ -35,11 +35,26 @@ public sealed class AppSettings
     /// </summary>
     public bool ModelAutoLoad { get; set; }
 
+    /// <summary>
+    /// Velopack update feed. Empty means auto update stays off. Point it at a
+    /// release folder URL or a GitHub Releases URL.
+    /// </summary>
+    public string UpdateFeedUrl { get; set; } = string.Empty;
+
+    /// <summary>When true, the app checks for updates quietly on startup.</summary>
+    public bool UpdateCheckOnStartup { get; set; } = true;
+
     /// <summary>Encrypted key, base64. Never written as plain text.</summary>
     public string LlmApiKeyProtected { get; set; } = string.Empty;
 
     /// <summary>Exam text size: Normal or Large. Plain preference, not secret.</summary>
     public string UiTextSize { get; set; } = "Normal";
+
+    /// <summary>
+    /// When true, a running test opens full screen on its own, without the
+    /// strict rules. The student can still leave full screen from the test.
+    /// </summary>
+    public bool FullscreenOnStart { get; set; }
 
     [JsonIgnore]
     public string LlmApiKey { get; set; } = string.Empty;

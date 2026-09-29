@@ -56,8 +56,38 @@ dotnet build --nologo
 dotnet run
 ```
 
-## Test papers and models
+## Package and release
 
+The app uses [Velopack](https://velopack.io) for the installer and self
+updates. One command publishes the app, builds the installer, and writes the
+update files:
+
+```powershell
+dotnet tool install -g vpk
+pwsh tools/pack-release.ps1 -Version 1.0.1
+```
+
+Output lands in `releases/`: `IELTop-win-Setup.exe` for a fresh install,
+`IELTop-win-Portable.zip` for a no-install run, and the `*.nupkg` plus
+`RELEASES` files that the app downloads to update itself.
+
+Upload the whole `releases` folder to a static host or a GitHub Releases page,
+then paste that URL into Settings under Updates. Leave the feed empty to keep
+auto update off. The app checks quietly on startup only when the setting is on,
+and it never blocks the first screen.
+
+The logo and icon come from `tools/make-icon.mjs`, a single Node script with no
+dependencies:
+
+```powershell
+node tools/make-icon.mjs
+```
+
+It writes `app.ico`, `logo-256.png`, and `logo-64.png` into
+`IELTop/Assets/Images`. `app.ico` is wired into the build and used by the
+installer.
+
+## Test papers and models
 Mock papers are plain JSON in `IELTop/Assets/Exams/`. Each part has a
 skill, minutes, material, and questions. Listening parts read their
 `material` aloud when no `audioFile` is shipped. Reading questions can
