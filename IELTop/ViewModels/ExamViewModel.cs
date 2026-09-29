@@ -1793,7 +1793,14 @@ public sealed partial class ExamViewModel : ObservableObject
             total += part.ScoredCount;
         }
 
-        double mid = total == 0 ? 0 : IeltsBanding.RawToBand(correct, total);
+        // The Reading conversion differs between Academic and General Training.
+        // Keep the paper category attached to the setup so a GT paper does not
+        // silently receive the Academic table.
+        bool generalReading = string.Equals(
+            SelectedPaper?.Category, "General Training", StringComparison.OrdinalIgnoreCase);
+        double mid = total == 0
+            ? 0
+            : IeltsBanding.RawToBand(correct, total, generalReading);
         var range = IeltsBanding.ToRange(mid, SelectedStrictness);
         BandLabel = total == 0 ? string.Empty : range.Label;
 
