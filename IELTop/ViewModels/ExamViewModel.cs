@@ -503,9 +503,13 @@ public sealed partial class ExamViewModel : ObservableObject
     [ObservableProperty] private ExamPaper? _selectedPaper;
     [ObservableProperty] private ExamPartViewModel? _currentPart;
     [ObservableProperty] private int _partIndex;
-    [ObservableProperty] private bool _isRunning;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowResult))]
+    private bool _isRunning;
     [ObservableProperty] private bool _isFinished;
-    [ObservableProperty] private string _resultText = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowResult))]
+    private string _resultText = string.Empty;
     [ObservableProperty] private string _bandLabel = string.Empty;
     [ObservableProperty] private bool _showReview;
     [ObservableProperty] private string _statusMessage = "Pick a paper, a scope, and a marking level, then start.";
@@ -1800,6 +1804,7 @@ public sealed partial class ExamViewModel : ObservableObject
               $"({IeltsBanding.StrictnessLabel(SelectedStrictness)}). " +
               "Writing and Speaking need AI marking or a teacher. " +
               "All bands are practice estimates, not official IELTS scores.";
+        StatusMessage = ResultText;
 
         SaveAttempt(correct, total, range);
         OnPropertyChanged(nameof(HasBand));
