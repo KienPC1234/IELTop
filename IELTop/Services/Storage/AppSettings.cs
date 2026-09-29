@@ -20,8 +20,26 @@ public sealed class AppSettings
     /// <summary>When true, images can be sent to models that accept them.</summary>
     public bool LlmVisionEnabled { get; set; }
 
+    /// <summary>Extra sampling control, 0 to 1. Sent as top_p. 1 means off.</summary>
+    public double LlmTopP { get; set; } = 1.0;
+
+    /// <summary>Per request timeout in seconds. 30 to 300.</summary>
+    public int LlmTimeoutSeconds { get; set; } = 120;
+
+    /// <summary>Custom examiner prompt. Empty means the built in prompt.</summary>
+    public string LlmSystemPrompt { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, offline ONNX models load when a feature starts and unload
+    /// when it finishes. When false, they load lazily on first use and stay.
+    /// </summary>
+    public bool ModelAutoLoad { get; set; }
+
     /// <summary>Encrypted key, base64. Never written as plain text.</summary>
     public string LlmApiKeyProtected { get; set; } = string.Empty;
+
+    /// <summary>Exam text size: Normal or Large. Plain preference, not secret.</summary>
+    public string UiTextSize { get; set; } = "Normal";
 
     [JsonIgnore]
     public string LlmApiKey { get; set; } = string.Empty;
@@ -30,7 +48,10 @@ public sealed class AppSettings
 public interface ISettingsStore
 {
     AppSettings Current { get; }
+    string FilePath { get; }
+    string DataFolder { get; }
     void Save();
+    void Reset();
 }
 
 public sealed class SettingsStore : ISettingsStore
@@ -44,6 +65,10 @@ public sealed class SettingsStore : ISettingsStore
     private readonly string _path;
 
     public AppSettings Current { get; private set; }
+
+    public string FilePath => _path;
+
+    public string DataFolder => Path.GetDirectoryName(_path) ?? string.Empty;
 
     public SettingsStore()
     {
@@ -77,5 +102,19 @@ public sealed class SettingsStore : ISettingsStore
         Current.LlmApiKeyProtected = SecretProtector.Protect(Current.LlmApiKey);
         var json = JsonSerializer.Serialize(Current, Options);
         File.WriteAllText(_path, json);
+    }
+
+    /// <summary>Deletes the file and starts fresh. Never throws.</summary>
+    public void Reset()    {
+        try
+        {
+            if (File.Exists(_path))
+                File.Delete(_path);
+        }
+        catch
+        {
+            // Keep going with defaults below.
+        }
+        Current = new AppSettings();
     }
 }

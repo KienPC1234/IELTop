@@ -61,7 +61,51 @@ dotnet run
 Mock papers are plain JSON in `IELTop/Assets/Exams/`. Each part has a
 skill, minutes, material, and questions. Listening parts read their
 `material` aloud when no `audioFile` is shipped. Reading questions can
-carry an `explanation` shown in review.
+carry an `explanation` shown in review. Papers carry a category, a
+level band, and tags for grouping in the Library.
+
+The Library page browses every paper with search, category, and skill
+filters. Drag papers into the basket (or press +) to assemble one
+custom mixed test, then start it. Downloaded papers can be deleted
+from the Mock Test setup under Your papers.
+
+Import paper JSON files with the Import button. Bad files are skipped
+with a reason, and name clashes get a numbered file instead of an
+overwrite. Export shown sends the filtered list to a timestamped
+folder under Documents with audio clips included. The AI check button
+asks the language model to rate one paper when it is configured.
+
+## Content servers
+
+The Servers page downloads mock test papers from IELTop content
+servers (protocol `ieltop/1`), community or private, over plain HTTP.
+The community list ships in `IELTop/servers.txt` (`Name | BaseUrl` per
+line). Users can add their own servers, which are kept on their
+computer.
+
+Servers can be anonymous, need an access code, or need a username and
+password. Codes and passwords stay encrypted on the computer. Saved
+papers land in `%LocalAppData%/IELTop/content/Exams` with audio in
+`%LocalAppData%/IELTop/content/Audio`, so they show up in Mock Test
+right away.
+
+Papers carry a category (for example Academic), a level band, skills,
+and an update date. The Servers page searches by title and filters by
+category, marks downloaded papers, and flags a paper when the server
+copy is newer than the saved file. Download all listed saves the whole
+filtered list with progress, and Stop cancels it. Every downloaded
+paper is validated before it is saved. The Mock Test setup lists every
+paper with its origin and deletes downloaded ones.
+
+Run the reference server (stdlib Python only, see
+`tools/content-server/README.md`):
+
+```powershell
+cd tools/content-server
+python server.py --papers ../../IELTop/Assets/Exams --port 8765
+python server.py --papers ./papers --audio ./audio --code SECRET
+python server.py --papers ./papers --user teacher --password SECRET
+```
 
 Offline models go in `IELTop/Assets/Models`. The list of models the app
 uses, with source and license, is in `IELTop/Assets/Models/README.md`.

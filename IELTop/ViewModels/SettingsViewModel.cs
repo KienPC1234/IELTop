@@ -22,8 +22,13 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _apiKey = string.Empty;
     [ObservableProperty] private double _temperature = 0.3;
     [ObservableProperty] private int _maxTokens = 800;
+    [ObservableProperty] private double _topP = 1.0;
+    [ObservableProperty] private int _timeoutSeconds = 120;
+    [ObservableProperty] private string _systemPrompt = string.Empty;
     [ObservableProperty] private bool _useStreaming = true;
     [ObservableProperty] private bool _visionEnabled;
+    [ObservableProperty] private bool _modelAutoLoad;
+    [ObservableProperty] private string _selectedTextSize = "Normal";
     [ObservableProperty] private string _statusMessage = "Not checked yet.";
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private bool _isValid = true;
@@ -33,6 +38,8 @@ public sealed partial class SettingsViewModel : ObservableObject
     private string _debugDetails = string.Empty;
 
     public ObservableCollection<string> Problems { get; } = new();
+
+    public IReadOnlyList<string> TextSizeOptions { get; } = new[] { "Normal", "Large" };
 
     public SettingsViewModel(ISettingsStore store, IIeltsAiService ai)
     {
@@ -45,16 +52,62 @@ public sealed partial class SettingsViewModel : ObservableObject
         ApiKey = s.LlmApiKey;
         Temperature = s.LlmTemperature;
         MaxTokens = s.LlmMaxTokens;
+        TopP = s.LlmTopP <= 0 || s.LlmTopP > 1 ? 1.0 : s.LlmTopP;
+        TimeoutSeconds = s.LlmTimeoutSeconds < 15 || s.LlmTimeoutSeconds > 300 ? 120 : s.LlmTimeoutSeconds;
+        SystemPrompt = s.LlmSystemPrompt;
         UseStreaming = s.LlmUseStreaming;
         VisionEnabled = s.LlmVisionEnabled;
+        ModelAutoLoad = s.ModelAutoLoad;
+        SelectedTextSize = s.UiTextSize == "Large" ? "Large" : "Normal";
 
+        RunChecks();
+    }
+
+    /// <summary>Reloads every field from disk, for the Reset button.</summary>
+    public void Reload()
+    {
+        var s = _store.Current;
+        BaseUrl = s.LlmBaseUrl;
+        Model = s.LlmModel;
+        ApiKey = s.LlmApiKey;
+        Temperature = s.LlmTemperature;
+        MaxTokens = s.LlmMaxTokens;
+        TopP = s.LlmTopP <= 0 || s.LlmTopP > 1 ? 1.0 : s.LlmTopP;
+        TimeoutSeconds = s.LlmTimeoutSeconds < 15 || s.LlmTimeoutSeconds > 300 ? 120 : s.LlmTimeoutSeconds;
+        SystemPrompt = s.LlmSystemPrompt;
+        UseStreaming = s.LlmUseStreaming;
+        VisionEnabled = s.LlmVisionEnabled;
+        ModelAutoLoad = s.ModelAutoLoad;
+        SelectedTextSize = s.UiTextSize == "Large" ? "Large" : "Normal";
+        StatusMessage = "Settings reloaded from disk.";
         RunChecks();
     }
 
     public bool ShowApiKeyHint => string.IsNullOrWhiteSpace(ApiKey);
     public bool HasProblems => Problems.Count > 0;
 
+    public string AppVersion =>
+        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0";
+
+    public string DataFolder => _store.DataFolder;
+
+    /// <summary>One line about how offline models load, for the Settings card.</summary>
+    public string ModelModeSummary
+    {
+        get
+        {
+            if (!ModelAutoLoad)
+                return "Models load when first needed, then stay in memory until you unload them.";
+            int ready = OnnxModelRegistry.Slots.Count(s => OnnxModelRegistry.IsComplete(s.Name));
+            return ready == 0
+                ? "Keep ready is on, but no model files are installed yet."
+                : $"Keep ready is on. {ready} model(s) load when Grade with AI starts, then unload after.";
+        }
+    }
+
     partial void OnApiKeyChanged(string value) => OnPropertyChanged(nameof(ShowApiKeyHint));
+
+    partial void OnModelAutoLoadChanged(bool value) => OnPropertyChanged(nameof(ModelModeSummary));
 
     partial void OnBaseUrlChanged(string value) => RunChecks();
     partial void OnModelChanged(string value) => RunChecks();
@@ -80,7 +133,13 @@ public sealed partial class SettingsViewModel : ObservableObject
         foreach (var issue in result.Warnings)
             Problems.Add($"Note, {issue.Field}: {issue.Message}");
 
-        IsValid = result.IsValid;
+        if (TopP <= 0 || TopP > 1)
+            Problems.Add("Error, Sampling: Top P must stay between 0 and 1.");
+        if (TimeoutSeconds < 15 || TimeoutSeconds > 300)
+            Problems.Add("Error, Timeout: use 15 to 300 seconds.");
+
+        IsValid = result.IsValid && TopP > 0 && TopP <= 1
+            && TimeoutSeconds >= 15 && TimeoutSeconds <= 300;
         CheckSummary = result.IsValid
             ? "The settings look valid. Press Test connection to check the server."
             : $"Fix {result.Errors.Count()} problem(s) before the model will work.";
@@ -103,15 +162,50 @@ public sealed partial class SettingsViewModel : ObservableObject
         s.LlmApiKey = ApiKey.Trim();
         s.LlmTemperature = Temperature;
         s.LlmMaxTokens = MaxTokens;
+        s.LlmTopP = TopP;
+        s.LlmTimeoutSeconds = TimeoutSeconds;
+        s.LlmSystemPrompt = SystemPrompt.Trim();
         s.LlmUseStreaming = UseStreaming;
         s.LlmVisionEnabled = VisionEnabled;
+        s.ModelAutoLoad = ModelAutoLoad;
+        s.UiTextSize = SelectedTextSize;
         _store.Save();
         StatusMessage = "Saved.";
         Saved?.Invoke(this, EventArgs.Empty);
     }
-
     /// <summary>Raised after a successful save so the shell can refresh its status line.</summary>
     public event EventHandler? Saved;
+
+    [RelayCommand]
+    private void OpenDataFolder()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = DataFolder,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception)
+        {
+            StatusMessage = "Could not open the data folder.";
+        }
+    }
+
+    [RelayCommand]
+    private void ResetSettings()
+    {
+        _store.Reset();
+        Reload();
+        Saved?.Invoke(this, EventArgs.Empty);
+    }
+
+    [RelayCommand]
+    private void CompactDatabase()
+    {
+        StatusMessage = Data.AppDbContext.CompactAndClean();
+    }
 
     [RelayCommand]
     private async Task TestConnectionAsync()
@@ -128,8 +222,15 @@ public sealed partial class SettingsViewModel : ObservableObject
         s.LlmBaseUrl = BaseUrl.Trim();
         s.LlmModel = Model.Trim();
         s.LlmApiKey = ApiKey.Trim();
+        s.LlmTemperature = Temperature;
+        s.LlmMaxTokens = MaxTokens;
+        s.LlmTopP = TopP;
+        s.LlmTimeoutSeconds = TimeoutSeconds;
+        s.LlmSystemPrompt = SystemPrompt.Trim();
         s.LlmUseStreaming = UseStreaming;
         s.LlmVisionEnabled = VisionEnabled;
+        s.ModelAutoLoad = ModelAutoLoad;
+        s.UiTextSize = SelectedTextSize;
         _store.Save();
 
         IsBusy = true;
@@ -164,6 +265,8 @@ public sealed partial class SettingsViewModel : ObservableObject
                $"Model: {Model.Trim()}\n" +
                $"API key: {(string.IsNullOrWhiteSpace(ApiKey) ? "empty" : "set")}\n" +
                $"Vision: {(VisionEnabled ? "on" : "off")}, streaming: {(UseStreaming ? "on" : "off")}\n" +
+               $"Sampling: temperature {Temperature:0.0}, top_p {TopP:0.00}, max tokens {MaxTokens}, timeout {TimeoutSeconds}s\n" +
+               $"System prompt: {(string.IsNullOrWhiteSpace(SystemPrompt) ? "built in" : "custom")}\n" +
                $"Result: {(result.Success ? "ok" : "failed")}, {status}, {result.ElapsedMs} ms\n" +
                $"Tested at: {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
     }

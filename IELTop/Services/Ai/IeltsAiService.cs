@@ -23,6 +23,10 @@ public sealed class WritingFeedback
     [JsonPropertyName("task_response")]
     public double TaskResponse { get; set; }
 
+    /// <summary>Task 1 key. The prompt asks for one of the two keys.</summary>
+    [JsonPropertyName("task_achievement")]
+    public double TaskAchievement { get; set; }
+
     [JsonPropertyName("coherence")]
     public double Coherence { get; set; }
 
@@ -31,6 +35,21 @@ public sealed class WritingFeedback
 
     [JsonPropertyName("grammar")]
     public double Grammar { get; set; }
+
+    [JsonPropertyName("task_response_why")]
+    public string TaskResponseWhy { get; set; } = string.Empty;
+
+    [JsonPropertyName("task_achievement_why")]
+    public string TaskAchievementWhy { get; set; } = string.Empty;
+
+    [JsonPropertyName("coherence_why")]
+    public string CoherenceWhy { get; set; } = string.Empty;
+
+    [JsonPropertyName("lexical_why")]
+    public string LexicalWhy { get; set; } = string.Empty;
+
+    [JsonPropertyName("grammar_why")]
+    public string GrammarWhy { get; set; } = string.Empty;
 
     [JsonPropertyName("summary")]
     public string Summary { get; set; } = string.Empty;
@@ -78,6 +97,18 @@ public sealed class SpeakingFeedback
     [JsonPropertyName("pronunciation")]
     public double Pronunciation { get; set; }
 
+    [JsonPropertyName("fluency_why")]
+    public string FluencyWhy { get; set; } = string.Empty;
+
+    [JsonPropertyName("lexical_why")]
+    public string LexicalWhy { get; set; } = string.Empty;
+
+    [JsonPropertyName("grammar_why")]
+    public string GrammarWhy { get; set; } = string.Empty;
+
+    [JsonPropertyName("pronunciation_why")]
+    public string PronunciationWhy { get; set; } = string.Empty;
+
     [JsonPropertyName("summary")]
     public string Summary { get; set; } = string.Empty;
 
@@ -95,6 +126,30 @@ public sealed record SpeakingFeedbackResult(bool Success, SpeakingFeedback? Feed
     public static SpeakingFeedbackResult Fail(string error) => new(false, null, error);
 }
 
+/// <summary>Part ids the model picked for a full test, with its reason.</summary>
+public sealed record TestPickResult(
+    bool Success, IReadOnlyList<string> Ids, string Reason, string Error)
+{
+    public static TestPickResult Fail(string error)
+        => new(false, Array.Empty<string>(), string.Empty, error);
+}
+
+/// <summary>Quality verdict for one mock test paper.</summary>
+public sealed record PaperReviewResult(
+    bool Success, double Score, IReadOnlyList<string> Strengths, IReadOnlyList<string> Fixes, string Error)
+{
+    public static PaperReviewResult Fail(string error)
+        => new(false, 0, Array.Empty<string>(), Array.Empty<string>(), error);
+}
+
+/// <summary>One paper drafted by the model from pasted or imported text.</summary>
+public sealed record PaperDraftResult(
+    bool Success, IELTop.Models.ExamPaper? Paper, string Json, string Error)
+{
+    public static PaperDraftResult Fail(string error)
+        => new(false, null, string.Empty, error);
+}
+
 public interface IIeltsAiService
 {
     bool IsAvailable { get; }
@@ -102,10 +157,17 @@ public interface IIeltsAiService
     Task<WritingFeedbackResult> ReviewWritingAsync(string taskPrompt, string essay, int minimumWords, CancellationToken ct = default);
     Task<WritingFeedbackResult> ReviewWritingAsync(string taskPrompt, string essay, int minimumWords, MarkingStrictness strictness, CancellationToken ct = default);
     Task<SpeakingFeedbackResult> AssessSpeakingAsync(string cue, string transcript, MarkingStrictness strictness, CancellationToken ct = default);
+    Task<SpeakingFeedbackResult> AssessSpeakingAsync(string cue, string transcript, string partInfo, int spokenSeconds, MarkingStrictness strictness, CancellationToken ct = default);
     Task<LlmResult> ExplainReadingAsync(string passage, string question, string chosenKey, string correctKey, CancellationToken ct = default);
+    Task<LlmResult> ExplainListeningAsync(string transcript, string question, string chosenAnswer, string correctAnswer, CancellationToken ct = default);
     Task<LlmResult> SuggestTopicAsync(string skill, CancellationToken ct = default);
+    Task<TestPickResult> PickTestAsync(string catalog, string history, CancellationToken ct = default);
+    Task<PaperReviewResult> ReviewPaperAsync(IELTop.Models.ExamPaper paper, CancellationToken ct = default);
+    Task<PaperDraftResult> DraftPaperAsync(string rawText, string hint, CancellationToken ct = default);
     IAsyncEnumerable<string> CoachSpeakingAsync(string target, string heardPhonemes, string mistakes, CancellationToken ct = default);
     Task<LlmResult> ReadImageAsync(string prompt, string base64Image, string mediaType, CancellationToken ct = default);
+    /// <summary>Reads one imported picture with a vision model for the import flow.</summary>
+    Task<LlmResult> ReadImportImageAsync(IELTop.Services.Storage.ImportedImage image, string skill, CancellationToken ct = default);
     Task<LlmResult> TestAsync(CancellationToken ct = default);
 }
 
@@ -115,18 +177,18 @@ public interface IIeltsAiService
 /// </summary>
 public sealed class IeltsAiService : IIeltsAiService
 {
-    private const string SystemPrompt =
-        "You are a strict but fair IELTS examiner and tutor. " +
-        "You give practical feedback a learner can act on. " +
-        "You never invent official scores. Estimated bands are guidance for practice only. " +
-        "Reply using the requested format exactly.";
-
     private readonly ILlmService _llm;
+    private readonly IELTop.Services.Storage.ISettingsStore _settings;
 
-    public IeltsAiService(ILlmService llm)
+    public IeltsAiService(ILlmService llm, IELTop.Services.Storage.ISettingsStore settings)
     {
         _llm = llm;
+        _settings = settings;
     }
+
+    private string SystemPrompt => string.IsNullOrWhiteSpace(_settings.Current.LlmSystemPrompt)
+        ? LlmPrompts.DefaultSystemPrompt
+        : _settings.Current.LlmSystemPrompt.Trim();
 
     public bool IsAvailable => _llm.IsConfigured;
 
@@ -151,6 +213,24 @@ public sealed class IeltsAiService : IIeltsAiService
         return _llm.CompleteAsync(new[] { LlmMessage.System(SystemPrompt), message }, ct);
     }
 
+    /// <summary>
+    /// Reads one imported picture with a vision model. Text pages come back
+    /// as transcription, charts come back as a word description usable as a
+    /// Writing Task 1 task. Refuses early without a vision model.
+    /// </summary>
+    public Task<LlmResult> ReadImportImageAsync(
+        IELTop.Services.Storage.ImportedImage image, string skill, CancellationToken ct = default)
+    {
+        if (!_llm.IsConfigured)
+            return Task.FromResult(LlmResult.Fail(
+                "No language model is configured. Open Settings to add one."));
+        if (!_llm.VisionEnabled)
+            return Task.FromResult(LlmResult.Fail(
+                "Vision is turned off. Enable it in Settings to read pictures."));
+        return ReadImageAsync(
+            LlmPrompts.BuildReadImage(image.Name, skill), image.Base64, image.MediaType, ct);
+    }
+
     public Task<WritingFeedbackResult> ReviewWritingAsync(
         string taskPrompt, string essay, int minimumWords, CancellationToken ct = default)
         => ReviewWritingAsync(taskPrompt, essay, minimumWords, MarkingStrictness.Standard, ct);
@@ -162,44 +242,11 @@ public sealed class IeltsAiService : IIeltsAiService
             return WritingFeedbackResult.Fail(
                 "No language model is configured. Open Settings to add one.");
 
-        var stance = strictness switch
-        {
-            MarkingStrictness.Lenient => "Mark like an encouraging examiner. Reward what works, note only clear errors.",
-            MarkingStrictness.Strict => "Mark like a very strict examiner. Penalize every error in task response, cohesion, words, and grammar. Do not inflate scores.",
-            _ => "Mark like a typical IELTS examiner. Be fair and specific."
-        };
+        var stance = LlmPrompts.WritingStance(strictness);
 
-        var user = new StringBuilder()
-            .AppendLine("Task prompt:")
-            .AppendLine(taskPrompt)
-            .AppendLine()
-            .AppendLine($"Minimum words: {minimumWords}")
-            .AppendLine($"Marking level: {IeltsBanding.StrictnessLabel(strictness)}. {stance}")
-            .AppendLine()
-            .AppendLine("Student essay:")
-            .AppendLine(essay)
-            .AppendLine()
-            .AppendLine("Score like an IELTS examiner. Give every band in half-band steps only")
-            .AppendLine("(for example 5.5, 6.0, 6.5, never 6.3 or 6.7).")
-            .AppendLine("The estimated_band must equal the mean of the four criteria.")
-            .AppendLine("If the essay is under the minimum word count, penalize Task Response.")
-            .AppendLine("Also give band_low and band_high around the estimate to show examiner variation (usually 0.5 each way).")
-            .AppendLine()
-            .AppendLine("Return only JSON with this shape:")
-            .AppendLine("{")
-            .AppendLine("  \"estimated_band\": 6.5,")
-            .AppendLine("  \"band_low\": 6.0,")
-            .AppendLine("  \"band_high\": 7.0,")
-            .AppendLine("  \"task_response\": 6.5,")
-            .AppendLine("  \"coherence\": 6.0,")
-            .AppendLine("  \"lexical_resource\": 6.5,")
-            .AppendLine("  \"grammar\": 6.0,")
-            .AppendLine("  \"summary\": \"two short sentences\",")
-            .AppendLine("  \"strengths\": [\"point\"],")
-            .AppendLine("  \"improvements\": [\"point with a fix\"],")
-            .AppendLine("  \"corrected_excerpt\": \"rewrite one weak sentence\"")
-            .AppendLine("}")
-            .ToString();
+        var user = LlmPrompts.BuildWritingPrompt(
+            taskPrompt, essay, minimumWords,
+            IeltsBanding.StrictnessLabel(strictness), stance);
 
         var result = await _llm.CompleteAsync(
             new[] { LlmMessage.System(SystemPrompt), LlmMessage.User(user) }, ct);
@@ -212,8 +259,12 @@ public sealed class IeltsAiService : IIeltsAiService
         return new WritingFeedbackResult(true, Sanitize(feedback, essay, minimumWords, strictness), string.Empty);
     }
 
-    public async Task<SpeakingFeedbackResult> AssessSpeakingAsync(
+    public Task<SpeakingFeedbackResult> AssessSpeakingAsync(
         string cue, string transcript, MarkingStrictness strictness, CancellationToken ct = default)
+        => AssessSpeakingAsync(cue, transcript, string.Empty, 0, strictness, ct);
+
+    public async Task<SpeakingFeedbackResult> AssessSpeakingAsync(
+        string cue, string transcript, string partInfo, int spokenSeconds, MarkingStrictness strictness, CancellationToken ct = default)
     {
         if (!_llm.IsConfigured)
             return SpeakingFeedbackResult.Fail(
@@ -221,26 +272,12 @@ public sealed class IeltsAiService : IIeltsAiService
         if (string.IsNullOrWhiteSpace(transcript))
             return SpeakingFeedbackResult.Fail("No spoken answer was recorded.");
 
-        var stance = strictness switch
-        {
-            MarkingStrictness.Lenient => "Be encouraging, reward communication.",
-            MarkingStrictness.Strict => "Be very strict. Penalize hesitation, limited words, grammar slips, and unclear sounds.",
-            _ => "Be fair like a typical examiner."
-        };
+        var stance = LlmPrompts.SpeakingStance(strictness);
 
-        var user = new StringBuilder()
-            .AppendLine($"Speaking cue: {cue}")
-            .AppendLine()
-            .AppendLine("Student transcript (typed from their speech):")
-            .AppendLine(transcript)
-            .AppendLine()
-            .AppendLine($"Marking level: {IeltsBanding.StrictnessLabel(strictness)}. {stance}")
-            .AppendLine("Score Fluency and Coherence, Lexical Resource, Grammar, Pronunciation in half bands.")
-            .AppendLine("estimated_band is the mean of the four. Give band_low and band_high 0.5 each way.")
-            .AppendLine("Return only JSON: {\"estimated_band\": 6.5, \"band_low\": 6.0, \"band_high\": 7.0,")
-            .AppendLine(" \"fluency\": 6.0, \"lexical_resource\": 6.5, \"grammar\": 6.0, \"pronunciation\": 6.0,")
-            .AppendLine(" \"summary\": \"two sentences\", \"strengths\": [\"point\"], \"improvements\": [\"point with a fix\"]}")
-            .ToString();
+        int words = CountWords(transcript);
+        var user = LlmPrompts.BuildSpeakingPrompt(
+            cue, transcript, partInfo, spokenSeconds, words,
+            IeltsBanding.StrictnessLabel(strictness), stance);
 
         var result = await _llm.CompleteAsync(
             new[] { LlmMessage.System(SystemPrompt), LlmMessage.User(user) }, ct);
@@ -267,6 +304,10 @@ public sealed class IeltsAiService : IIeltsAiService
                 LexicalResource = lexical,
                 Grammar = grammar,
                 Pronunciation = pron,
+                FluencyWhy = raw.FluencyWhy ?? string.Empty,
+                LexicalWhy = raw.LexicalWhy ?? string.Empty,
+                GrammarWhy = raw.GrammarWhy ?? string.Empty,
+                PronunciationWhy = raw.PronunciationWhy ?? string.Empty,
                 Summary = raw.Summary ?? string.Empty,
                 Strengths = raw.Strengths ?? new(),
                 Improvements = raw.Improvements ?? new()
@@ -283,14 +324,169 @@ public sealed class IeltsAiService : IIeltsAiService
         if (!_llm.IsConfigured)
             return Task.FromResult(LlmResult.Fail(
                 "No language model is configured. Open Settings to add one."));
-        var user = $"Suggest one {skill} mock test prompt for IELTS. " +
-                   "Reply with two lines only. Line 1: topic. Line 2: the task or cue.";
+        var clean = string.IsNullOrWhiteSpace(skill) ? "Writing" : skill.Trim();
+        var user = LlmPrompts.BuildSuggestTopic(clean);
         return _llm.CompleteAsync(new[] { LlmMessage.System(SystemPrompt), LlmMessage.User(user) }, ct);
     }
 
     /// <summary>
-    /// Explains one wrong Reading answer in two short sentences: why the
-    /// correct key is right and why the chosen key is wrong.
+    /// Builds a full test from the catalog below. Listening parts only work
+    /// inside a multi skill test, so include them only with other skills.
+    /// Reply with only JSON: {"ids": ["paper|part", ...], "reason": "one sentence"}.
+    /// Order the ids in test order: Listening, Reading, Writing, Speaking.
+    /// Favor the weakest skills from the history. Pick 4 to 8 parts.
+    /// </summary>
+    public async Task<TestPickResult> PickTestAsync(
+        string catalog, string history, CancellationToken ct = default)
+    {
+        if (!_llm.IsConfigured)
+            return TestPickResult.Fail(
+                "No language model is configured. Open Settings to add one.");
+
+        var user = LlmPrompts.BuildPickTest(catalog, history);
+
+        var result = await _llm.CompleteAsync(
+            new[] { LlmMessage.System(SystemPrompt), LlmMessage.User(user) }, ct);
+        if (!result.Success) return TestPickResult.Fail(result.Error);
+
+        var json = ExtractJsonObject(result.Text);
+        if (json is null) return TestPickResult.Fail("The model reply could not be read. Try again.");
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var ids = doc.RootElement.TryGetProperty("ids", out var list)
+                ? list.EnumerateArray()
+                    .Select(e => e.GetString() ?? string.Empty)
+                    .Where(s => s.Contains('|'))
+                    .Distinct()
+                    .Take(8)
+                    .ToList()
+                : new List<string>();
+            var reason = doc.RootElement.TryGetProperty("reason", out var why)
+                ? why.GetString() ?? string.Empty
+                : string.Empty;
+            if (ids.Count < 2)
+                return TestPickResult.Fail("The model picked too few parts. Try again.");
+            return new TestPickResult(true, ids, reason, string.Empty);
+        }
+        catch (JsonException)
+        {
+            return TestPickResult.Fail("The model reply could not be read. Try again.");
+        }
+    }
+
+    /// <summary>
+    /// Rates one mock test paper: skill balance, instruction clarity, and
+    /// answer key sanity. Score is 0 to 10, practice guidance only.
+    /// </summary>
+    public async Task<PaperReviewResult> ReviewPaperAsync(
+        IELTop.Models.ExamPaper paper, CancellationToken ct = default)
+    {
+        if (!_llm.IsConfigured)
+            return PaperReviewResult.Fail(
+                "No language model is configured. Open Settings to add one.");
+
+        var outline = new StringBuilder()
+            .AppendLine($"Title: {paper.Title}")
+            .AppendLine($"Category: {paper.Category}, Level: {paper.Level}");
+        foreach (var part in paper.Parts.Take(12))
+        {
+            int choice = part.Questions.Count(q =>
+                string.Equals(q.Kind, "choice", StringComparison.OrdinalIgnoreCase));
+            int gap = part.Questions.Count(q =>
+                string.Equals(q.Kind, "gap", StringComparison.OrdinalIgnoreCase));
+            int match = part.Questions.Count(q =>
+                string.Equals(q.Kind, "match", StringComparison.OrdinalIgnoreCase));
+            outline.AppendLine($"- {part.Skill} {part.Id}: {part.Title} " +
+                $"({part.Minutes} min, {part.Questions.Count} questions: {choice} choice, {gap} gap, {match} match)");
+        }
+
+        var user = LlmPrompts.BuildReviewPaper(outline.ToString());
+
+        var result = await _llm.CompleteAsync(
+            new[] { LlmMessage.System(SystemPrompt), LlmMessage.User(user) }, ct);
+        if (!result.Success) return PaperReviewResult.Fail(result.Error);
+
+        var json = ExtractJsonObject(result.Text);
+        if (json is null) return PaperReviewResult.Fail("The model reply could not be read. Try again.");
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            double score = root.TryGetProperty("score", out var s) && s.ValueKind == JsonValueKind.Number
+                ? Math.Clamp(s.GetDouble(), 0, 10)
+                : 0;
+            static List<string> Strings(JsonElement e, string name)
+                => e.TryGetProperty(name, out var list) && list.ValueKind == JsonValueKind.Array
+                    ? list.EnumerateArray()
+                        .Select(x => x.GetString() ?? string.Empty)
+                        .Where(x => x.Length > 0)
+                        .Take(3)
+                        .ToList()
+                    : new List<string>();
+            return new PaperReviewResult(true, Math.Round(score, 1),
+                Strings(root, "strengths"), Strings(root, "fixes"), string.Empty);
+        }
+        catch (JsonException)
+        {
+            return PaperReviewResult.Fail("The model reply could not be read. Try again.");
+        }
+    }
+
+    /// <summary>
+    /// Turns pasted or imported text into one IELTop paper draft.
+    /// The caller shows the JSON for review before saving, never auto saves.
+    /// </summary>
+    public async Task<PaperDraftResult> DraftPaperAsync(
+        string rawText, string hint, CancellationToken ct = default)
+    {
+        if (!_llm.IsConfigured)
+            return PaperDraftResult.Fail(
+                "No language model is configured. Open Settings to add one.");
+        if (string.IsNullOrWhiteSpace(rawText))
+            return PaperDraftResult.Fail("There is no text to format yet.");
+
+        var clipped = rawText.Trim();
+        if (clipped.Length > 12_000)
+            clipped = clipped[..12_000];
+        var want = string.IsNullOrWhiteSpace(hint) ? "Reading" : hint.Trim();
+        var user = LlmPrompts.BuildDraftPaper(clipped, want);
+
+        var result = await _llm.CompleteAsync(
+            new[] { LlmMessage.System(SystemPrompt), LlmMessage.User(user) }, ct);
+        if (!result.Success) return PaperDraftResult.Fail(result.Error);
+
+        var json = ExtractJsonObject(result.Text);
+        if (json is null) return PaperDraftResult.Fail("The model reply could not be read. Try again.");
+        if (!IELTop.Services.Storage.PaperValidator.TryParse(
+            json, out var paper, out var issues) || paper is null)
+        {
+            // Keep the raw JSON so the editor can load it for hand fixes.
+            string pretty;
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                pretty = JsonSerializer.Serialize(doc.RootElement,
+                    new JsonSerializerOptions { WriteIndented = true });
+            }
+            catch (JsonException) { pretty = json; }
+            string why = issues.Count > 0 ? issues[0] : "The draft needs fixes before saving.";
+            return new PaperDraftResult(false, null, pretty, $"The draft needs fixes: {why}");
+        }
+        string formatted;
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            formatted = JsonSerializer.Serialize(doc.RootElement,
+                new JsonSerializerOptions { WriteIndented = true });
+        }
+        catch (JsonException) { formatted = json; }
+        return new PaperDraftResult(true, paper, formatted, string.Empty);
+    }
+
+    /// <summary>
+    /// Explains one wrong Reading answer. The caller passes full question
+    /// detail including option texts, because keys alone mean nothing.
     /// </summary>
     public Task<LlmResult> ExplainReadingAsync(
         string passage, string question, string chosenKey, string correctKey, CancellationToken ct = default)
@@ -299,12 +495,22 @@ public sealed class IeltsAiService : IIeltsAiService
             return Task.FromResult(LlmResult.Fail(
                 "No language model is configured. Open Settings to add one."));
         var picked = string.IsNullOrWhiteSpace(chosenKey) ? "no answer" : chosenKey;
-        var user =
-            "Passage:\n" + passage + "\n\n" +
-            "Question:\n" + question + "\n\n" +
-            $"The student chose {picked}. The correct answer is {correctKey}.\n" +
-            "In two short sentences, say why the correct answer is right " +
-            "and why the student choice is wrong. Quote the passage.";
+        var user = LlmPrompts.BuildReadingExplanation(passage, question, picked, correctKey);
+        return _llm.CompleteAsync(new[] { LlmMessage.System(SystemPrompt), LlmMessage.User(user) }, ct);
+    }
+
+    /// <summary>
+    /// Explains one wrong Listening answer. Points at the listening trap:
+    /// sound alike words, plurals, word limits, or a paraphrase that was missed.
+    /// </summary>
+    public Task<LlmResult> ExplainListeningAsync(
+        string transcript, string question, string chosenAnswer, string correctAnswer, CancellationToken ct = default)
+    {
+        if (!_llm.IsConfigured)
+            return Task.FromResult(LlmResult.Fail(
+                "No language model is configured. Open Settings to add one."));
+        var picked = string.IsNullOrWhiteSpace(chosenAnswer) ? "no answer" : chosenAnswer;
+        var user = LlmPrompts.BuildListeningExplanation(transcript, question, picked, correctAnswer);
         return _llm.CompleteAsync(new[] { LlmMessage.System(SystemPrompt), LlmMessage.User(user) }, ct);
     }
 
@@ -317,7 +523,8 @@ public sealed class IeltsAiService : IIeltsAiService
     /// </summary>
     private static WritingFeedback Sanitize(WritingFeedback raw, string essay, int minimumWords, MarkingStrictness strictness)
     {
-        var task = RoundHalf(Clamp(raw.TaskResponse));
+        double firstRaw = raw.TaskAchievement > 0 ? raw.TaskAchievement : raw.TaskResponse;
+        var task = RoundHalf(Clamp(firstRaw));
         var coherence = RoundHalf(Clamp(raw.Coherence));
         var lexical = RoundHalf(Clamp(raw.LexicalResource));
         var grammar = RoundHalf(Clamp(raw.Grammar));
@@ -334,15 +541,24 @@ public sealed class IeltsAiService : IIeltsAiService
         }
 
         var range = IeltsBanding.ToRange(overall, strictness);
+        string firstWhy = !string.IsNullOrWhiteSpace(raw.TaskAchievementWhy)
+            ? raw.TaskAchievementWhy
+            : raw.TaskResponseWhy ?? string.Empty;
         return new WritingFeedback
         {
             EstimatedBand = overall,
             BandLow = range.Low,
             BandHigh = range.High,
             TaskResponse = task,
+            TaskAchievement = task,
             Coherence = coherence,
             LexicalResource = lexical,
             Grammar = grammar,
+            TaskResponseWhy = firstWhy,
+            TaskAchievementWhy = firstWhy,
+            CoherenceWhy = raw.CoherenceWhy ?? string.Empty,
+            LexicalWhy = raw.LexicalWhy ?? string.Empty,
+            GrammarWhy = raw.GrammarWhy ?? string.Empty,
             Summary = summary,
             Strengths = raw.Strengths ?? new(),
             Improvements = raw.Improvements ?? new(),
@@ -363,13 +579,7 @@ public sealed class IeltsAiService : IIeltsAiService
     public IAsyncEnumerable<string> CoachSpeakingAsync(
         string target, string heardPhonemes, string mistakes, CancellationToken ct = default)
     {
-        var user =
-            "A student practised this sentence aloud.\n" +
-            $"Target: {target}\n" +
-            $"Sounds the model heard: {heardPhonemes}\n" +
-            $"Detected mistakes: {mistakes}\n\n" +
-            "Give three short, specific tips to fix the pronunciation. " +
-            "Mention the mouth position when helpful. Keep it under 120 words.";
+        var user = LlmPrompts.BuildCoachSpeaking(target, heardPhonemes, mistakes);
         return _llm.StreamAsync(new[] { LlmMessage.System(SystemPrompt), LlmMessage.User(user) }, ct);
     }
 

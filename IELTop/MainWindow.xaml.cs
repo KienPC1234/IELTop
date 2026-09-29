@@ -1,6 +1,10 @@
 ﻿using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Media;
+using IELTop.Styles;
 using IELTop.ViewModels;
 
 namespace IELTop
@@ -18,6 +22,7 @@ namespace IELTop
             InitializeComponent();
             Loaded += (_, _) => HookStrictMode();
             PreviewKeyDown += OnPreviewKeyDown;
+            Deactivated += (_, _) => (DataContext as MainViewModel)?.Exam.RegisterFocusLost();
             Closing += OnClosing;
         }
 
@@ -71,10 +76,13 @@ namespace IELTop
                 e.Key == Key.F11 ||
                 e.Key == Key.F12 ||
                 e.Key == Key.LWin || e.Key == Key.RWin ||
-                e.Key == Key.PrintScreen ||
+                e.Key == Key.Apps ||
+                e.Key == Key.PrintScreen || e.Key == Key.Snapshot ||
                 (e.Key == Key.Tab && (Keyboard.Modifiers & ModifierKeys.Alt) != 0) ||
                 (e.Key == Key.F4 && (Keyboard.Modifiers & ModifierKeys.Alt) != 0) ||
                 (e.Key == Key.Escape) ||
+                ((Keyboard.Modifiers & ModifierKeys.Control) != 0 &&
+                 (Keyboard.Modifiers & ModifierKeys.Shift) != 0 && e.Key == Key.Escape) ||
                 ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt)) != 0 &&
                  (e.Key == Key.Delete || e.Key == Key.Tab || e.Key == Key.Escape));
             if (blocked)
@@ -82,6 +90,71 @@ namespace IELTop
                 e.Handled = true;
                 if (DataContext is MainViewModel vm)
                     vm.Exam.StatusMessage = "Strict mode is on. Finish or submit the test first.";
+            }
+        }
+
+        /// <summary>
+        /// Passage highlight, like the real test. Read only code behind:
+        /// pure presentation, no test logic.
+        /// </summary>
+        private void HighlightButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selection = PassageBox.Selection;
+            if (!selection.IsEmpty)
+                selection.ApplyPropertyValue(
+                    TextElement.BackgroundProperty, Brushes.Yellow);
+        }
+
+        private void ClearHighlightButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (DataContext is MainViewModel vm && vm.Exam.CurrentPart is not null)
+                PassageBox.Document = RichText.Build(vm.Exam.CurrentPart.Material);
+        }
+
+        /// <summary>
+        /// Drag and drop for matching questions: bank items drag, gaps drop.
+        /// Pure presentation wiring, answers live in the row view models.
+        /// </summary>
+        private void BankItem_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed
+                && sender is TextBlock tb && tb.Text.Length > 0)
+                DragDrop.DoDragDrop(tb, tb.Text, DragDropEffects.Copy);
+        }
+
+        private void Gap_Drop(object sender, DragEventArgs e)
+        {
+            if (sender is Border border
+                && border.DataContext is MatchRowViewModel row
+                && e.Data.GetDataPresent(DataFormats.StringFormat))
+                row.Selected = (string)e.Data.GetData(DataFormats.StringFormat);
+        }
+
+        private void ClearRow_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is System.Windows.Controls.Button b
+                && b.DataContext is MatchRowViewModel row)
+                row.Selected = string.Empty;
+        }
+
+        /// <summary>
+        /// Library drag and drop: paper titles drag, the basket drops.
+        /// </summary>
+        private void PaperDrag_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (e.LeftButton == MouseButtonState.Pressed
+                && sender is TextBlock tb && tb.Text.Length > 0)
+                DragDrop.DoDragDrop(tb, tb.Text, DragDropEffects.Copy);
+        }
+
+        private void Basket_Drop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetDataPresent(DataFormats.StringFormat)
+                && DataContext is MainViewModel vm)
+            {
+                string title = (string)e.Data.GetData(DataFormats.StringFormat);
+                if (vm.Library.AddToBasketCommand.CanExecute(title))
+                    vm.Library.AddToBasketCommand.Execute(title);
             }
         }
 

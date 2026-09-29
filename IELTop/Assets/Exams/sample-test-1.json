@@ -1,6 +1,9 @@
 {
   "title": "IELTop Sample Test 1",
   "source": "IELTop original sample content, released with the app. Replace with licensed exam material.",
+  "category": "Academic",
+  "level": "5.0-7.0",
+  "tags": ["library", "city life", "transport", "hometown", "skills"],
   "parts": [
     {
       "id": "L1",
@@ -15,23 +18,19 @@
       "questions": [
         {
           "number": 1,
-          "prompt": "What time does the library open on weekdays?",
-          "options": [
-            { "key": "A", "text": "7:00" },
-            { "key": "B", "text": "8:00" },
-            { "key": "C", "text": "9:00" }
-          ],
-          "correctKey": "B"
+          "kind": "gap",
+          "prompt": "The library opens at ___ on weekdays.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "8:00|8|8am|8 am|eight"
         },
         {
           "number": 2,
-          "prompt": "How long can a student borrow a laptop?",
-          "options": [
-            { "key": "A", "text": "Two hours" },
-            { "key": "B", "text": "One day" },
-            { "key": "C", "text": "One week" }
-          ],
-          "correctKey": "A"
+          "kind": "gap",
+          "prompt": "A student can borrow a laptop for ___.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "two hours|2 hours"
         }
       ]
     },
@@ -66,6 +65,18 @@
           ],
           "correctKey": "A",
           "explanation": "The passage links green space to lower stress and better concentration."
+        },
+        {
+          "number": 5,
+          "kind": "match",
+          "prompt": "Match each measure with what it describes.",
+          "options": [],
+          "correctKey": "",
+          "bank": ["Road capacity", "Park distance", "Shop count"],
+          "matchRows": [
+            { "label": "Old measure of success", "answer": "Road capacity" },
+            { "label": "New measure of success", "answer": "Park distance" }
+          ]
         }
       ]
     },

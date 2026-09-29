@@ -1,0 +1,249 @@
+{
+  "title": "IELTop Sample Test 2",
+  "source": "IELTop original sample content, written for this app. Free to keep and share with the app.",
+  "category": "Academic",
+  "level": "5.0-7.0",
+  "tags": ["sports", "museum", "trains", "bees", "libraries", "work", "food", "travel"],
+  "parts": [
+    {
+      "id": "L1",
+      "skill": "Listening",
+      "title": "Listening Part 1: Sports Centre",
+      "topic": "Membership",
+      "taskType": "Part 1",
+      "minutes": 8,
+      "instructions": "Listen to the conversation, then type no more than two words for each answer. The clip plays once.",
+      "material": "Good afternoon, Riverside Sports Centre. Hello, I would like to join the swimming club. Of course. Can I take your name? It is Anna Kowalski. Kowal ski, K O W A L S K I. And how old are you? I am twenty four. Our junior membership ends at eighteen, so you need an adult membership. That costs forty five pounds per month. That is fine. Which evenings can you swim? The pool is open for club members on Tuesday and Thursday from seven to nine. Thursday is best for me. Good. Please arrive fifteen minutes early for your first session to meet the coach.",
+      "audioFile": "",
+      "questions": [
+        {
+          "number": 1,
+          "kind": "gap",
+          "prompt": "Family name of the new member: ___",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "Kowalski"
+        },
+        {
+          "number": 2,
+          "kind": "gap",
+          "prompt": "Monthly adult membership: ___ pounds.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "45|forty five|forty-five"
+        },
+        {
+          "number": 3,
+          "kind": "gap",
+          "prompt": "Club swimming evening chosen: ___.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "Thursday"
+        }
+      ]
+    },
+    {
+      "id": "L2",
+      "skill": "Listening",
+      "title": "Listening Part 2: City Museum",
+      "topic": "Museum visit",
+      "taskType": "Part 2",
+      "minutes": 8,
+      "instructions": "Listen to the guide, then choose the correct answer. The clip plays once.",
+      "material": "Welcome to the City Museum. Before you walk around, here is some practical information. The museum opens at ten every day except Monday, when we are closed for cleaning. Entry tickets cost twelve pounds for adults and six pounds for children under sixteen. Audio guides are free, please ask at the desk. Photography is allowed in the main hall only, not in the special exhibition rooms. The cafe on the top floor serves lunch from eleven thirty until two. Finally, the museum shop closes fifteen minutes before the museum itself, at a quarter to six.",
+      "audioFile": "",
+      "questions": [
+        {
+          "number": 4,
+          "kind": "choice",
+          "prompt": "On which day is the museum closed?",
+          "options": [
+            { "key": "A", "text": "Sunday" },
+            { "key": "B", "text": "Monday" },
+            { "key": "C", "text": "Friday" }
+          ],
+          "correctKey": "B"
+        },
+        {
+          "number": 5,
+          "kind": "gap",
+          "prompt": "Adult entry ticket: ___ pounds.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "12|twelve"
+        },
+        {
+          "number": 6,
+          "kind": "choice",
+          "prompt": "Where is photography allowed?",
+          "options": [
+            { "key": "A", "text": "Everywhere" },
+            { "key": "B", "text": "Only in the main hall" },
+            { "key": "C", "text": "Only outside" }
+          ],
+          "correctKey": "B"
+        }
+      ]
+    },
+    {
+      "id": "R1",
+      "skill": "Reading",
+      "title": "Reading Passage 1: Night Trains Return",
+      "topic": "Travel",
+      "taskType": "Passage 1",
+      "minutes": 12,
+      "instructions": "Read the passage, then answer the questions below.",
+      "material": "Night trains are coming back to Europe. After years of decline, several operators now report full carriages on sleeper routes between major cities. Passengers say they prefer waking up in a new city to spending a night in an airport hotel. A single sleeper ticket often costs less than a flight plus a hotel room. Operators admit the old carriages are expensive to maintain, but new orders suggest the business now makes sense. Environmental rules that raise the price of short flights have helped too. Critics argue that night trains still need public money to survive, and that tickets sell out too fast for most travellers.",
+      "questions": [
+        {
+          "number": 7,
+          "kind": "choice",
+          "prompt": "Why do passengers prefer night trains?",
+          "options": [
+            { "key": "A", "text": "They wake up in a new city" },
+            { "key": "B", "text": "They are always cheaper than hotels" },
+            { "key": "C", "text": "They never sell out" }
+          ],
+          "correctKey": "A",
+          "explanation": "The passage says passengers prefer waking up in a new city to a night in an airport hotel."
+        },
+        {
+          "number": 8,
+          "kind": "choice",
+          "prompt": "The writer says environmental rules have",
+          "options": [
+            { "key": "A", "text": "closed many airports" },
+            { "key": "B", "text": "helped night trains" },
+            { "key": "C", "text": "lowered ticket prices" }
+          ],
+          "correctKey": "B",
+          "explanation": "Rules raising short flight prices have helped night trains compete."
+        },
+        {
+          "number": 9,
+          "kind": "choice",
+          "prompt": "Critics of night trains say that",
+          "options": [
+            { "key": "A", "text": "tickets sell out too fast" },
+            { "key": "B", "text": "carriages are too modern" },
+            { "key": "C", "text": "flights are better for the environment" }
+          ],
+          "correctKey": "A",
+          "explanation": "Critics say tickets sell out too fast for most travellers."
+        },
+        {
+          "number": 10,
+          "kind": "match",
+          "prompt": "Match each fact with what it describes.",
+          "options": [],
+          "correctKey": "",
+          "bank": ["Full carriages", "Public money", "Airport hotel"],
+          "matchRows": [
+            { "label": "What operators report", "answer": "Full carriages" },
+            { "label": "What critics say trains need", "answer": "Public money" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "R2",
+      "skill": "Reading",
+      "title": "Reading Passage 2: Urban Bees",
+      "topic": "Nature",
+      "taskType": "Passage 2",
+      "minutes": 12,
+      "instructions": "Read the passage, then answer the questions below.",
+      "material": "Honeybees are moving into cities in large numbers. Rooftop hives now appear on offices, schools, and restaurants. Researchers found that city bees often produce more honey than country bees, because gardens flower all year and farmers use fewer pesticides in town centres. There is a limit, however. Too many hives in one area means bees compete for the same flowers, and wild bees lose out. Some cities now ask beekeepers to register hives so numbers can be managed.",
+      "questions": [
+        {
+          "number": 11,
+          "kind": "choice",
+          "prompt": "City bees often produce more honey because",
+          "options": [
+            { "key": "A", "text": "gardens flower all year" },
+            { "key": "B", "text": "rooftops are warmer" },
+            { "key": "C", "text": "beekeepers feed them sugar" }
+          ],
+          "correctKey": "A",
+          "explanation": "Gardens flower all year and town centres use fewer pesticides."
+        },
+        {
+          "number": 12,
+          "kind": "gap",
+          "prompt": "Too many hives means bees ___ for the same flowers.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "compete"
+        },
+        {
+          "number": 13,
+          "kind": "choice",
+          "prompt": "Some cities ask beekeepers to register hives so that",
+          "options": [
+            { "key": "A", "text": "honey can be taxed" },
+            { "key": "B", "text": "numbers can be managed" },
+            { "key": "C", "text": "wild bees leave" }
+          ],
+          "correctKey": "B",
+          "explanation": "Registration lets cities manage hive numbers."
+        }
+      ]
+    },
+    {
+      "id": "W1",
+      "skill": "Writing",
+      "title": "Writing Task 1: Library Visits",
+      "topic": "Libraries",
+      "taskType": "Task 1 Letter",
+      "minutes": 20,
+      "instructions": "Write at least 150 words. Cover all three points below.",
+      "material": "Your local library plans to shorten its evening opening hours. Write a letter to the library manager. Explain why you use the library in the evening, describe the problems shorter hours would cause, and suggest one alternative solution.",
+      "questions": []
+    },
+    {
+      "id": "W2",
+      "skill": "Writing",
+      "title": "Writing Task 2: Working From Home",
+      "topic": "Work",
+      "taskType": "Task 2 Opinion",
+      "minutes": 40,
+      "instructions": "Write at least 250 words. State your view, give two reasons with examples, and finish with a short conclusion.",
+      "material": "Many people now work from home instead of going to an office. Do the advantages of this outweigh the disadvantages?",
+      "questions": []
+    },
+    {
+      "id": "S1",
+      "skill": "Speaking",
+      "title": "Speaking Part 1: Food",
+      "topic": "Food",
+      "taskType": "Part 1",
+      "minutes": 2,
+      "instructions": "Answer in 2 to 3 sentences per question. Speak for about 60 seconds, no pause.",
+      "material": "What kind of food do you enjoy most? Do you prefer cooking at home or eating out? Has what you eat changed much since you were a child?",
+      "questions": []
+    },
+    {
+      "id": "S2",
+      "skill": "Speaking",
+      "title": "Speaking Part 2: Cue Card",
+      "topic": "A journey",
+      "taskType": "Part 2 Cue Card",
+      "minutes": 2,
+      "prepSeconds": 60,
+      "instructions": "You have 1 minute to prepare, then speak for 1 to 2 minutes without pause.",
+      "material": "Describe an interesting journey you have taken. You should say where you went, who you went with, what happened on the way, and why you remember it well.",
+      "questions": []
+    },
+    {
+      "id": "S3",
+      "skill": "Speaking",
+      "title": "Speaking Part 3: Travel and Transport",
+      "topic": "Travel",
+      "taskType": "Part 3",
+      "minutes": 3,
+      "instructions": "Give longer answers with reasons and examples. Speak for about 60 seconds per question, no pause.",
+      "material": "Why do some people prefer travelling by train rather than by plane? How has tourism changed your country in recent years? Should governments spend more on public transport or on roads?",
+      "questions": []
+    }
+  ]
+}

@@ -1,0 +1,131 @@
+{
+  "title": "IELTop Sample Test 3",
+  "source": "IELTop original sample content, written for this app. Free to keep and share with the app.",
+  "category": "General Training",
+  "level": "4.5-6.5",
+  "tags": ["general", "housing", "letters", "work", "health", "community"],
+  "parts": [
+    {
+      "id": "L1",
+      "skill": "Listening",
+      "title": "Listening Part 1: Renting a Room",
+      "topic": "Housing",
+      "taskType": "Part 1",
+      "minutes": 8,
+      "instructions": "Listen to the conversation, then answer. The clip plays once. Write no more than two words for gaps.",
+      "material": "Good afternoon, Maple Housing. Hello, I saw your ad for a room near the station. Yes, it is still free. How much is the rent per month? It is three hundred and eighty pounds, bills included. That sounds fair. Is the room furnished? Yes, with a bed, a desk, and a wardrobe. And can I use the kitchen? Of course, but please clean after cooking. One more thing, is there a bus stop nearby? Yes, the number twelve stops right outside and takes ten minutes to the centre.",
+      "audioFile": "",
+      "questions": [
+        {
+          "number": 1,
+          "kind": "gap",
+          "prompt": "Monthly rent: ___ pounds.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "380|three hundred and eighty|three hundred eighty"
+        },
+        {
+          "number": 2,
+          "kind": "choice",
+          "prompt": "How long does the bus take to the centre?",
+          "options": [
+            { "key": "A", "text": "Five minutes" },
+            { "key": "B", "text": "Ten minutes" },
+            { "key": "C", "text": "Twelve minutes" }
+          ],
+          "correctKey": "B",
+          "explanation": "The speaker says the number twelve bus takes ten minutes to the centre."
+        }
+      ]
+    },
+    {
+      "id": "R1",
+      "skill": "Reading",
+      "title": "Reading Passage 1: Community Gardens",
+      "topic": "Community",
+      "taskType": "Passage 1",
+      "minutes": 12,
+      "instructions": "Read the passage, then answer the questions below.",
+      "material": "Community gardens give city residents a small plot to grow vegetables and flowers. Members share tools, water costs, and weekend work. Studies link regular gardening to better mood and light exercise. Most gardens ask members to grow without strong chemicals, so children can play safely nearby. Waiting lists are common, so new members often start by helping an experienced gardener for one season.",
+      "questions": [
+        {
+          "number": 3,
+          "kind": "choice",
+          "prompt": "What do members share?",
+          "options": [
+            { "key": "A", "text": "Tools, water costs, and work" },
+            { "key": "B", "text": "Only seeds" },
+            { "key": "C", "text": "Cooked meals" }
+          ],
+          "correctKey": "A",
+          "explanation": "The passage lists tools, water costs, and weekend work as shared."
+        },
+        {
+          "number": 4,
+          "kind": "gap",
+          "prompt": "New members often start by ___ an experienced gardener.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "helping"
+        },
+        {
+          "number": 5,
+          "kind": "match",
+          "prompt": "Match each fact with what it describes.",
+          "options": [],
+          "correctKey": "",
+          "bank": ["Better mood", "Safe play", "Waiting lists"],
+          "matchRows": [
+            { "label": "What gardening is linked to", "answer": "Better mood" },
+            { "label": "Why strong chemicals are avoided", "answer": "Safe play" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "W1",
+      "skill": "Writing",
+      "title": "Writing Task 1: Noisy Neighbours",
+      "topic": "Housing",
+      "taskType": "Task 1 Letter",
+      "minutes": 20,
+      "instructions": "Write at least 150 words. Cover all three points below.",
+      "material": "Your neighbours play loud music late at night. Write a letter to them. Describe the problem, explain how it affects you, and suggest a solution.",
+      "questions": []
+    },
+    {
+      "id": "W2",
+      "skill": "Writing",
+      "title": "Writing Task 2: Healthy Habits",
+      "topic": "Health",
+      "taskType": "Task 2 Opinion",
+      "minutes": 40,
+      "instructions": "Write at least 250 words. State your view, give two reasons with examples, and finish with a short conclusion.",
+      "material": "Some people think employers should give staff extra time for exercise. Do you agree or disagree?",
+      "questions": []
+    },
+    {
+      "id": "S1",
+      "skill": "Speaking",
+      "title": "Speaking Part 1: Work and Rest",
+      "topic": "Work",
+      "taskType": "Part 1",
+      "minutes": 2,
+      "instructions": "Answer in 2 to 3 sentences per question. Speak for about 60 seconds, no pause.",
+      "material": "Do you work or study? What do you like most about your job or studies? How do you usually rest after a busy day?",
+      "questions": []
+    },
+    {
+      "id": "S2",
+      "skill": "Speaking",
+      "title": "Speaking Part 2: Cue Card",
+      "topic": "A helpful person",
+      "taskType": "Part 2 Cue Card",
+      "minutes": 2,
+      "prepSeconds": 60,
+      "instructions": "You have 1 minute to prepare, then speak for 1 to 2 minutes without pause.",
+      "material": "Describe a person who helped you with something. You should say who they are, what they did, when it happened, and why you remember them.",
+      "questions": []
+    }
+  ]
+}

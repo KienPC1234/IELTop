@@ -16,7 +16,9 @@ public sealed record DashboardStats(
     int ModelsReady,
     int ModelsTotal,
     bool LlmConfigured,
-    string LlmModel);
+    string LlmModel,
+    int ExamAttempts,
+    string LastBandLabel);
 
 public interface IStatsService
 {
@@ -34,8 +36,9 @@ public sealed class StatsService : IStatsService
 
     public DashboardStats Build()
     {
-        int words = 0, due = 0, attempts = 0;
+        int words = 0, due = 0, attempts = 0, exams = 0;
         double average = 0, best = 0;
+        string lastBand = "No test yet";
 
         try
         {
@@ -45,13 +48,25 @@ public sealed class StatsService : IStatsService
             var today = DateTime.UtcNow.Date;
             due = db.StudyRecords.Count(r => r.NextReview <= today);
 
-            var spoken = db.SpeakingAttempts.ToList();
-            attempts = spoken.Count;
-            if (attempts > 0)
+            // Aggregate in SQL so a long history never loads row by row.
+            var spoken = db.SpeakingAttempts
+                .GroupBy(_ => 1)
+                .Select(g => new { Count = g.Count(), Avg = g.Average(s => s.Accuracy), Max = g.Max(s => s.Accuracy) })
+                .FirstOrDefault();
+            if (spoken is not null)
             {
-                average = Math.Round(spoken.Average(s => s.Accuracy), 1);
-                best = Math.Round(spoken.Max(s => s.Accuracy), 1);
+                attempts = spoken.Count;
+                average = Math.Round(spoken.Avg, 1);
+                best = Math.Round(spoken.Max, 1);
             }
+
+            exams = db.ExamAttempts.Count();
+            var last = db.ExamAttempts
+                .OrderByDescending(a => a.Id)
+                .Select(a => new { a.BandLow, a.BandHigh })
+                .FirstOrDefault();
+            if (last is not null)
+                lastBand = $"{last.BandLow:0.0} to {last.BandHigh:0.0}";
         }
         catch (Exception)
         {
@@ -65,6 +80,7 @@ public sealed class StatsService : IStatsService
             words, due, attempts, average, best,
             ready, slots.Count,
             !string.IsNullOrWhiteSpace(_settings.Current.LlmModel),
-            _settings.Current.LlmModel);
+            _settings.Current.LlmModel,
+            exams, lastBand);
     }
 }

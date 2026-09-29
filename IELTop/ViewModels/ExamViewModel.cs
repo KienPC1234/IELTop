@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using IELTop.Data;
@@ -7,6 +8,7 @@ using IELTop.Models;
 using IELTop.Services.Ai;
 using IELTop.Services.Audio;
 using IELTop.Services.Storage;
+using Microsoft.EntityFrameworkCore;
 
 namespace IELTop.ViewModels;
 
@@ -21,7 +23,7 @@ public sealed partial class ExamOptionViewModel : ObservableObject
 
     public string Key { get; }
     public string Text { get; }
-    public string GroupName => $"q{_question.Model.Number}";
+    public string GroupName => $"{_question.GroupPrefix}_{_question.Model.Number}";
 
     public ExamOptionViewModel(ExamOption option, ExamQuestionViewModel question)
     {
@@ -38,45 +40,131 @@ public sealed partial class ExamOptionViewModel : ObservableObject
 }
 
 /// <summary>
+/// One row of a matching question: a label with a gap filled from the bank
+/// by drag and drop. Answered when a bank item sits in the gap.
+/// </summary>
+public sealed partial class MatchRowViewModel : ObservableObject
+{
+    public string Label { get; }
+    public string Answer { get; }
+
+    [ObservableProperty] private string _selected = string.Empty;
+
+    public MatchRowViewModel(ExamMatchRow row)
+    {
+        Label = row.Label;
+        Answer = row.Answer;
+    }
+
+    public bool IsCorrect => Norm(Selected) == Norm(Answer) && Selected.Length > 0;
+
+    private static string Norm(string text)
+    {
+        var parts = text.Trim().ToLowerInvariant()
+            .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(" ", parts);
+    }
+}
+
+/// <summary>
 /// One question as presented during the test, with the student's choice.
 /// </summary>
 public sealed partial class ExamQuestionViewModel : ObservableObject
 {
     public ExamQuestion Model { get; }
+    public int Index { get; }
+    public string GroupPrefix { get; }
 
     [ObservableProperty] private string _selectedKey = string.Empty;
+    [ObservableProperty] private string _answer = string.Empty;
     [ObservableProperty] private bool _isFlagged;
 
     public ObservableCollection<ExamOptionViewModel> Options { get; } = new();
+    public ObservableCollection<MatchRowViewModel> MatchRows { get; } = new();
+
+    public IReadOnlyList<string> Bank => Model.Bank;
 
     public string NumberLabel => $"Question {Model.Number}";
     public string Prompt => Model.Prompt;
     public string Explanation => Model.Explanation;
     public bool HasExplanation => !string.IsNullOrWhiteSpace(Model.Explanation);
     public string FlagLabel => IsFlagged ? "Flagged" : "Flag";
+    public bool IsGap => string.Equals(Model.Kind, "gap", StringComparison.OrdinalIgnoreCase);
+    public bool IsMatch => string.Equals(Model.Kind, "match", StringComparison.OrdinalIgnoreCase);
+    public bool ShowOptions => !IsGap && !IsMatch;
+    public bool IsAnswered => IsMatch
+        ? MatchRows.Any(r => !string.IsNullOrWhiteSpace(r.Selected))
+        : IsGap ? !string.IsNullOrWhiteSpace(Answer) : !string.IsNullOrEmpty(SelectedKey);
 
-    public ExamQuestionViewModel(ExamQuestion model)
+    /// <summary>First accepted answer, shown in Reading review.</summary>
+    public string DisplayAnswer => IsGap ? FirstGapAnswer : Model.CorrectKey;
+
+    private string FirstGapAnswer =>
+        Model.GapAnswer.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault() ?? string.Empty;
+
+    public ExamQuestionViewModel(ExamQuestion model, int index, string groupPrefix)
     {
         Model = model;
+        Index = index;
+        GroupPrefix = groupPrefix;
         foreach (var option in model.Options)
             Options.Add(new ExamOptionViewModel(option, this));
+        foreach (var row in model.MatchRows)
+        {
+            var rowVm = new MatchRowViewModel(row);
+            rowVm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(MatchRowViewModel.Selected))
+                    OnPropertyChanged(nameof(IsAnswered));
+            };
+            MatchRows.Add(rowVm);
+        }
     }
 
     partial void OnSelectedKeyChanged(string value)
     {
         foreach (var option in Options)
             option.IsSelected = option.Key == value;
+        OnPropertyChanged(nameof(IsAnswered));
     }
 
     partial void OnIsFlaggedChanged(bool value) => OnPropertyChanged(nameof(FlagLabel));
 
-    public bool IsCorrect => SelectedKey == Model.CorrectKey;
+    partial void OnAnswerChanged(string value) => OnPropertyChanged(nameof(IsAnswered));
+
+    public bool IsCorrect => IsMatch
+        ? MatchRows.Count > 0 && MatchRows.All(r => r.IsCorrect)
+        : IsGap ? MatchesGap(Answer) : SelectedKey == Model.CorrectKey;
+
+    /// <summary>
+    /// Gap answers ignore case and extra spaces. Alternatives split by |.
+    /// </summary>
+    private bool MatchesGap(string answer)
+    {
+        var given = NormGap(answer);
+        if (given.Length == 0) return false;
+        return Model.GapAnswer
+            .Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(a => NormGap(a) == given);
+    }
+
+    private static string NormGap(string text)
+    {
+        var parts = text.Trim().ToLowerInvariant()
+            .Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(" ", parts);
+    }
 
     public string FlagSuffix => IsFlagged ? " (flagged)" : string.Empty;
 
-    public string ReviewLabel => string.IsNullOrEmpty(SelectedKey)
-        ? $"no answer, correct is {Model.CorrectKey}"
-        : IsCorrect ? "correct" : $"you chose {SelectedKey}, correct is {Model.CorrectKey}";
+    public string ChosenLabel => IsMatch
+        ? string.Join("; ", MatchRows.Select(r => $"{r.Label}={r.Selected.Trim()}"))
+        : IsGap ? Answer.Trim() : SelectedKey;
+
+    public string ReviewLabel => string.IsNullOrWhiteSpace(ChosenLabel)
+        ? $"no answer, correct is {DisplayAnswer}"
+        : IsCorrect ? "correct" : $"you chose {ChosenLabel}, correct is {DisplayAnswer}";
 
     /// <summary>Listening review names only the wrong questions, no answers.</summary>
     public string ListeningReviewLabel => $"wrong{FlagSuffix}";
@@ -91,6 +179,46 @@ public sealed partial class ExamQuestionViewModel : ObservableObject
     }
 }
 
+/// <summary>One paper row with its origin for the manage list.</summary>
+public sealed partial class PaperRow : ObservableObject
+{
+    public string Title { get; }
+    public string Detail { get; }
+    public bool IsUserPaper { get; }
+    public string Category { get; }
+    public string Level { get; }
+    public string Skills { get; }
+    public int Parts { get; }
+    public int Questions { get; }
+    public int Minutes { get; }
+
+    public PaperRow(ExamPaper paper, bool isUserPaper)
+    {
+        Title = paper.Title;
+        Skills = string.Join(", ", paper.Parts
+            .Select(p => p.Skill).Distinct(StringComparer.OrdinalIgnoreCase));
+        Parts = paper.Parts.Count;
+        Questions = paper.Parts.Sum(p => p.Questions.Count);
+        Minutes = paper.Parts.Sum(p => p.Minutes);
+        Category = paper.Category;
+        Level = paper.Level;
+        Detail = $"{Parts} parts, {Questions} questions, about {Minutes} min. {Skills}. " +
+            (isUserPaper ? "Yours." : "Built in.");
+        IsUserPaper = isUserPaper;
+    }
+}
+
+/// <summary>Compares a server date against a local file date. Pure logic.</summary>
+public static class UpdateChecker
+{
+    public static bool IsNewer(string? serverDate, DateTime localDate)
+    {
+        if (string.IsNullOrWhiteSpace(serverDate)) return false;
+        if (!DateTime.TryParse(serverDate, out var server)) return false;
+        return server.Date > localDate.Date;
+    }
+}
+
 /// <summary>
 /// One part of the test with a countdown timer. Listening parts can play a
 /// clip, Writing parts collect an essay, Speaking parts collect a recording
@@ -102,14 +230,26 @@ public sealed partial class ExamPartViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RemainingLabel))]
+    [NotifyPropertyChangedFor(nameof(IsLowTime))]
+    [NotifyPropertyChangedFor(nameof(IsCriticalTime))]
     private int _remainingSeconds;
     [ObservableProperty] private bool _isTimerRunning;
     [ObservableProperty] private string _essay = string.Empty;
     [ObservableProperty] private string _transcript = string.Empty;
+    [ObservableProperty] private string _notes = string.Empty;
     [ObservableProperty] private string _audioStatus = string.Empty;
     [ObservableProperty] private bool _isRecording;
     [ObservableProperty] private string _aiResult = string.Empty;
-    [ObservableProperty] private bool _audioPlayedOnce;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowStartNow))]
+    private bool _audioPlayedOnce;
+    [ObservableProperty] private bool _noAudioFallback;
+    [ObservableProperty] private int _focusedIndex;
+    [ObservableProperty] private int _spokenSeconds;
+    [ObservableProperty] private bool _isCurrent;
+
+    /// <summary>Owning paper, set when a test mixes parts from many papers.</summary>
+    public string PaperName { get; set; } = string.Empty;
 
     public string Title => Model.Title;
     public string Skill => Model.Skill;
@@ -126,13 +266,17 @@ public sealed partial class ExamPartViewModel : ObservableObject
                              && Questions.Count == 0;
     public bool IsSpeaking => string.Equals(Skill, "Speaking", StringComparison.OrdinalIgnoreCase);
     public bool IsListening => string.Equals(Skill, "Listening", StringComparison.OrdinalIgnoreCase);
+    public bool IsReading => string.Equals(Skill, "Reading", StringComparison.OrdinalIgnoreCase);
     public bool HasAudio => !string.IsNullOrWhiteSpace(AudioFile);
+    public bool ShowStartNow => IsListening && !AudioPlayedOnce;
 
     public string HeaderLine
     {
         get
         {
-            var bits = new List<string> { Skill };
+            var bits = new List<string>();
+            if (!string.IsNullOrWhiteSpace(PaperName)) bits.Add(PaperName);
+            bits.Add(Skill);
             if (HasTaskType) bits.Add(TaskType);
             if (HasTopic) bits.Add(Topic);
             return string.Join(" | ", bits);
@@ -154,8 +298,10 @@ public sealed partial class ExamPartViewModel : ObservableObject
     {
         Model = model;
         RemainingSeconds = Math.Max(60, model.Minutes * 60);
+        string prefix = Guid.NewGuid().ToString("N");
+        int index = 0;
         foreach (var q in model.Questions)
-            Questions.Add(new ExamQuestionViewModel(q));
+            Questions.Add(new ExamQuestionViewModel(q, index++, prefix));
     }
 
     partial void OnEssayChanged(string value) => OnPropertyChanged(nameof(WordCountLabel));
@@ -182,6 +328,52 @@ public sealed partial class ExamPartViewModel : ObservableObject
 
     public int CorrectCount => Questions.Count(q => q.IsCorrect);
     public int ScoredCount => Questions.Count;
+    public int AnsweredCount => Questions.Count(q => q.IsAnswered);
+    public int FlaggedCount => Questions.Count(q => q.IsFlagged);
+
+    public string ProgressLabel => HasQuestions
+        ? $"Answered {AnsweredCount} of {ScoredCount}, flagged {FlaggedCount}."
+        : string.Empty;
+
+    /// <summary>Orange under 10 minutes, like the real test warning.</summary>
+    public bool IsLowTime => RemainingSeconds <= 600;
+
+    /// <summary>Red under 5 minutes, like the real test warning.</summary>
+    public bool IsCriticalTime => RemainingSeconds <= 300;
+
+    public ExamQuestionViewModel? FocusedQuestion =>
+        Questions.Count == 0 ? null : Questions[Math.Clamp(FocusedIndex, 0, Questions.Count - 1)];
+
+    partial void OnFocusedIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(FocusedQuestion));
+        OnPropertyChanged(nameof(CanQuestionBack));
+        OnPropertyChanged(nameof(CanQuestionNext));
+    }
+
+    public bool CanQuestionBack => FocusedIndex > 0;
+    public bool CanQuestionNext => FocusedIndex < Questions.Count - 1;
+
+    public void GoToQuestion(ExamQuestionViewModel question)
+    {
+        int index = Questions.IndexOf(question);
+        if (index >= 0)
+            FocusedIndex = index;
+    }
+
+    public void NextQuestion()
+    {
+        if (FocusedIndex < Questions.Count - 1)
+            FocusedIndex++;
+    }
+
+    public void PreviousQuestion()
+    {
+        if (FocusedIndex > 0)
+            FocusedIndex--;
+    }
+
+    public void RefreshProgress() => OnPropertyChanged(nameof(ProgressLabel));
 
     /// <summary>Recording length for a speaking cue. Part 2 gets longer.</summary>
     public int SpeakingSeconds
@@ -204,6 +396,9 @@ public sealed partial class ExamPartViewModel : ObservableObject
 /// Speaking get AI band ranges when a model is set, and stay honestly
 /// unmarked when it is not. Speaking runs without pause, like the real test.
 /// </summary>
+/// <summary>One review line with a verdict for its icon.</summary>
+public sealed record ReviewItem(string Text, bool? IsGood);
+
 public sealed partial class ExamViewModel : ObservableObject
 {
     private readonly IExamRepository _repository;
@@ -212,10 +407,13 @@ public sealed partial class ExamViewModel : ObservableObject
     private readonly ITtsService _tts;
     private readonly ISttService _stt;
     private readonly IGecService _gec;
+    private readonly IModelLoadCoordinator _models;
     private readonly System.Windows.Threading.DispatcherTimer _timer;
     private readonly List<ExamPartViewModel> _parts = new();
     private CancellationTokenSource? _speakingCts;
     private CancellationTokenSource? _listeningCts;
+    private CancellationTokenSource? _prepCts;
+    private CancellationTokenSource? _gradingCts;
 
     [ObservableProperty] private ExamPaper? _selectedPaper;
     [ObservableProperty] private ExamPartViewModel? _currentPart;
@@ -227,15 +425,27 @@ public sealed partial class ExamViewModel : ObservableObject
     [ObservableProperty] private bool _showReview;
     [ObservableProperty] private string _statusMessage = "Pick a paper, a scope, and a marking level, then start.";
     [ObservableProperty] private string _selectedScope = "Full test";
+    [ObservableProperty] private string _selectedTaskType = "All types";
     [ObservableProperty] private MarkingStrictness _selectedStrictness = MarkingStrictness.Standard;
     [ObservableProperty] private bool _strictMode;
     [ObservableProperty] private bool _shuffleParts;
+    [ObservableProperty] private bool _mixAllPapers;
+    [ObservableProperty] private string _selectedBuildMode = "Paper order";
     [ObservableProperty] private bool _isGrading;
+    [ObservableProperty] private string _loadingLabel = string.Empty;
+    [ObservableProperty] private string _modelModeLabel = string.Empty;
     [ObservableProperty] private double _volume = 80;
+    [ObservableProperty] private int _strictViolations;
+    [ObservableProperty] private double _fontScale = 1.0;
 
     public ObservableCollection<ExamPaper> Papers { get; } = new();
-    public ObservableCollection<string> ReviewLines { get; } = new();
+    public ObservableCollection<PaperRow> PaperRows { get; } = new();
+    public ObservableCollection<ReviewItem> ReviewItems { get; } = new();
     public ObservableCollection<string> AiFeedbackLines { get; } = new();
+    public ObservableCollection<string> TaskTypes { get; } = new();
+
+    /// <summary>Raised after papers change, so the Library list can reload.</summary>
+    public Action? PapersChanged { get; set; }
 
     // Listening audio cannot be split, so it only runs inside a full test.
     // Reading, Writing, and Speaking can each run alone.
@@ -243,7 +453,16 @@ public sealed partial class ExamViewModel : ObservableObject
     public IReadOnlyList<MarkingStrictness> StrictnessOptions { get; } =
         new[] { MarkingStrictness.Lenient, MarkingStrictness.Standard, MarkingStrictness.Strict };
 
-    public ExamViewModel(IExamRepository repository, IIeltsAiService ai, IAudioService audio, ITtsService tts, ISttService stt, IGecService gec)
+    public IReadOnlyList<string> BuildModes { get; } =
+        new[] { "Paper order", "Random", "AI pick" };
+
+    public bool HasViolations => StrictViolations > 0;
+    public string ViolationLabel => $"Stay in the test. Focus left {StrictViolations} time(s).";
+
+    /// <summary>Questions with no answer yet, for the submit warning.</summary>
+    public int UnansweredCount => _parts.Sum(p => p.Questions.Count(q => !q.IsAnswered));
+
+    public ExamViewModel(IExamRepository repository, IIeltsAiService ai, IAudioService audio, ITtsService tts, ISttService stt, IGecService gec, IModelLoadCoordinator models)
     {
         _repository = repository;
         _ai = ai;
@@ -251,6 +470,7 @@ public sealed partial class ExamViewModel : ObservableObject
         _tts = tts;
         _stt = stt;
         _gec = gec;
+        _models = models;
         _timer = new System.Windows.Threading.DispatcherTimer
         {
             Interval = TimeSpan.FromSeconds(1)
@@ -282,9 +502,12 @@ public sealed partial class ExamViewModel : ObservableObject
     public string CriteriaHint =>
         "Listening and Reading use the official raw to band table. " +
         "Writing and Speaking average four criteria to half bands. " +
+        "Grade with AI also explains each wrong Listening and Reading answer. " +
         "Bands are ranges, because examiners vary. Practice estimates only.";
 
     partial void OnStrictModeChanged(bool value) => OnPropertyChanged(nameof(StrictModeHint));
+
+    partial void OnStrictViolationsChanged(int value) => OnPropertyChanged(nameof(HasViolations));
 
     partial void OnVolumeChanged(double value) => _audio.Volume = value / 100.0;
 
@@ -297,9 +520,81 @@ public sealed partial class ExamViewModel : ObservableObject
             Papers.Add(paper);
         SelectedPaper ??= Papers.FirstOrDefault();
 
+        RebuildTaskTypes();
+        RebuildPaperRows();
         OnPropertyChanged(nameof(HasPapers));
         OnPropertyChanged(nameof(ShowNoPaperWarning));
         OnPropertyChanged(nameof(PaperCountLabel));
+    }
+
+    /// <summary>Every paper with its origin, so downloaded ones can be deleted.</summary>
+    private void RebuildPaperRows()
+    {
+        PaperRows.Clear();
+        foreach (var paper in Papers)
+            PaperRows.Add(new PaperRow(paper, _repository.IsUserPaper(paper.Title)));
+    }
+
+    [RelayCommand]
+    private void DeletePaper(PaperRow? row)
+    {
+        if (row is null || !row.IsUserPaper) return;
+        var ask = System.Windows.MessageBox.Show(
+            $"Delete {row.Title} from this computer?",
+            "Delete paper", System.Windows.MessageBoxButton.YesNo,
+            System.Windows.MessageBoxImage.Question);
+        if (ask != System.Windows.MessageBoxResult.Yes)
+            return;
+        if (_repository.DeleteUserPaper(row.Title))
+        {
+            if (SelectedPaper is not null && string.Equals(
+                SelectedPaper.Title, row.Title, StringComparison.OrdinalIgnoreCase))
+                SelectedPaper = null;
+            Load();
+            PapersChanged?.Invoke();
+            StatusMessage = $"Deleted {row.Title}.";
+        }
+        else
+        {
+            StatusMessage = "Could not delete that paper.";
+        }
+    }
+
+    /// <summary>Picks one paper from the Your papers list for the setup above.</summary>
+    [RelayCommand]
+    private void UsePaper(PaperRow? row)
+    {
+        if (row is null) return;
+        var paper = Papers.FirstOrDefault(p =>
+            string.Equals(p.Title, row.Title, StringComparison.OrdinalIgnoreCase));
+        if (paper is null)
+        {
+            StatusMessage = "That paper is gone. The list will refresh.";
+            Load();
+            return;
+        }
+        SelectedPaper = paper;
+        SelectedScope = "Full test";
+        StatusMessage = $"Using {paper.Title}. Pick a scope and press Start test.";
+    }
+
+    partial void OnSelectedPaperChanged(ExamPaper? value) => RebuildTaskTypes();
+    partial void OnMixAllPapersChanged(bool value) => RebuildTaskTypes();
+
+    /// <summary>Every task type on the candidate papers, for the type filter.</summary>
+    private void RebuildTaskTypes()
+    {
+        var keep = SelectedTaskType;
+        TaskTypes.Clear();
+        TaskTypes.Add("All types");
+        var source = MixAllPapers ? Papers.SelectMany(p => p.Parts) : SelectedPaper?.Parts ?? Enumerable.Empty<ExamPart>();
+        foreach (var type in source
+            .Select(p => p.TaskType)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase))
+            TaskTypes.Add(type);
+        SelectedTaskType = TaskTypes.Contains(keep) ? keep : "All types";
     }
 
     public void RefreshAiState()
@@ -308,29 +603,62 @@ public sealed partial class ExamViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowAiHint));
     }
 
-    private IEnumerable<ExamPart> FilteredParts()
+    /// <summary>
+    /// Counts leaving the test window during strict mode. Called from the
+    /// window Deactivated event. Never blocks, only records honestly.
+    /// </summary>
+    public void RegisterFocusLost()
     {
-        if (SelectedPaper is null) return Enumerable.Empty<ExamPart>();
-        if (SelectedScope == "Full test") return SelectedPaper.Parts;
-        return SelectedPaper.Parts.Where(p =>
-            string.Equals(p.Skill, SelectedScope, StringComparison.OrdinalIgnoreCase));
+        if (!IsRunning || !StrictMode) return;
+        StrictViolations++;
+        StatusMessage = ViolationLabel;
+    }
+
+    private IEnumerable<(ExamPaper Paper, ExamPart Part)> FilteredParts()
+    {
+        IEnumerable<ExamPaper> papers = MixAllPapers
+            ? Papers
+            : SelectedPaper is null ? Enumerable.Empty<ExamPaper>() : new[] { SelectedPaper };
+        foreach (var paper in papers)
+        {
+            foreach (var part in paper.Parts)
+            {
+                if (SelectedScope != "Full test" && !string.Equals(part.Skill, SelectedScope, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (SelectedTaskType != "All types" && !string.Equals(part.TaskType, SelectedTaskType, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                yield return (paper, part);
+            }
+        }
     }
 
     [RelayCommand]
-    private void StartExam()
+    private async Task StartExamAsync()
     {
+        if (IsRunning)
+        {
+            var ask = System.Windows.MessageBox.Show(
+                "A test is already running. Start a new one and drop the current answers?",
+                "Start new test",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Question);
+            if (ask != System.Windows.MessageBoxResult.Yes)
+                return;
+        }
         _parts.Clear();
         _timer.Stop();
         _speakingCts?.Cancel();
         _listeningCts?.Cancel();
+        _prepCts?.Cancel();
         _audio.StopPlayback();
         _audio.StopRecording();
+        StrictViolations = 0;
 
         var chosen = FilteredParts().ToList();
-        if (SelectedPaper is null || chosen.Count == 0)
+        if (chosen.Count == 0)
         {
-            ResultText = SelectedScope == "Full test"
-                ? "Pick a test paper with at least one part."
+            ResultText = MixAllPapers || SelectedScope == "Full test"
+                ? "No parts match this setup. Loosen the scope or type filter."
                 : $"This paper has no {SelectedScope} part. Pick another scope or paper.";
             BandLabel = string.Empty;
             IsRunning = false;
@@ -338,29 +666,184 @@ public sealed partial class ExamViewModel : ObservableObject
             return;
         }
 
-        if (ShuffleParts)
+        string buildNote = string.Empty;
+        if (SelectedBuildMode == "Random" || ShuffleParts)
         {
             var rng = new Random();
             chosen = chosen.OrderBy(_ => rng.Next()).ToList();
+            buildNote = "Random order.";
+        }
+        else if (SelectedBuildMode == "AI pick")
+        {
+            var picked = await PickBalancedAsync(chosen);
+            chosen = picked.Parts;
+            buildNote = picked.Note;
         }
 
-        foreach (var part in chosen)
-            _parts.Add(new ExamPartViewModel(part));
+        foreach (var (paper, part) in chosen)
+        {
+            var vm = new ExamPartViewModel(part);
+            if (MixAllPapers || chosen.Select(c => c.Paper.Title).Distinct().Count() > 1)
+                vm.PaperName = paper.Title;
+            _parts.Add(vm);
+        }
 
+        BeginRun(buildNote);
+    }
+
+    /// <summary>
+    /// Starts a custom test assembled elsewhere, for example the Library
+    /// basket. Unknown paper or part names are skipped quietly. Needs at
+    /// least one part and two skills when listening is inside.
+    /// </summary>
+    public void StartCustomTest(IEnumerable<(string PaperTitle, string PartId)> picks, string note)
+    {
+        _parts.Clear();
+        _timer.Stop();
+        _speakingCts?.Cancel();
+        _listeningCts?.Cancel();
+        _prepCts?.Cancel();
+        _audio.StopPlayback();
+        _audio.StopRecording();
+        StrictViolations = 0;
+
+        var fresh = _repository.LoadPapers();
+        var chosen = new List<(ExamPaper Paper, ExamPart Part)>();
+        foreach (var (title, id) in picks)
+        {
+            var paper = fresh.FirstOrDefault(p =>
+                string.Equals(p.Title, title, StringComparison.OrdinalIgnoreCase));
+            var part = paper?.Parts.FirstOrDefault(p =>
+                string.Equals(p.Id, id, StringComparison.OrdinalIgnoreCase));
+            if (paper is not null && part is not null
+                && !chosen.Any(c => ReferenceEquals(c.Part, part)))
+                chosen.Add((paper, part));
+        }
+
+        if (chosen.Count == 0)
+        {
+            ResultText = "The basket is empty. Drag papers into it first.";
+            BandLabel = string.Empty;
+            IsRunning = false;
+            IsFinished = false;
+            return;
+        }
+
+        Papers.Clear();
+        foreach (var paper in fresh)
+            Papers.Add(paper);
+        SelectedPaper = Papers.FirstOrDefault();
+        RebuildTaskTypes();
+        RebuildPaperRows();
+
+        foreach (var (paper, part) in chosen)
+        {
+            var vm = new ExamPartViewModel(part);
+            vm.PaperName = paper.Title;
+            _parts.Add(vm);
+        }
+
+        BeginRun(note);
+    }
+
+    private void BeginRun(string buildNote)
+    {
         IsRunning = true;
         IsFinished = false;
         ShowReview = false;
-        ReviewLines.Clear();
+        ReviewItems.Clear();
         AiFeedbackLines.Clear();
         OnPropertyChanged(nameof(HasAiFeedback));
         OnPropertyChanged(nameof(Parts));
         ResultText = string.Empty;
         BandLabel = string.Empty;
-        StatusMessage = StrictMode
+        var intro = StrictMode
             ? "Strict mode is on. Full screen, no other apps, finish the test."
             : "Test started. Answer every part, then submit.";
+        StatusMessage = string.IsNullOrWhiteSpace(buildNote) ? intro : $"{intro} {buildNote}";
         SetPart(0);
         _timer.Start();
+    }
+
+    /// <summary>
+    /// Builds the closest thing to a real full test: AI picks the parts
+    /// and explains why, or a balanced deterministic set when no model
+    /// answers. Listening only survives inside a multi skill set.
+    /// </summary>
+    private async Task<(List<(ExamPaper Paper, ExamPart Part)> Parts, string Note)> PickBalancedAsync(
+        List<(ExamPaper Paper, ExamPart Part)> candidates)
+    {
+        var catalog = candidates.Select(c =>
+            $"{c.Paper.Title}|{c.Part.Id}, {c.Part.Skill}, {c.Part.TaskType}, {c.Part.Minutes}min");
+
+        if (_ai.IsAvailable)
+        {
+            StatusMessage = "AI is building your full test.";
+            try
+            {
+                var pick = await _ai.PickTestAsync(
+                    string.Join("\n", catalog), HistorySummary());
+                if (pick.Success)
+                {
+                    var ordered = new List<(ExamPaper Paper, ExamPart Part)>();
+                    foreach (var id in pick.Ids)
+                    {
+                        var cut = id.Split('|', 2);
+                        if (cut.Length != 2) continue;
+                        var found = candidates.FirstOrDefault(c =>
+                            string.Equals(c.Paper.Title, cut[0], StringComparison.OrdinalIgnoreCase) &&
+                            string.Equals(c.Part.Id, cut[1], StringComparison.OrdinalIgnoreCase));
+                        if (found.Part is not null
+                            && !ordered.Any(o => ReferenceEquals(o.Part, found.Part)))
+                            ordered.Add(found);
+                    }
+                    if (ordered.Count >= 2 && !IsListeningOnly(ordered))
+                        return (ordered, $"AI built this test: {pick.Reason}");
+                }
+            }
+            catch (Exception)
+            {
+                // A model failure falls through to the balanced set below.
+            }
+        }
+
+        var balanced = new List<(ExamPaper Paper, ExamPart Part)>();
+        foreach (var skill in new[] { "Listening", "Reading", "Writing", "Speaking" })
+        {
+            balanced.AddRange(candidates
+                .Where(c => string.Equals(c.Part.Skill, skill, StringComparison.OrdinalIgnoreCase)
+                    && !balanced.Any(o => ReferenceEquals(o.Part, c.Part)))
+                .Take(2));
+        }
+        if (balanced.Count == 0)
+            balanced.AddRange(candidates.Take(8));
+        balanced = balanced.Take(8).ToList();
+        if (IsListeningOnly(balanced))
+            balanced = candidates.Take(8).ToList();
+        return (balanced, "Balanced set across the four skills.");
+    }
+
+    private static bool IsListeningOnly(List<(ExamPaper Paper, ExamPart Part)> parts) =>
+        parts.Count > 0 && parts.All(c =>
+            string.Equals(c.Part.Skill, "Listening", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Past bands per scope, so the picker can favor weak skills.</summary>
+    private static string HistorySummary()
+    {
+        try
+        {
+            using var db = new AppDbContext();
+            var rows = db.ExamAttempts
+                .GroupBy(a => a.Scope)
+                .Select(g => new { Scope = g.Key, Avg = g.Average(a => (a.BandLow + a.BandHigh) / 2.0), Count = g.Count() })
+                .ToList();
+            if (rows.Count == 0) return "no past tests";
+            return string.Join("; ", rows.Select(r => $"{r.Scope}: {r.Avg:0.0} over {r.Count} test(s)"));
+        }
+        catch
+        {
+            return "history unavailable";
+        }
     }
 
     [RelayCommand]
@@ -377,6 +860,41 @@ public sealed partial class ExamViewModel : ObservableObject
         if (CurrentPart?.IsSpeaking == true) return;
         if (PartIndex > 0)
             SetPart(PartIndex - 1);
+    }
+
+    [RelayCommand]
+    private void GoToQuestion(ExamQuestionViewModel question)
+    {
+        CurrentPart?.GoToQuestion(question);
+    }
+
+    /// <summary>Jump to any question of any part, like the bottom palette.</summary>
+    [RelayCommand]
+    private void GoToGlobal(ExamQuestionViewModel question)
+    {
+        if (!IsRunning || question is null) return;
+        if (CurrentPart?.IsSpeaking == true) return;
+        for (int i = 0; i < _parts.Count; i++)
+        {
+            if (_parts[i].Questions.Contains(question))
+            {
+                SetPart(i);
+                _parts[i].GoToQuestion(question);
+                return;
+            }
+        }
+    }
+
+    [RelayCommand]
+    private void NextQuestion()
+    {
+        CurrentPart?.NextQuestion();
+    }
+
+    [RelayCommand]
+    private void PreviousQuestion()
+    {
+        CurrentPart?.PreviousQuestion();
     }
 
     [RelayCommand]
@@ -397,7 +915,20 @@ public sealed partial class ExamViewModel : ObservableObject
     private async Task PlayListeningOnceAsync(ExamPartViewModel part, CancellationToken ct)
     {
         if (part.AudioPlayedOnce) return;
+
+        // Reading time before the clip, like the real test. Skippable.
+        part.AudioStatus = "Read the questions. The clip starts in 15 seconds, or press Start now.";
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(15), _prepCts?.Token ?? CancellationToken.None);
+        }
+        catch (OperationCanceledException)
+        {
+            if (ct.IsCancellationRequested) return;
+        }
+
         part.AudioPlayedOnce = true;
+        part.NoAudioFallback = false;
 
         string? path = string.IsNullOrWhiteSpace(part.AudioFile)
             ? null
@@ -410,13 +941,15 @@ public sealed partial class ExamViewModel : ObservableObject
             if (!_tts.IsAvailable || string.IsNullOrWhiteSpace(part.Material))
             {
                 part.AudioStatus = "No audio for this part. Read the transcript and answer.";
+                part.NoAudioFallback = true;
                 return;
             }
-            part.AudioStatus = "Reading the transcript aloud.";
+            part.AudioStatus = $"Reading the transcript aloud ({_tts.VoiceName}).";
             path = await _tts.SpeakToFileAsync(part.Material, ct);
             if (string.IsNullOrWhiteSpace(path))
             {
                 part.AudioStatus = "Voice playback failed. Read the transcript and answer.";
+                part.NoAudioFallback = true;
                 return;
             }
         }
@@ -456,8 +989,16 @@ public sealed partial class ExamViewModel : ObservableObject
                 StatusMessage = "No audio was captured.";
                 return;
             }
+            CurrentPart.SpokenSeconds = CurrentPart.SpeakingSeconds;
             if (_stt.IsAvailable())
             {
+                // Keep ready mode loads the transcription model here, so the
+                // first transcript does not stall after the recording ends.
+                if (_models.KeepReady)
+                {
+                    CurrentPart.AudioStatus = "Getting the transcription model ready.";
+                    await _models.PrepareAsync(new[] { "stt-whisper-tiny-en" }, _speakingCts.Token);
+                }
                 CurrentPart.AudioStatus = "Transcribing your speech.";
                 StatusMessage = "The transcription model is reading your speech.";
                 var transcript = await _stt.TranscribeAsync(wav, _speakingCts.Token);
@@ -475,7 +1016,7 @@ public sealed partial class ExamViewModel : ObservableObject
             }
             else
             {
-                CurrentPart.AudioStatus = $"Saved recording. Type what you said below so AI marking can work. File kept locally.";
+                CurrentPart.AudioStatus = $"Saved recording. No transcription model, type what you said below so AI marking can work. File kept locally.";
                 StatusMessage = "Recording done. Type your transcript, then continue.";
             }
         }
@@ -508,6 +1049,7 @@ public sealed partial class ExamViewModel : ObservableObject
     [RelayCommand]
     private async Task GradeWithAiAsync()
     {
+        if (IsGrading) return;
         if (!_ai.IsAvailable)
         {
             StatusMessage = "Add a language model in Settings to get AI bands.";
@@ -518,60 +1060,108 @@ public sealed partial class ExamViewModel : ObservableObject
             StatusMessage = "Start a test first.";
             return;
         }
+        _gradingCts?.Cancel();
+        _gradingCts = new CancellationTokenSource();
+        var ct = _gradingCts.Token;
         IsGrading = true;
         AiFeedbackLines.Clear();
-        StatusMessage = $"The model is marking ({IeltsBanding.StrictnessLabel(SelectedStrictness)}).";
+        LoadingLabel = "Preparing the writing and speaking models.";
+        StatusMessage = $"The model is marking ({IeltsBanding.StrictnessLabel(SelectedStrictness)}). Press Stop to cancel.";
         try
         {
+            // Preload only when the user asked for it. On demand mode leaves
+            // each service to load lazily on its first real call.
+            var wanted = new List<string>();
+            if (_parts.Any(p => p.IsWriting)) wanted.AddRange(_models.WritingSlots);
+            if (_parts.Any(p => p.IsSpeaking)) wanted.AddRange(_models.SpeakingSlots);
+            var prep = await _models.PrepareAsync(wanted, ct);
+            ModelModeLabel = prep.Message;
+            LoadingLabel = "Marking with the language model.";
             foreach (var part in _parts.Where(p => p.IsWriting))
             {
+                ct.ThrowIfCancellationRequested();
                 if (string.IsNullOrWhiteSpace(part.Essay))
                 {
                     AiFeedbackLines.Add($"{part.Title}: no essay, skipped.");
                     continue;
                 }
+                int minimum = LlmPrompts.IsTask1(part.Material + " " + part.Instructions + " " + part.Title)
+                    ? 150 : 250;
                 var r = await _ai.ReviewWritingAsync(
-                    part.Material + "\n" + part.Instructions, part.Essay, 150, SelectedStrictness);
+                    part.Material + "\n" + part.Instructions, part.Essay, minimum, SelectedStrictness, ct);
                 if (!r.Success || r.Feedback is null)
                 {
                     AiFeedbackLines.Add($"{part.Title}: {r.Error}");
                     continue;
                 }
                 var f = r.Feedback;
+                f = await ApplyGrammarCheckAsync(part.Title, part.Essay, f);
                 part.AiResult = $"Band {f.BandLabel}. {f.Summary}";
-                AiFeedbackLines.Add($"{part.Title}: band {f.BandLabel} " +
-                    $"(Task {f.TaskResponse:0.0}, Cohesion {f.Coherence:0.0}, Words {f.LexicalResource:0.0}, Grammar {f.Grammar:0.0}). {f.Summary}");
+                string firstName = part.Title.Contains("Task 1", StringComparison.OrdinalIgnoreCase)
+                    ? "Task Achievement" : "Task Response";
+                AiFeedbackLines.Add($"{part.Title}: band {f.BandLabel}. {f.Summary}");
+                AiFeedbackLines.Add($"  Band table: {firstName} {f.TaskResponse:0.0}, " +
+                    $"Cohesion {f.Coherence:0.0}, Words {f.LexicalResource:0.0}, Grammar {f.Grammar:0.0}.");
+                AddWhy(AiFeedbackLines, $"  {firstName}", f.TaskResponseWhy);
+                AddWhy(AiFeedbackLines, "  Cohesion", f.CoherenceWhy);
+                AddWhy(AiFeedbackLines, "  Words", f.LexicalWhy);
+                AddWhy(AiFeedbackLines, "  Grammar", f.GrammarWhy);
                 foreach (var s in f.Strengths.Take(2)) AiFeedbackLines.Add($"  Good: {s}");
                 foreach (var s in f.Improvements.Take(3)) AiFeedbackLines.Add($"  Fix: {s}");
                 if (!string.IsNullOrWhiteSpace(f.CorrectedExcerpt))
                     AiFeedbackLines.Add($"  Rewrite: {f.CorrectedExcerpt}");
+                AiFeedbackLines.Add($"  Stats: {WritingStats(part.Essay)}");
             }
             foreach (var part in _parts.Where(p => p.IsSpeaking))
             {
+                ct.ThrowIfCancellationRequested();
                 if (string.IsNullOrWhiteSpace(part.Transcript))
                 {
                     AiFeedbackLines.Add($"{part.Title}: no transcript, skipped. Type what you said to get a band.");
                     continue;
                 }
-                var r = await _ai.AssessSpeakingAsync(part.Material + "\n" + part.Title, part.Transcript, SelectedStrictness);
+                var r = await _ai.AssessSpeakingAsync(
+                    part.Material + "\n" + part.Title, part.Transcript,
+                    $"{part.Skill} {part.TaskType}", part.SpokenSeconds, SelectedStrictness, ct);
                 if (!r.Success || r.Feedback is null)
                 {
                     AiFeedbackLines.Add($"{part.Title}: {r.Error}");
                     continue;
                 }
                 var f = r.Feedback;
+                f = ApplyPaceCap(part, f);
                 part.AiResult = $"Band {f.BandLabel}. {f.Summary}";
-                AiFeedbackLines.Add($"{part.Title}: band {f.BandLabel} " +
-                    $"(Fluency {f.Fluency:0.0}, Words {f.LexicalResource:0.0}, Grammar {f.Grammar:0.0}, Sound {f.Pronunciation:0.0}). {f.Summary}");
+                AiFeedbackLines.Add($"{part.Title}: band {f.BandLabel}. {f.Summary}");
+                AiFeedbackLines.Add($"  Band table: Fluency {f.Fluency:0.0}, " +
+                    $"Words {f.LexicalResource:0.0}, Grammar {f.Grammar:0.0}, Sound {f.Pronunciation:0.0}.");
+                AddWhy(AiFeedbackLines, "  Fluency", f.FluencyWhy);
+                AddWhy(AiFeedbackLines, "  Words", f.LexicalWhy);
+                AddWhy(AiFeedbackLines, "  Grammar", f.GrammarWhy);
+                AddWhy(AiFeedbackLines, "  Sound", f.PronunciationWhy);
+                foreach (var s in f.Strengths.Take(2)) AiFeedbackLines.Add($"  Good: {s}");
                 foreach (var s in f.Improvements.Take(3)) AiFeedbackLines.Add($"  Fix: {s}");
+            }
+            foreach (var part in _parts.Where(p => p.IsListening))
+            {
+                ct.ThrowIfCancellationRequested();
+                foreach (var q in part.Questions.Where(q => !q.IsCorrect))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var r = await _ai.ExplainListeningAsync(
+                        part.Material, QuestionDetail(q), q.ChosenLabel, q.DisplayAnswer, ct);
+                    AiFeedbackLines.Add(r.Success
+                        ? $"{part.Title}, question {q.Model.Number}: {OneLine(r.Text)}"
+                        : $"{part.Title}, question {q.Model.Number}: {r.Error}");
+                }
             }
             foreach (var part in _parts.Where(p => !p.IsListening && !p.IsWriting && !p.IsSpeaking))
             {
                 // Reading mistakes get a short AI explanation each.
                 foreach (var q in part.Questions.Where(q => !q.IsCorrect))
                 {
+                    ct.ThrowIfCancellationRequested();
                     var r = await _ai.ExplainReadingAsync(
-                        part.Material, $"Q{q.Model.Number}: {q.Prompt}", q.SelectedKey, q.Model.CorrectKey);
+                        part.Material, QuestionDetail(q), q.ChosenLabel, q.DisplayAnswer, ct);
                     AiFeedbackLines.Add(r.Success
                         ? $"{part.Title}, question {q.Model.Number}: {OneLine(r.Text)}"
                         : $"{part.Title}, question {q.Model.Number}: {r.Error}");
@@ -580,13 +1170,182 @@ public sealed partial class ExamViewModel : ObservableObject
             OnPropertyChanged(nameof(HasAiFeedback));
             StatusMessage = AiFeedbackLines.Count == 0
                 ? "Nothing to mark. Write an essay or type a speaking transcript first."
-                : "AI marking done. Bands are ranges for practice, not official scores.";
+                : "AI marking done. Listening and Reading lines explain each wrong answer. Bands are ranges for practice, not official scores.";
+            UpdateLastAttemptWithAi();
+        }
+        catch (OperationCanceledException)
+        {
+            StatusMessage = "AI marking stopped.";
         }
         finally
         {
+            // The models a single run pulled in are freed when it ends, so
+            // RAM is not held while the student reads results. Manual loads
+            // that were already in memory stay.
+            _models.ReleaseAfterUse(_models.WritingSlots.Concat(_models.SpeakingSlots));
             IsGrading = false;
+            LoadingLabel = string.Empty;
         }
     }
+
+    [RelayCommand]
+    private void CancelGrading()
+    {
+        _gradingCts?.Cancel();
+        StatusMessage = "Stopping AI marking.";
+    }
+
+    [RelayCommand]
+    private void CopyFeedback()
+    {
+        if (AiFeedbackLines.Count == 0)
+        {
+            StatusMessage = "Nothing to copy yet. Grade with AI first.";
+            return;
+        }
+        try
+        {
+            System.Windows.Clipboard.SetText(string.Join("\n", AiFeedbackLines));
+            StatusMessage = "Feedback copied to the clipboard.";
+        }
+        catch (Exception)
+        {
+            StatusMessage = "Could not copy. Select the text by hand.";
+        }
+    }
+
+    /// <summary>
+    /// Stores the AI bands and feedback on the newest attempt, so the
+    /// Results page can show the detail of what the model said.
+    /// </summary>
+    private void UpdateLastAttemptWithAi()
+    {
+        if (AiFeedbackLines.Count == 0) return;
+        try
+        {
+            using var db = new AppDbContext();
+            var last = db.ExamAttempts.OrderByDescending(a => a.Id).FirstOrDefault();
+            if (last is null) return;
+
+            double writing = _parts.Where(p => p.IsWriting && p.AiResult.Length > 0)
+                .Select(p => ParseBand(p.AiResult)).DefaultIfEmpty(0).Max();
+            double speaking = _parts.Where(p => p.IsSpeaking && p.AiResult.Length > 0)
+                .Select(p => ParseBand(p.AiResult)).DefaultIfEmpty(0).Max();
+            if (writing > 0) last.WritingBand = writing;
+            if (speaking > 0) last.SpeakingBand = speaking;
+
+            var feedback = string.Join("\n", AiFeedbackLines);
+            last.AiFeedback = feedback.Length > 8000 ? feedback[..8000] : feedback;
+            db.SaveChanges();
+        }
+        catch
+        {
+            // Result history must never block the feedback screen.
+        }
+    }
+
+    /// <summary>Reads the first band number out of "Band 6.0 to 7.0. ...".</summary>
+    private static double ParseBand(string aiResult)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(aiResult, @"(\d+(?:\.\d+)?)");
+        return match.Success && double.TryParse(match.Groups[1].Value,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture, out var value)
+            ? value : 0;
+    }
+
+    /// <summary>
+    /// Full question detail for the model: prompt plus options, bank, or
+    /// accepted answers. Keys alone tell the model nothing.
+    /// </summary>
+    private static string QuestionDetail(ExamQuestionViewModel q)
+    {
+        var sb = new StringBuilder($"Q{q.Model.Number}: {q.Prompt}");
+        if (q.ShowOptions && q.Options.Count > 0)
+            sb.Append(" Options: " + string.Join("; ",
+                q.Options.Select(o => $"{o.Key}) {o.Text}")));
+        if (q.IsGap)
+            sb.Append($" Accepted answers: {q.Model.GapAnswer}");
+        if (q.IsMatch)
+        {
+            if (q.Bank.Count > 0)
+                sb.Append(" Bank: " + string.Join("; ", q.Bank));
+            sb.Append(" Rows: " + string.Join("; ",
+                q.MatchRows.Select(r => $"{r.Label} is {r.Answer}")));
+        }
+        if (!string.IsNullOrWhiteSpace(q.Model.Explanation))
+            sb.Append($" Note: {q.Model.Explanation}");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Offline writing stats: words, sentences, pace, and long word share.
+    /// Informational only, never a band.
+    /// </summary>
+    private static string WritingStats(string essay)
+    {
+        var words = essay.Split(new[] { ' ', '\t', '\n', '\r' },
+            StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length == 0) return "no words";
+        int sentences = Math.Max(1, System.Text.RegularExpressions.Regex
+            .Matches(essay, @"[.!?]+").Count);
+        int distinct = new HashSet<string>(
+            words.Select(w => w.Trim('.', ',', '!', '?', ';', ':').ToLowerInvariant()))
+            .Count;
+        int longWords = words.Count(w => w.Length >= 7);
+        return $"{words.Length} words, {sentences} sentences, " +
+            $"{words.Length / (double)sentences:0.0} words per sentence, " +
+            $"{distinct} different words, {longWords * 100 / words.Length}% long words.";
+    }
+
+    /// <summary>
+    /// Grounds the LLM fluency band with measured speech pace from the
+    /// transcript and the recorded seconds. Slow speech caps fluency,
+    /// then the overall band is recomputed like an examiner would.
+    /// </summary>
+    private SpeakingFeedback ApplyPaceCap(ExamPartViewModel part, SpeakingFeedback f)
+    {
+        int words = CountWords(part.Transcript);
+        double minutes = Math.Max(1, part.SpokenSeconds) / 60.0;
+        double wpm = words / minutes;
+        AiFeedbackLines.Add($"{part.Title}: speech pace about {wpm:0} words per minute.");
+
+        double cap = wpm switch
+        {
+            < 60 => 5.0,
+            < 90 => 6.0,
+            < 110 => 7.0,
+            _ => 9.0
+        };
+        if (f.Fluency <= cap)
+            return f;
+
+        double fluency = cap;
+        double overall = IeltsBanding.RoundHalf(
+            (fluency + f.LexicalResource + f.Grammar + f.Pronunciation) / 4.0);
+        var range = IeltsBanding.ToRange(overall, SelectedStrictness);
+        AiFeedbackLines.Add($"{part.Title}: slow pace caps fluency at {fluency:0.0}.");
+        return new SpeakingFeedback
+        {
+            EstimatedBand = overall,
+            BandLow = range.Low,
+            BandHigh = range.High,
+            Fluency = fluency,
+            LexicalResource = f.LexicalResource,
+            Grammar = f.Grammar,
+            Pronunciation = f.Pronunciation,
+            FluencyWhy = f.FluencyWhy,
+            LexicalWhy = f.LexicalWhy,
+            GrammarWhy = f.GrammarWhy,
+            PronunciationWhy = f.PronunciationWhy,
+            Summary = f.Summary,
+            Strengths = f.Strengths,
+            Improvements = f.Improvements
+        };
+    }
+
+    private static int CountWords(string text)
+        => text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
 
     /// <summary>
     /// Grounds the LLM grammar band with a deterministic grammar check, so
@@ -598,7 +1357,10 @@ public sealed partial class ExamViewModel : ObservableObject
         string title, string essay, WritingFeedback f)
     {
         if (!_gec.IsAvailable())
+        {
+            AiFeedbackLines.Add($"{title}: no grammar model, grammar band is an AI estimate only.");
             return f;
+        }
 
         StatusMessage = $"Checking grammar in {title}.";
         GecResult? g = null;
@@ -645,9 +1407,15 @@ public sealed partial class ExamViewModel : ObservableObject
             BandLow = range.Low,
             BandHigh = range.High,
             TaskResponse = f.TaskResponse,
+            TaskAchievement = f.TaskAchievement,
             Coherence = f.Coherence,
             LexicalResource = f.LexicalResource,
             Grammar = grammar,
+            TaskResponseWhy = f.TaskResponseWhy,
+            TaskAchievementWhy = f.TaskAchievementWhy,
+            CoherenceWhy = f.CoherenceWhy,
+            LexicalWhy = f.LexicalWhy,
+            GrammarWhy = f.GrammarWhy,
             Summary = f.Summary,
             Strengths = f.Strengths,
             Improvements = f.Improvements,
@@ -677,17 +1445,38 @@ public sealed partial class ExamViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void SubmitExam()
+    private void SubmitExam() => SubmitExamCore(confirm: true);
+
+    /// <summary>
+    /// Manual submit asks first when questions are blank, like the real
+    /// test. Timer auto submit never asks.
+    /// </summary>
+    private void SubmitExamCore(bool confirm)
     {
+        if (!IsRunning) return;
+        if (confirm)
+        {
+            int blank = UnansweredCount;
+            var ask = System.Windows.MessageBox.Show(
+                blank == 0
+                    ? "Submit the test now?"
+                    : $"Submit now? {blank} question(s) have no answer.",
+                "Submit test",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Question);
+            if (ask != System.Windows.MessageBoxResult.Yes)
+                return;
+        }
         _timer.Stop();
         _speakingCts?.Cancel();
         _listeningCts?.Cancel();
+        _prepCts?.Cancel();
         _audio.StopPlayback();
         _audio.StopRecording();
         IsRunning = false;
         IsFinished = true;
         ShowReview = false;
-        ReviewLines.Clear();
+        ReviewItems.Clear();
 
         int correct = 0, total = 0;
         foreach (var part in _parts)
@@ -714,55 +1503,94 @@ public sealed partial class ExamViewModel : ObservableObject
         OnPropertyChanged(nameof(CanGoNext));
     }
 
+    /// <summary>Clears the result screen so a new test can be set up.</summary>
+    [RelayCommand]
+    private void BackToSetup()
+    {
+        IsFinished = false;
+        ShowReview = false;
+        ResultText = string.Empty;
+        BandLabel = string.Empty;
+        ReviewItems.Clear();
+        AiFeedbackLines.Clear();
+        OnPropertyChanged(nameof(ShowResult));
+        OnPropertyChanged(nameof(HasBand));
+        OnPropertyChanged(nameof(HasAiFeedback));
+    }
+
     [RelayCommand]
     private void ToggleReview()
     {
         ShowReview = !ShowReview;
         if (!ShowReview) return;
 
-        ReviewLines.Clear();
+        ReviewItems.Clear();
         foreach (var part in _parts)
         {
             if (part.IsWriting)
             {
-                ReviewLines.Add($"{part.Title}: {part.WordCountLabel} written, not auto scored.");
+                AddReview($"{part.Title}: {part.WordCountLabel} written, not auto scored.");
                 continue;
             }
             if (part.IsSpeaking)
             {
-                ReviewLines.Add($"{part.Title}: {part.TranscriptWordCount}, not auto scored.");
+                AddReview($"{part.Title}: {part.TranscriptWordCount}, not auto scored.");
                 continue;
             }
             if (part.IsListening)
             {
                 // Listening gives no answers back, only the wrong questions.
+                // The transcript is revealed here, after the test.
                 var wrong = part.Questions.Where(q => !q.IsCorrect).ToList();
                 if (wrong.Count == 0)
-                    ReviewLines.Add($"{part.Title}: all correct.");
+                    AddReview($"{part.Title}: all correct.", true);
                 foreach (var q in wrong)
-                    ReviewLines.Add($"{part.Title}, question {q.Model.Number}: {q.ListeningReviewLabel}");
+                    AddReview($"{part.Title}, question {q.Model.Number}: {q.ListeningReviewLabel}", false);
+                if (part.HasMaterial)
+                    AddReview($"{part.Title} transcript: {part.Material}");
                 continue;
             }
             foreach (var q in part.Questions)
-                ReviewLines.Add($"{part.Title}, question {q.Model.Number}: {q.ReadingReviewLabel}");
+            {
+                AddReview($"{part.Title}, question {q.Model.Number}: {q.ReadingReviewLabel}", q.IsCorrect);
+                if (q.IsMatch)
+                {
+                    foreach (var row in q.MatchRows)
+                    {
+                        var mark = row.IsCorrect ? "correct"
+                            : string.IsNullOrWhiteSpace(row.Selected) ? $"no answer, correct is {row.Answer}"
+                            : $"you chose {row.Selected.Trim()}, correct is {row.Answer}";
+                        AddReview($"    {row.Label}: {mark}", row.IsCorrect);
+                    }
+                }
+            }
         }
     }
+
+    private void AddReview(string text, bool? isGood = null)
+        => ReviewItems.Add(new ReviewItem(text, isGood));
 
     private void SaveAttempt(int correct, int total, BandRange range)
     {
         try
         {
             using var db = new AppDbContext();
+            var summary = ResultText.Length > 500 ? ResultText[..500] : ResultText;
+            if (HasViolations)
+                summary += $" Focus left {StrictViolations} time(s) during strict mode.";
             db.ExamAttempts.Add(new ExamAttempt
             {
-                PaperTitle = SelectedPaper?.Title ?? SelectedScope,
+                PaperTitle = SelectedBuildMode == "AI pick" ? "AI built test"
+                    : MixAllPapers ? "Mixed papers" : SelectedPaper?.Title ?? SelectedScope,
                 Scope = SelectedScope,
                 Strictness = IeltsBanding.StrictnessLabel(SelectedStrictness),
                 BandLow = range.Low,
                 BandHigh = range.High,
                 Correct = correct,
                 Total = total,
-                Summary = ResultText.Length > 500 ? ResultText[..500] : ResultText
+                Summary = summary,
+                Violations = StrictViolations,
+                CreatedAt = DateTime.Now
             });
             db.SaveChanges();
         }
@@ -785,29 +1613,48 @@ public sealed partial class ExamViewModel : ObservableObject
     private static string OneLine(string text)
     {
         var clean = text.Replace('\n', ' ').Replace('\r', ' ').Trim();
-        return clean.Length <= 220 ? clean : clean[..220] + "...";
+        return clean.Length <= 320 ? clean : clean[..320] + "...";
+    }
+
+    /// <summary>Adds one band table row, skipping empty model reasons.</summary>
+    private static void AddWhy(ObservableCollection<string> lines, string label, string why)
+    {
+        if (string.IsNullOrWhiteSpace(why)) return;
+        lines.Add($"{label}: {OneLine(why)}");
     }
 
     private void SetPart(int index)
     {
         _listeningCts?.Cancel();
+        _prepCts?.Cancel();
         _audio.StopPlayback();
+        foreach (var part in _parts)
+            part.IsCurrent = false;
         PartIndex = index;
         CurrentPart = _parts[index];
         CurrentPart.IsTimerRunning = true;
+        CurrentPart.IsCurrent = true;
         OnPropertyChanged(nameof(CanGoBack));
         OnPropertyChanged(nameof(CanGoNext));
         if (CurrentPart.IsListening)
         {
             _listeningCts = new CancellationTokenSource();
+            _prepCts = new CancellationTokenSource();
             _ = PlayListeningOnceAsync(CurrentPart, _listeningCts.Token);
         }
+    }
+
+    [RelayCommand]
+    private void SkipPrep()
+    {
+        _prepCts?.Cancel();
     }
 
     private void Tick()
     {
         if (CurrentPart is null) { _timer.Stop(); return; }
         CurrentPart.Tick();
+        CurrentPart.RefreshProgress();
         if (CurrentPart.RemainingSeconds > 0) return;
 
         CurrentPart.IsTimerRunning = false;
@@ -817,6 +1664,6 @@ public sealed partial class ExamViewModel : ObservableObject
             return;
         }
 
-        SubmitExam();
+        SubmitExamCore(confirm: false);
     }
 }

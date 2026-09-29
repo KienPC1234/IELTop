@@ -3,6 +3,9 @@
                     xmlns:local="clr-namespace:IELTop.Styles">
     <!-- Plain WPF theme. No extra UI library needed. -->
     <local:BooleanToVisibilityConverter x:Key="Bool2Visibility"/>
+    <local:CountToVisibilityConverter x:Key="Count2Visibility"/>
+    <local:InverseBooleanToVisibilityConverter x:Key="InverseBool2Visibility"/>
+    <local:ScaleFontConverter x:Key="ScaleFont"/>
     <local:InverseBooleanConverter x:Key="InverseBool"/>
     <local:StringMatchToVisibilityConverter x:Key="PageMatch"/>
     <local:NonEmptyStringToVisibilityConverter x:Key="String2Visibility"/>
@@ -29,25 +32,35 @@
     <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedColor}"/>
     <SolidColorBrush x:Key="LineBrush" Color="{StaticResource LineColor}"/>
 
-    <!-- Sidebar navigation item -->
+    <!-- Sidebar navigation item: bright text on dark ground, big hit area -->
     <Style x:Key="NavItem" TargetType="ListBoxItem">
-        <Setter Property="Foreground" Value="#D1D5DB"/>
-        <Setter Property="FontSize" Value="14"/>
-        <Setter Property="Padding" Value="14,10"/>
-        <Setter Property="Margin" Value="0,1"/>
+        <Setter Property="Foreground" Value="#E5E7EB"/>
+        <Setter Property="FontSize" Value="15"/>
+        <Setter Property="Padding" Value="12,12"/>
+        <Setter Property="Margin" Value="0,2"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListBoxItem">
-                    <Border x:Name="Root" Background="Transparent" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                        <ContentPresenter VerticalAlignment="Center"/>
-                    </Border>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="4"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="Indicator" Background="Transparent" CornerRadius="2" Margin="0,10,0,10"/>
+                        <Border Grid.Column="1" x:Name="Root" Background="Transparent" CornerRadius="8"
+                                Padding="{TemplateBinding Padding}"
+                                TextElement.Foreground="{TemplateBinding Foreground}">
+                            <ContentPresenter VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Root" Property="Background" Value="{StaticResource SidebarHoverBrush}"/>
                             <Setter Property="Foreground" Value="White"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Root" Property="Background" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="Root" Property="Background" Value="{StaticResource SidebarHoverBrush}"/>
+                            <Setter TargetName="Indicator" Property="Background" Value="{StaticResource AccentBrush}"/>
                             <Setter Property="Foreground" Value="White"/>
                             <Setter Property="FontWeight" Value="SemiBold"/>
                         </Trigger>
@@ -58,8 +71,7 @@
     </Style>
 
     <!-- Buttons -->
-    <Style x:Key="PrimaryButton" TargetType="Button">
-        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+    <Style x:Key="PrimaryButton" TargetType="Button">        <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
         <Setter Property="Foreground" Value="White"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="14,8"/>
@@ -70,12 +82,16 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
-                            Padding="{TemplateBinding Padding}">
+                            Padding="{TemplateBinding Padding}"
+                            TextElement.Foreground="{TemplateBinding Foreground}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="Background" Value="{StaticResource AccentHoverBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#3730A3"/>
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="Bd" Property="Background" Value="#C7CBD3"/>
@@ -99,7 +115,8 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
                             BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
-                            Padding="{TemplateBinding Padding}">
+                            Padding="{TemplateBinding Padding}"
+                            TextElement.Foreground="{TemplateBinding Foreground}">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -122,6 +139,74 @@
         <Setter Property="Padding" Value="18"/>
         <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.12" Color="#111827"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Flat card for inner lists: no shadow, cheap on weak machines -->
+    <Style x:Key="CardFlat" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CardBrush}"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="14"/>
+        <Setter Property="BorderBrush" Value="{StaticResource LineBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+
+    <!-- Small status labels: band ranges, model states, skills -->
+    <Style x:Key="BadgeBase" TargetType="Border">
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="8,3"/>
+        <Setter Property="Margin" Value="0,0,6,6"/>
+    </Style>
+    <Style x:Key="BadgeGreen" TargetType="Border" BasedOn="{StaticResource BadgeBase}">
+        <Setter Property="Background" Value="#DCFCE7"/>
+        <Setter Property="TextBlock.Foreground" Value="#15803D"/>
+    </Style>
+    <Style x:Key="BadgeGray" TargetType="Border" BasedOn="{StaticResource BadgeBase}">
+        <Setter Property="Background" Value="#F3F4F6"/>
+        <Setter Property="TextBlock.Foreground" Value="#6B7280"/>
+    </Style>
+    <Style x:Key="BadgeAmber" TargetType="Border" BasedOn="{StaticResource BadgeBase}">
+        <Setter Property="Background" Value="#FEF3C7"/>
+        <Setter Property="TextBlock.Foreground" Value="#B45309"/>
+    </Style>
+    <Style x:Key="BadgeRed" TargetType="Border" BasedOn="{StaticResource BadgeBase}">
+        <Setter Property="Background" Value="#FEE2E2"/>
+        <Setter Property="TextBlock.Foreground" Value="#B91C1C"/>
+    </Style>
+    <Style x:Key="DangerButton" TargetType="Button">
+        <Setter Property="Background" Value="#B91C1C"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="14,8"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="8"
+                            Padding="{TemplateBinding Padding}"
+                            TextElement.Foreground="{TemplateBinding Foreground}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#991B1B"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#7F1D1D"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Background" Value="#C7CBD3"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- Big number tile used on the dashboard -->
@@ -140,7 +225,7 @@
         <Setter Property="Margin" Value="0,0,0,8"/>
     </Style>
 
-    <Style TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-    </Style>
+    <!-- No global TextBlock foreground: dark surfaces set their own light
+         text explicitly, light surfaces use the default dark text. A global
+         color here would leak into menus and buttons and make text unreadable. -->
 </ResourceDictionary>

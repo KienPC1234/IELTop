@@ -29,6 +29,8 @@ public sealed class PiperTtsService : ITtsService
 
     public bool IsAvailable => true; // The Windows voice fallback always works.
 
+    public string VoiceName => IsNeuralAvailable ? "Neural voice" : "Windows voice";
+
     public bool IsNeuralAvailable => OnnxModelRegistry.IsComplete(SlotName)
         && File.Exists(ConfigPath) && EspeakPhonemizer.IsAvailable;
 

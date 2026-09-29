@@ -1,0 +1,130 @@
+{
+  "title": "IELTop Sample Test 4",
+  "source": "IELTop original sample content, written for this app. Free to keep and share with the app.",
+  "category": "Academic",
+  "level": "6.0-7.5",
+  "tags": ["academic", "oceans", "sleep", "energy", "maps", "festivals"],
+  "parts": [
+    {
+      "id": "L3",
+      "skill": "Listening",
+      "title": "Listening Part 3: Energy Project",
+      "topic": "Study discussion",
+      "taskType": "Part 3",
+      "minutes": 8,
+      "instructions": "Listen to two students, then answer. The clip plays once.",
+      "material": "Have you started the energy survey? Not yet. I read that flats with smart meters use about eight percent less power. That is a good opening fact. We could ask twenty flats on our street. Twenty sounds enough for a class project. Should we also ask about heating? Yes, because heating is half the winter bill. Good point. Let us meet Thursday to write the questions. Thursday at four in the library works for me.",
+      "audioFile": "",
+      "questions": [
+        {
+          "number": 1,
+          "kind": "gap",
+          "prompt": "Smart meter flats use about ___ less power.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "8 percent|8%|eight percent"
+        },
+        {
+          "number": 2,
+          "kind": "choice",
+          "prompt": "When will they meet to write questions?",
+          "options": [
+            { "key": "A", "text": "Thursday at four" },
+            { "key": "B", "text": "Friday at four" },
+            { "key": "C", "text": "Thursday at five" }
+          ],
+          "correctKey": "A",
+          "explanation": "They agree on Thursday at four in the library."
+        }
+      ]
+    },
+    {
+      "id": "R3",
+      "skill": "Reading",
+      "title": "Reading Passage 3: Maps of Sleep",
+      "topic": "Science",
+      "taskType": "Passage 3",
+      "minutes": 15,
+      "instructions": "Read the passage, then answer the questions below.",
+      "material": "Sleep scientists now map the night in ninety minute cycles. Each cycle moves from light sleep to deep sleep and then to dreaming sleep. Missing the last cycle, often by waking to an alarm, leaves people groggy even after seven hours in bed. A short nap of twenty minutes can help, because it rarely enters deep sleep. Longer daytime naps often backfire, delaying night sleep by hours.",
+      "questions": [
+        {
+          "number": 3,
+          "kind": "choice",
+          "prompt": "A full sleep cycle lasts about",
+          "options": [
+            { "key": "A", "text": "twenty minutes" },
+            { "key": "B", "text": "ninety minutes" },
+            { "key": "C", "text": "seven hours" }
+          ],
+          "correctKey": "B",
+          "explanation": "The passage says the night is mapped in ninety minute cycles."
+        },
+        {
+          "number": 4,
+          "kind": "gap",
+          "prompt": "A short nap of ___ rarely enters deep sleep.",
+          "options": [],
+          "correctKey": "",
+          "gapAnswer": "twenty minutes|20 minutes"
+        },
+        {
+          "number": 5,
+          "kind": "match",
+          "prompt": "Match each sleep length with its effect.",
+          "options": [],
+          "correctKey": "",
+          "bank": ["Light help", "Grogginess", "Delayed night sleep"],
+          "matchRows": [
+            { "label": "Missing the last cycle", "answer": "Grogginess" },
+            { "label": "Long daytime nap", "answer": "Delayed night sleep" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "W1",
+      "skill": "Writing",
+      "title": "Writing Task 1: Power Chart",
+      "topic": "Energy",
+      "taskType": "Task 1 Report",
+      "minutes": 20,
+      "instructions": "Write at least 150 words. Summarise the main trends and compare where relevant.",
+      "material": "The chart shows home power use by hour in winter and summer. Summarise the information by selecting and reporting the main features.",
+      "questions": []
+    },
+    {
+      "id": "W2",
+      "skill": "Writing",
+      "title": "Writing Task 2: Ocean Plastic",
+      "topic": "Environment",
+      "taskType": "Task 2 Discussion",
+      "minutes": 40,
+      "instructions": "Write at least 250 words. Discuss both views and give your own opinion with examples.",
+      "material": "Some people say only governments can reduce ocean plastic. Others say each person must act. Discuss both views and give your opinion.",
+      "questions": []
+    },
+    {
+      "id": "S1",
+      "skill": "Speaking",
+      "title": "Speaking Part 1: Festivals",
+      "topic": "Culture",
+      "taskType": "Part 1",
+      "minutes": 2,
+      "instructions": "Answer in 2 to 3 sentences per question. Speak for about 60 seconds, no pause.",
+      "material": "Do you enjoy festivals? What is one popular festival in your country? Do you prefer small local events or large ones?",
+      "questions": []
+    },
+    {
+      "id": "S3",
+      "skill": "Speaking",
+      "title": "Speaking Part 3: Cities and Rest",
+      "topic": "Cities",
+      "taskType": "Part 3",
+      "minutes": 3,
+      "instructions": "Give longer answers with reasons and examples. Speak for about 60 seconds per question, no pause.",
+      "material": "Why do many adults sleep less than they need? Should schools start later in the morning? How can cities help people rest better?",
+      "questions": []
+    }
+  ]
+}

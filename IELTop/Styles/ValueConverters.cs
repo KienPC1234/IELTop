@@ -25,6 +25,52 @@ public sealed class InverseBooleanConverter : IValueConverter
         => value is not true;
 }
 
+/// <summary>Shows the element when the bound number is above zero.</summary>
+public sealed class CountToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        double number = value switch
+        {
+            int n => n,
+            double d => d,
+            _ => 0
+        };
+        return number > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+public sealed class InverseBooleanToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is true ? Visibility.Collapsed : Visibility.Visible;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is not Visibility.Visible;
+}
+
+/// <summary>
+/// Multiplies a base font size by a scale factor. Parameter is the base
+/// size, for example 14. Used for the exam text size setting.
+/// </summary>
+public sealed class ScaleFontConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        double scale = value is double d ? d : 1.0;
+        double baseSize = parameter is string s && double.TryParse(s,
+            NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 14.0;
+        return Math.Round(baseSize * scale, 1);
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
 /// <summary>
 /// Matches the current page against ConverterParameter to switch panels.
 /// Invert=true shows the panel on every page except the named one.

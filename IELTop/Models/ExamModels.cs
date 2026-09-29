@@ -10,17 +10,32 @@ public sealed class ExamOption
 }
 
 /// <summary>
-/// A single question inside a mock test part. Explanation is the reason the
-/// correct answer is right, shown for Reading review. Old papers without it
+/// A single question inside a mock test part. Kind is choice (options with
+/// CorrectKey) or gap (type the answer, checked against GapAnswer with |
+/// separated alternatives). Explanation is the reason the correct answer is
+/// right, shown for Reading review. Old papers without the new fields
 /// still load.
 /// </summary>
 public sealed class ExamQuestion
 {
     public int Number { get; set; }
     public string Prompt { get; set; } = string.Empty;
+    public string Kind { get; set; } = "choice";
     public List<ExamOption> Options { get; set; } = new();
     public string CorrectKey { get; set; } = string.Empty;
+    public string GapAnswer { get; set; } = string.Empty;
+    public List<ExamMatchRow> MatchRows { get; set; } = new();
+    public List<string> Bank { get; set; } = new();
     public string Explanation { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// One row of a matching question: which bank item belongs to this label.
+/// </summary>
+public sealed class ExamMatchRow
+{
+    public string Label { get; set; } = string.Empty;
+    public string Answer { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -46,11 +61,16 @@ public sealed class ExamPart
 }
 
 /// <summary>
-/// A full mock test made of ordered parts.
+/// A full mock test made of ordered parts. Category groups papers on
+/// content servers, for example Academic or General. Level names the
+/// target band range, for example 5.0-6.5. Old papers without them load.
 /// </summary>
 public sealed class ExamPaper
 {
     public string Title { get; set; } = string.Empty;
     public string Source { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string Level { get; set; } = string.Empty;
+    public List<string> Tags { get; set; } = new();
     public List<ExamPart> Parts { get; set; } = new();
 }

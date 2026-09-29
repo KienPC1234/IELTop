@@ -32,7 +32,8 @@ public sealed class StudyRecord
 /// <summary>
 /// A scored mock test attempt, kept so the student can track progress.
 /// Bands are stored as a range, because examiners vary. They are practice
-/// estimates, never official IELTS scores.
+/// estimates, never official IELTS scores. WritingBand and SpeakingBand
+/// are the AI marked bands for those skills when a model was used.
 /// </summary>
 public sealed class ExamAttempt
 {
@@ -45,6 +46,17 @@ public sealed class ExamAttempt
     public int Correct { get; set; }
     public int Total { get; set; }
     public string Summary { get; set; } = string.Empty;
+    public int Violations { get; set; }
+
+    /// <summary>AI marked Writing band, 0 when not marked.</summary>
+    public double WritingBand { get; set; }
+
+    /// <summary>AI marked Speaking band, 0 when not marked.</summary>
+    public double SpeakingBand { get; set; }
+
+    /// <summary>Full AI feedback text from the run, for the detail view.</summary>
+    public string AiFeedback { get; set; } = string.Empty;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

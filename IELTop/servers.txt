@@ -1,0 +1,6 @@
+# IELTop community content servers (protocol ieltop/1)
+# One server per line: Name | BaseUrl
+# Lines starting with # are comments. The app also lets users add
+# their own servers, which are kept separately on their computer.
+# To run your own server, see tools/content-server/README.md.
+IELTop Sample Server | http://localhost:8765

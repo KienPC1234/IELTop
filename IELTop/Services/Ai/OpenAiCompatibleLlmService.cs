@@ -79,7 +79,7 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
 
     public Task<LlmResult> TestConnectionAsync(CancellationToken ct = default)
         => CompleteAsync(
-            new[] { LlmMessage.User("Reply with the single word: ok") }, ct);
+            new[] { LlmMessage.User(LlmPrompts.TestConnectionPrompt) }, ct);
 
     public async Task<LlmResult> CompleteAsync(
         IReadOnlyList<LlmMessage> messages, CancellationToken ct = default)
@@ -88,10 +88,12 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
 
         var endpoint = $"{_settings.Current.LlmBaseUrl.TrimEnd('/')}/chat/completions";
         var watch = System.Diagnostics.Stopwatch.StartNew();
+        using var timeout = new CancellationTokenSource(TimeoutOf(_settings));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         try
         {
             using var request = BuildRequest(messages, stream: false);
-            using var response = await _http.SendAsync(request, ct);
+            using var response = await _http.SendAsync(request, linked.Token);
             var body = await response.Content.ReadAsStringAsync(ct);
             watch.Stop();
 
@@ -138,23 +140,25 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
         HttpResponseMessage? response = null;
         Stream? stream = null;
         StreamReader? reader = null;
+        using var timeout = new CancellationTokenSource(TimeoutOf(_settings));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
         try
         {
             using var request = BuildRequest(messages, stream: true);
-            response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token);
 
             if (!response.IsSuccessStatusCode)
             {
-                var body = await response.Content.ReadAsStringAsync(ct);
+                var body = await response.Content.ReadAsStringAsync(linked.Token);
                 yield return DescribeHttpError(response.StatusCode, body);
                 yield break;
             }
 
-            stream = await response.Content.ReadAsStreamAsync(ct);
+            stream = await response.Content.ReadAsStreamAsync(linked.Token);
             reader = new StreamReader(stream);
 
             // Read to end with ReadLineAsync. Checking EndOfStream would block on the stream.
-            while (await reader.ReadLineAsync(ct) is { } line)
+            while (await reader.ReadLineAsync(linked.Token) is { } line)
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
@@ -177,11 +181,14 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
     private HttpRequestMessage BuildRequest(IReadOnlyList<LlmMessage> messages, bool stream)
     {
         var url = $"{_settings.Current.LlmBaseUrl.TrimEnd('/')}/chat/completions";
+        double topP = _settings.Current.LlmTopP;
+        if (!double.IsFinite(topP) || topP <= 0 || topP > 1) topP = 1.0;
         var payload = new
         {
             model = _settings.Current.LlmModel,
             messages = messages.Select(BuildMessage).ToList(),
             temperature = _settings.Current.LlmTemperature,
+            top_p = topP,
             max_tokens = _settings.Current.LlmMaxTokens,
             stream
         };
@@ -201,6 +208,14 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
 
         return request;
+    }
+
+    private static TimeSpan TimeoutOf(ISettingsStore settings)
+    {
+        int seconds = settings.Current.LlmTimeoutSeconds;
+        if (seconds < 15) seconds = 15;
+        if (seconds > 300) seconds = 300;
+        return TimeSpan.FromSeconds(seconds);
     }
 
     /// <summary>

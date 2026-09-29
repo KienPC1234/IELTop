@@ -31,13 +31,19 @@ namespace IELTop
                     services.AddSingleton<IG2PService, SimpleG2PService>();
                     services.AddSingleton<IMddPhonemeService, MddPhonemeService>();
                     services.AddSingleton<IExamRepository, ExamRepository>();
+                    services.AddSingleton<IModelLoadCoordinator, ModelLoadCoordinator>();
+                    services.AddSingleton<IContentServerStore, ContentServerStore>();
+                    services.AddSingleton<IContentServerClient, ContentServerClient>();
                     services.AddSingleton<ILlmService, OpenAiCompatibleLlmService>();
                     services.AddSingleton<IIeltsAiService, IeltsAiService>();
 
                     services.AddSingleton<MainViewModel>();
                     services.AddSingleton<ExamViewModel>();
+                    services.AddSingleton<LibraryViewModel>();
+                    services.AddSingleton<EditorViewModel>();
                     services.AddSingleton<SettingsViewModel>();
                     services.AddSingleton<ResultsViewModel>();
+                    services.AddSingleton<ServersViewModel>();
 
                     services.AddTransient<MainWindow>();
                 })
@@ -56,6 +62,7 @@ namespace IELTop
             {
                 (_host.Services.GetService<IOnnxService>() as IDisposable)?.Dispose();
                 (_host.Services.GetService<IAudioService>() as IDisposable)?.Dispose();
+                (_host.Services.GetService<IContentServerClient>() as IDisposable)?.Dispose();
                 await _host.StopAsync();
                 _host.Dispose();
             }

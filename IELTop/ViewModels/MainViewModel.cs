@@ -46,11 +46,14 @@ public sealed partial class ModelSlotViewModel : ObservableObject
 
     public void Refresh()
     {
-        State = IsReady ? "Ready" : "Missing";
+        State = IsReady ? (_onnx.IsLoaded(Name) ? "In memory" : "Ready") : "Missing";
         FileDetail = BuildFileDetail();
         OnPropertyChanged(nameof(IsReady));
         OnPropertyChanged(nameof(FullPath));
+        OnPropertyChanged(nameof(IsLoaded));
     }
+
+    public bool IsLoaded => _onnx.IsLoaded(Name);
 
     /// <summary>
     /// Debug line for release and publish checks: exact file state on disk,
@@ -81,6 +84,25 @@ public sealed partial class ModelSlotViewModel : ObservableObject
             Message = error;
         Refresh();
     }
+
+    [RelayCommand]
+    private void Unload()
+    {
+        _onnx.Unload(Name);
+        Message = "Unloaded to free memory.";
+        Refresh();
+    }
+
+    [RelayCommand]
+    private void DeleteModel()
+    {
+        if (!IsReady)
+        {
+            Message = "Nothing to delete. The file is not installed.";
+            return;
+        }
+        Message = $"File kept at {FullPath}. Delete it by hand to save disk space.";
+    }
 }
 
 public sealed partial class MainViewModel : ObservableObject
@@ -95,14 +117,20 @@ public sealed partial class MainViewModel : ObservableObject
     [ObservableProperty] private int _wordsDue;
     [ObservableProperty] private int _attemptCount;
     [ObservableProperty] private int _examCount;
+    [ObservableProperty] private int _papersCount;
     [ObservableProperty] private string _lastBand = "No test yet";
     [ObservableProperty] private string _averageAccuracy = "0";
     [ObservableProperty] private string _modelsSummary = "0 of 0";
+    [ObservableProperty] private string _loadedMemory = "Models in memory: 0 MB";
     [ObservableProperty] private string _llmSummary = "Not set";
+    [ObservableProperty] private string _statusMessage = string.Empty;
 
     public ExamViewModel Exam { get; }
+    public LibraryViewModel Library { get; }
+    public EditorViewModel Editor { get; }
     public SettingsViewModel Settings { get; }
     public ResultsViewModel Results { get; }
+    public ServersViewModel Servers { get; }
 
     public ObservableCollection<ModelSlotViewModel> Models { get; } = new();
 
@@ -110,20 +138,65 @@ public sealed partial class MainViewModel : ObservableObject
         IOnnxService onnx,
         IStatsService stats,
         ExamViewModel exam,
+        LibraryViewModel library,
+        EditorViewModel editor,
         SettingsViewModel settings,
-        ResultsViewModel results)
+        ResultsViewModel results,
+        ServersViewModel servers)
     {
         _onnx = onnx;
         _stats = stats;
         Exam = exam;
+        Library = library;
+        Editor = editor;
         Settings = settings;
         Results = results;
+        Servers = servers;
+        Library.NavigateTo = page => CurrentPage = page;
+        Library.Editor = editor;
+        Editor.NavigateTo = page => CurrentPage = page;
+        Editor.PapersChanged = RefreshPapers;
+        Exam.PapersChanged = () => Library.LoadCommand.Execute(null);
 
         Exam.Load();
         BuildModels();
         RefreshStats();
+        Exam.FontScale = Settings.SelectedTextSize == "Large" ? 1.15 : 1.0;
 
         Settings.Saved += (_, _) => OnSettingsChanged();
+        Exam.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ExamViewModel.IsRunning))
+                OnPropertyChanged(nameof(IsExamRunning));
+        };
+    }
+
+    /// <summary>True while the Mock Test page runs a test. Pins the exam bars.</summary>
+    public bool IsExamRunning => CurrentPage == "Exam" && Exam.IsRunning;
+
+    /// <summary>
+    /// Lists go stale while the user is elsewhere: a downloaded paper, a
+    /// finished test, or new stats. Refresh the page being opened.
+    /// </summary>
+    partial void OnCurrentPageChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsExamRunning));
+        if (value == "Exam")
+            Exam.Load();
+        else if (value == "Library")
+            Library.LoadCommand.Execute(null);
+        else if (value == "Results")
+            Results.LoadCommand.Execute(null);
+        else if (value == "Overview")
+            RefreshStatsCommand.Execute(null);
+    }
+
+    /// <summary>Reloads every paper list after a save or delete.</summary>
+    private void RefreshPapers()
+    {
+        Exam.Load();
+        Library.LoadCommand.Execute(null);
+        PapersCount = Exam.Papers.Count;
     }
 
     /// <summary>
@@ -134,10 +207,32 @@ public sealed partial class MainViewModel : ObservableObject
     {
         RefreshStats();
         Exam.RefreshAiState();
+        Library.RefreshAiState();
+        Editor.RefreshAiState();
+        Exam.FontScale = Settings.SelectedTextSize == "Large" ? 1.15 : 1.0;
         OnPropertyChanged(nameof(LlmSummary));
     }
 
     public string ModelsFolder => OnnxModelRegistry.ModelsDir;
+
+    [RelayCommand]
+    private void UnloadAllModels()
+    {
+        _onnx.UnloadAll();
+        foreach (var model in Models)
+            model.Refresh();
+        LoadedMemory = $"Models in memory: 0 MB.";
+        StatusMessage = "All models were unloaded.";
+    }
+
+    [RelayCommand]
+    private void GoExam() => CurrentPage = "Exam";
+
+    [RelayCommand]
+    private void GoLibrary() => CurrentPage = "Library";
+
+    [RelayCommand]
+    private void GoServers() => CurrentPage = "Servers";
 
     [RelayCommand]
     private void RefreshStats()
@@ -148,21 +243,11 @@ public sealed partial class MainViewModel : ObservableObject
         AttemptCount = s.SpeakingAttempts;
         AverageAccuracy = $"{s.AverageAccuracy:0.#}%";
         ModelsSummary = $"{s.ModelsReady} of {s.ModelsTotal}";
+        LoadedMemory = $"Models in memory: {_onnx.LoadedBytes() / 1048576} MB. Unload a model to free RAM.";
         LlmSummary = s.LlmConfigured ? s.LlmModel : "Not set";
-
-        try
-        {
-            using var db = new Data.AppDbContext();
-            var list = db.ExamAttempts.OrderByDescending(x => x.CreatedAt).Take(20).ToList();
-            ExamCount = db.ExamAttempts.Count();
-            var last = list.FirstOrDefault();
-            LastBand = last is null ? "No test yet" : $"{last.BandLow:0.0} to {last.BandHigh:0.0}";
-        }
-        catch
-        {
-            ExamCount = 0;
-            LastBand = "No test yet";
-        }
+        PapersCount = Exam.Papers.Count;
+        ExamCount = s.ExamAttempts;
+        LastBand = s.LastBandLabel;
 
         foreach (var model in Models)
             model.Refresh();

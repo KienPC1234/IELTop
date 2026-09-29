@@ -13,11 +13,14 @@ namespace IELTop.Services.Audio;
 public interface ITtsService
 {
     bool IsAvailable { get; }
+    string VoiceName { get; }
     Task<string> SpeakToFileAsync(string text, CancellationToken ct = default);
 }
 
 public sealed class WindowsTtsService : ITtsService
 {
+    public string VoiceName => "Windows voice";
+
     private static string CacheDir => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "IELTop", "tts");
