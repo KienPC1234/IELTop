@@ -1,0 +1,37 @@
+@page
+@model IELTop_Content_Server.Pages.Account.LoginModel
+@{
+    ViewData["Title"] = "Sign in";
+    Layout = "_Layout";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-5 col-lg-4">
+        <div class="card mt-4">
+            <div class="card-body">
+                <h1 class="h4 mb-3">Sign in</h1>
+                @if (!string.IsNullOrEmpty(Model.Error))
+                {
+                    <div class="alert alert-danger" role="alert">@Model.Error</div>
+                }
+                <form method="post">
+                    <div class="mb-3">
+                        <label class="form-label" for="username">Username</label>
+                        <input class="form-control" id="username" name="username" value="@Model.Username"
+                               autocomplete="username" autofocus required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="password">Password</label>
+                        <input class="form-control" id="password" name="password" type="password"
+                               autocomplete="current-password" required />
+                    </div>
+                    <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+                    <button type="submit" class="btn btn-primary w-100">Sign in</button>
+                </form>
+            </div>
+        </div>
+        <p class="text-muted small mt-3 mb-0">
+            This portal manages the papers, audio, and access codes that the IELTop app downloads.
+        </p>
+    </div>
+</div>

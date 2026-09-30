@@ -1,0 +1,143 @@
+@page
+@model IELTop_Content_Server.Pages.Audio.IndexModel
+@{
+    ViewData["Title"] = "Audio";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Audio</h1>
+    <span class="text-muted">@Model.Clips.Count clip(s), @Model.TotalSize in total</span>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">Upload clips</div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="Upload" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <input class="form-control" type="file" name="files" multiple required
+                               accept=".wav,.mp3,.m4a,.ogg,.flac,.aac,.opus" />
+                        <div class="form-text">
+                            wav, mp3, m4a, ogg, flac, aac, opus. Up to @Model.MaxUploadMb MB per file.
+                            The file name is what the paper references in audioFile.
+                        </div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="audioOverwrite"
+                               name="overwrite" value="true" />
+                        <label class="form-check-label" for="audioOverwrite">Replace clips with the same name</label>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Upload</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card h-100">
+            <div class="card-header">Import from a folder on this server</div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="Folder">
+                    <div class="mb-3">
+                        <label class="form-label" for="folder">Folder path</label>
+                        <input class="form-control" id="folder" name="folder" value="@Model.SuggestedFolder" />
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="folderOverwrite"
+                               name="overwrite" value="true" />
+                        <label class="form-check-label" for="folderOverwrite">Replace clips with the same name</label>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Import folder</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (Model.Results.Count > 0)
+{
+    <div class="card mb-3">
+        <div class="card-header">Result</div>
+        <ul class="list-group list-group-flush">
+            @foreach (var line in Model.Results)
+            {
+                <li class="list-group-item small">@line</li>
+            }
+        </ul>
+    </div>
+}
+
+@if (Model.MissingFromDisk.Count > 0)
+{
+    <div class="alert alert-warning" role="alert">
+        These clips are listed but the file is not on disk:
+        <strong>@string.Join(", ", Model.MissingFromDisk)</strong>
+    </div>
+}
+
+@if (Model.UnusedClips.Count > 0)
+{
+    <div class="alert alert-info" role="alert">
+        Not referenced by any paper: <strong>@string.Join(", ", Model.UnusedClips)</strong>
+    </div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead>
+        <tr>
+            <th>File</th>
+            <th>Type</th>
+            <th class="text-end">Size</th>
+            <th class="text-end">Downloads</th>
+            <th>State</th>
+            <th>Uploaded</th>
+            <th>Preview</th>
+            <th class="text-end">Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var clip in Model.Clips)
+        {
+            <tr>
+                <td><code>@clip.FileName</code></td>
+                <td>@clip.ContentType</td>
+                <td class="text-end">@Model.Size(clip.SizeBytes)</td>
+                <td class="text-end">@clip.DownloadCount</td>
+                <td>
+                    @if (Model.MissingFromDisk.Contains(clip.FileName))
+                    {
+                        <span class="badge text-bg-danger">File missing</span>
+                    }
+                    else
+                    {
+                        <span class="badge text-bg-success">Ready</span>
+                    }
+                </td>
+                <td class="text-nowrap">@clip.UploadedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                <td>
+                    @if (!Model.MissingFromDisk.Contains(clip.FileName))
+                    {
+                        <audio controls preload="none" style="height:32px"
+                               src="@Url.Page("/Audio/Index", "Play", new { file = clip.FileName })"></audio>
+                    }
+                </td>
+                <td class="text-end text-nowrap">
+                    <a class="btn btn-sm btn-outline-secondary"
+                       href="@Url.Page("/Audio/Index", "Play", new { file = clip.FileName, download = true })">Download</a>
+                    <form method="post" asp-page-handler="Delete" class="d-inline"
+                          onsubmit="return confirm('Delete @clip.FileName?');">
+                        <input type="hidden" name="file" value="@clip.FileName" />
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                    </form>
+                </td>
+            </tr>
+        }
+        @if (Model.Clips.Count == 0)
+        {
+            <tr><td colspan="8" class="text-muted">No audio clips yet.</td></tr>
+        }
+        </tbody>
+    </table>
+</div>

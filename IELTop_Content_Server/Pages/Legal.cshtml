@@ -1,0 +1,53 @@
+@page
+@{
+    ViewData["Title"] = "Content and licensing";
+}
+
+<div class="row">
+    <div class="col-lg-8">
+        <h1 class="h3 mb-3">Content and licensing</h1>
+
+        <p>
+            This server only serves practice content that someone has the right to share.
+            Every paper carries a source and a license, and every accepted submission was
+            confirmed by its author before review.
+        </p>
+
+        <h2 class="h5 mt-4">What we accept</h2>
+        <ul>
+            <li>Original content written for IELTop.</li>
+            <li>Content released under a license that allows redistribution, for example
+                Creative Commons.</li>
+            <li>Public domain material.</li>
+        </ul>
+        <p>We do not accept paid exam papers, copyrighted passages, or anything the
+            author cannot redistribute.</p>
+
+        <h2 class="h5 mt-4">How review works</h2>
+        <ol>
+            <li>You confirm authorship when you submit.</li>
+            <li>A model reads the paper, suggests tags, and lists any problems.</li>
+            <li>A human editor accepts it, or sends it back with a reason.</li>
+            <li>You get an email either way.</li>
+        </ol>
+
+        <h2 class="h5 mt-4">Your data</h2>
+        <ul>
+            <li>Your account email is used to sign in and to notify you. It is never shown
+                on a published paper.</li>
+            <li>Passwords are hashed with PBKDF2 and never stored as text.</li>
+            <li>Submitted files are kept with the submission so a review is reproducible.</li>
+        </ul>
+
+        <h2 class="h5 mt-4">Scores</h2>
+        <p>
+            Any band or score shown in the app is a practice estimate, not an official
+            IELTS result.
+        </p>
+
+        <p class="mt-4">
+            <a class="btn btn-primary" asp-page="/Contrib/Register">Create an account</a>
+            <a class="btn btn-outline-secondary" asp-page="/About">Back to about</a>
+        </p>
+    </div>
+</div>

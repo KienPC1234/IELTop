@@ -1,10 +1,194 @@
 ﻿@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Home page";
+    ViewData["Title"] = "Dashboard";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Dashboard</h1>
+    <div>
+        <a class="btn btn-outline-secondary" asp-page="/Health">Health check</a>
+        <a class="btn btn-primary" asp-page="/Papers/Import">Import papers</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Published papers</div>
+                <div class="display-6">@Model.PaperCount</div>
+                <a class="small" asp-page="/Papers/Index">Manage papers</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Audio clips</div>
+                <div class="display-6">@Model.AudioCount</div>
+                <a class="small" asp-page="/Audio/Index">Manage audio</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3 @(Model.InReview > 0 ? "bg-warning-subtle rounded" : null)">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Submissions in review</div>
+                <div class="display-6">@Model.InReview</div>
+                <a class="small" asp-page="/Submissions/Index">Open review queue</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Editor applications</div>
+                <div class="display-6">@Model.PendingEditors</div>
+                <a class="small" asp-page="/Editors/Index">Review applications</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Contributors</div>
+                <div class="h2">@Model.ContributorCount</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Api calls today</div>
+                <div class="h2">@Model.TodayApiCalls</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Paper downloads today</div>
+                <div class="h2">@Model.TodayDownloads</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-lg-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="text-muted small">Audio served today</div>
+                <div class="h2">@Model.TodayAudio</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!Model.LoginEnabled)
+{
+    <div class="alert alert-warning" role="alert">
+        Client login is off. The app connects with the other auth modes only.
+    </div>
+}
+@if (!Model.CaptchaEnabled)
+{
+    <div class="alert alert-info" role="alert">
+        Cloudflare Turnstile is off. The public forms work, but without a bot check.
+        Set the keys in appsettings to turn it on.
+    </div>
+}
+@if (!Model.SmtpEnabled)
+{
+    <div class="alert alert-info" role="alert">
+        SMTP is off, so contributor emails are queued but not sent.
+        <a asp-page="/Settings/Notifications">Set up email</a>.
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card h-100">
+            <div class="card-header">Connection</div>
+            <div class="card-body">
+                <p class="mb-2">Give this address to the app:</p>
+                <div class="input-group mb-3">
+                    <input class="form-control" readonly value="@Model.BaseUrl" aria-label="Server address" />
+                    <a class="btn btn-outline-secondary" asp-page="/Health">Test</a>
+                </div>
+                <div class="mb-2">
+                    <span class="text-muted small me-2">Auth modes</span>
+                    @foreach (var mode in Model.AuthModes)
+                    {
+                        <span class="badge text-bg-secondary me-1">@mode</span>
+                    }
+                </div>
+                <div>
+                    <span class="text-muted small me-2">Skills served</span>
+                    @foreach (var skill in Model.Skills)
+                    {
+                        <span class="badge text-bg-info me-1">@skill</span>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-3">
+        <div class="card h-100">
+            <div class="card-header">Runtime</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Database</span><span class="text-muted">@Model.DatabaseProvider</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Cache</span><span class="text-muted">@Model.CacheProvider</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Content version</span><span class="text-muted">@Model.ContentVersion</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Uptime</span><span class="text-muted">@Model.Uptime</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Memory</span><span class="text-muted">@Model.WorkingSet</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Mail queue</span>
+                    <a asp-page="/Notifications/Index">@Model.MailPending pending</a>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Recent activity</span>
+                <a class="small" asp-page="/Audit/Index">All</a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead>
+                    <tr><th>When</th><th>Action</th><th>Target</th></tr>
+                    </thead>
+                    <tbody>
+                    @foreach (var row in Model.Recent)
+                    {
+                        <tr>
+                            <td class="text-nowrap">@row.At.ToLocalTime().ToString("MM-dd HH:mm")</td>
+                            <td>@row.Action</td>
+                            <td class="text-truncate" style="max-width:12rem">@row.Target</td>
+                        </tr>
+                    }
+                    @if (Model.Recent.Count == 0)
+                    {
+                        <tr><td colspan="3" class="text-muted">No activity yet.</td></tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>

@@ -1,0 +1,12 @@
+@{
+    bool enabled = ViewData["CaptchaEnabled"] as bool? ?? false;
+    string siteKey = ViewData["CaptchaSiteKey"] as string ?? string.Empty;
+}
+@if (enabled)
+{
+    <div class="mb-3">
+        <div class="cf-turnstile" data-sitekey="@siteKey" data-theme="light"></div>
+        <div class="form-text">Complete the check so we know you are a person.</div>
+    </div>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+}

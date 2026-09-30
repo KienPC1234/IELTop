@@ -1,0 +1,68 @@
+@page
+@model IELTop_Content_Server.Pages.Contrib.ApplyEditorModel
+@{
+    ViewData["Title"] = "Become an editor";
+}
+
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <h1 class="h3 mb-3">Become a reviewing editor</h1>
+        <p class="text-muted">
+            Editors review submitted papers, accept good ones, and send the rest back with a
+            clear reason. Apply below and an admin will decide.
+        </p>
+
+        @if (Model.Done)
+        {
+            <div class="alert alert-success" role="alert">
+                Thank you. Your application is in. We will email you when it is decided.
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(Model.Error))
+        {
+            <div class="alert alert-danger" role="alert">@Model.Error</div>
+        }
+
+        @if (!Model.Done)
+        {
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        <div class="mb-3">
+                            <label class="form-label" for="email">Email</label>
+                            <input class="form-control" id="email" name="email" type="email" required
+                                   value="@Model.Email" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="fullName">Full name</label>
+                            <input class="form-control" id="fullName" name="fullName" required
+                                   value="@Model.FullName" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="languages">Languages you can review</label>
+                            <input class="form-control" id="languages" name="languages"
+                                   value="@Model.Languages" placeholder="English, Vietnamese" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="portfolioUrl">Portfolio or profile link</label>
+                            <input class="form-control" id="portfolioUrl" name="portfolioUrl"
+                                   value="@Model.PortfolioUrl" placeholder="https://..." />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="reason">Why do you want to help?</label>
+                            <textarea class="form-control" id="reason" name="reason" rows="5" required>@Model.Reason</textarea>
+                            <div class="form-text">
+                                Tell us about your teaching or exam experience. At least a sentence.
+                            </div>
+                        </div>
+
+                        @await Html.PartialAsync("_Captcha")
+
+                        <button class="btn btn-primary" type="submit">Send application</button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+</div>

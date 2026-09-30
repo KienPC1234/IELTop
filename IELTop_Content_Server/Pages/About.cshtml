@@ -1,0 +1,114 @@
+@page
+@model IELTop_Content_Server.Pages.AboutModel
+@{
+    ViewData["Title"] = "About";
+}
+
+<div class="row">
+    <div class="col-lg-8">
+        <h1 class="h3 mb-3">About the IELTop content server</h1>
+
+        <p>
+            This server serves practice material to the open source IELTop desktop app
+            over a small, documented protocol called <code>ieltop/1</code>. It also hosts
+            a portal where contributors submit new practice papers and where the team
+            reviews and publishes them.
+        </p>
+
+        <h2 class="h5 mt-4">What it serves</h2>
+        <ul>
+            <li>Mock test papers with their parts, questions, and answers.</li>
+            <li>Listening audio clips in m4a or opus, with range requests for seeking.</li>
+            <li>A small greeting the app reads to learn how to connect.</li>
+        </ul>
+
+        <h2 class="h5 mt-4">The protocol</h2>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+                </thead>
+                <tbody>
+                <tr><td>GET</td><td><code>/api/info</code></td><td>Greeting, auth modes, skills. Always open.</td></tr>
+                <tr><td>GET</td><td><code>/api/papers</code></td><td>Paper list with filters.</td></tr>
+                <tr><td>GET</td><td><code>/api/papers/{id}</code></td><td>One full paper.</td></tr>
+                <tr><td>GET</td><td><code>/api/audio/{file}</code></td><td>One audio clip.</td></tr>
+                <tr><td>POST</td><td><code>/api/login</code></td><td>Username and password to a token.</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small">
+            Guarded calls accept an access code or a bearer token, depending on what the
+            server has turned on.
+        </p>
+
+        <h2 class="h5 mt-4">Contribute</h2>
+        <p>
+            Anyone can <a asp-page="/Contrib/Register">create an account</a> and submit
+            practice content. Submissions are read by an automated review that suggests
+            tags and flags problems, then decided by a human editor. You get an email
+            when a submission is accepted or needs changes.
+        </p>
+        <p>
+            Teachers and exam writers can
+            <a asp-page="/Contrib/ApplyEditor">apply to become a reviewing editor</a>.
+        </p>
+
+        <h2 class="h5 mt-4">Open and offline first</h2>
+        <p>
+            The whole thing runs with SQLite and in memory caching on one small machine.
+            For a real deployment, point it at Postgres and Redis and run several
+            instances behind a load balancer. Login tokens and the content cache travel
+            through Redis, so any instance can serve any client.
+        </p>
+
+        <h2 class="h5 mt-4">Current status</h2>
+        <ul class="list-group mb-3">
+            <li class="list-group-item d-flex justify-content-between">
+                <span>Server name</span><span>@Model.Name</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span>Protocol</span><code>@Model.Protocol</code>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span>Published papers</span><span>@Model.PaperCount</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span>Audio clips</span><span>@Model.AudioCount</span>
+            </li>
+            <li class="list-group-item d-flex justify-content-between">
+                <span>Auth modes</span><span>@string.Join(", ", Model.AuthModes)</span>
+            </li>
+        </ul>
+
+        <p class="text-muted small">
+            A band estimate in the app is a practice guide, not an official IELTS score.
+        </p>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card mb-3">
+            <div class="card-header">Connect the app</div>
+            <div class="card-body">
+                <p class="mb-2">Server address:</p>
+                <div class="input-group">
+                    <input class="form-control" readonly value="@Model.BaseUrl" aria-label="Server address" />
+                    <a class="btn btn-outline-secondary" asp-page="/Health">Test</a>
+                </div>
+                <p class="text-muted small mb-0 mt-2">
+                    Add this in the Servers page of the IELTop app, then press Connect.
+                </p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">For the team</div>
+            <div class="list-group list-group-flush">
+                <a class="list-group-item list-group-item-action" asp-page="/Contrib/SignIn">Contributor sign in</a>
+                <a class="list-group-item list-group-item-action" asp-page="/Contrib/ApplyEditor">Apply as editor</a>
+                <a class="list-group-item list-group-item-action" asp-page="/Account/Login">Admin portal</a>
+                <a class="list-group-item list-group-item-action" asp-page="/Legal">Content and licensing</a>
+            </div>
+        </div>
+    </div>
+</div>

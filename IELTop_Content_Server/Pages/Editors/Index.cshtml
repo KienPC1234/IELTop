@@ -1,0 +1,104 @@
+@page
+@model IELTop_Content_Server.Pages.Editors.IndexModel
+@{
+    ViewData["Title"] = "Editor applications";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-0">Editor applications</h1>
+        <span class="text-muted">@Model.Pending pending, @Model.Rows.Count shown</span>
+    </div>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-sm-4 col-md-3">
+        <select class="form-select" name="status">
+            <option value="">All</option>
+            @foreach (var option in new[] { "Pending", "Approved", "Declined" })
+            {
+                <option value="@option" selected="@(Model.Status == option)">@option</option>
+            }
+        </select>
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-outline-secondary" type="submit">Filter</button>
+        <a class="btn btn-link" asp-page="/Editors/Index">Clear</a>
+    </div>
+</form>
+
+@foreach (var app in Model.Rows)
+{
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span>@app.FullName, <span class="text-muted">@app.Email</span></span>
+            <span class="badge @(app.Status == EditorApplicationStatus.Pending ? "text-bg-info"
+                : app.Status == EditorApplicationStatus.Approved ? "text-bg-success" : "text-bg-secondary")">
+                @app.Status
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-lg-7">
+                    <p class="mb-1"><strong>Languages:</strong> @app.Languages</p>
+                    <p class="mb-1">
+                        <strong>Portfolio:</strong>
+                        @if (app.PortfolioUrl.Length > 0)
+                        {
+                            <span class="text-break">@app.PortfolioUrl</span>
+                        }
+                        else
+                        {
+                            <span class="text-muted">none</span>
+                        }
+                    </p>
+                    <p class="mb-1"><strong>Reason:</strong></p>
+                    <p class="text-break">@app.Reason</p>
+                    <p class="small text-muted mb-0">
+                        Applied @Format.When(app.CreatedAt)
+                        @if (app.DecidedAt is not null)
+                        {
+                            <span>, decided @Format.When(app.DecidedAt)</span>
+                        }
+                    </p>
+                </div>
+                <div class="col-lg-5">
+                    @if (app.Status == EditorApplicationStatus.Pending)
+                    {
+                        <form method="post" asp-page-handler="Approve" class="mb-2">
+                            <input type="hidden" name="id" value="@app.Id" />
+                            <div class="mb-2">
+                                <label class="form-label" for="role-@app.Id">Role</label>
+                                <select class="form-select" id="role-@app.Id" name="role">
+                                    <option value="Editor">Editor</option>
+                                    <option value="Senior editor">Senior editor</option>
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <input class="form-control" name="note" placeholder="Note to the applicant" />
+                            </div>
+                            <button class="btn btn-success w-100" type="submit">Approve and invite</button>
+                        </form>
+                        <form method="post" asp-page-handler="Decline">
+                            <input type="hidden" name="id" value="@app.Id" />
+                            <div class="mb-2">
+                                <input class="form-control" name="note" placeholder="Reason (optional)" />
+                            </div>
+                            <button class="btn btn-outline-danger w-100" type="submit">Decline</button>
+                        </form>
+                    }
+                    else
+                    {
+                        <p class="mb-1"><strong>Decision note:</strong> @app.DecisionNote</p>
+                        <p class="mb-0"><strong>Role:</strong> @app.Role</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (Model.Rows.Count == 0)
+{
+    <p class="text-muted">No applications.</p>
+}

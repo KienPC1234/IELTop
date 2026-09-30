@@ -1,0 +1,42 @@
+@page
+@model IELTop_Content_Server.Pages.Audit.IndexModel
+@{
+    ViewData["Title"] = "Activity";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Activity</h1>
+    <span class="text-muted">Last @Model.Logs.Count event(s)</span>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-sm table-striped align-middle">
+        <thead>
+        <tr>
+            <th>When</th>
+            <th>Who</th>
+            <th>Action</th>
+            <th>Target</th>
+            <th>Detail</th>
+            <th>From</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Logs)
+        {
+            <tr>
+                <td class="text-nowrap">@row.At.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                <td>@row.Actor</td>
+                <td><span class="badge text-bg-light border">@row.Action</span></td>
+                <td class="text-break">@row.Target</td>
+                <td class="text-break small">@row.Detail</td>
+                <td class="text-nowrap">@row.Ip</td>
+            </tr>
+        }
+        @if (Model.Logs.Count == 0)
+        {
+            <tr><td colspan="6" class="text-muted">No activity recorded yet.</td></tr>
+        }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,124 @@
+@page
+@model IELTop_Content_Server.Pages.Contrib.SubmitModel
+@{
+    ViewData["Title"] = "Submit content";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-0">Submit content</h1>
+        <span class="text-muted">
+            At most @Model.MaxFiles files, up to @Model.MaxMb MB in total.
+        </span>
+    </div>
+    <a class="btn btn-outline-secondary" asp-page="/Contrib/Dashboard">My submissions</a>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="alert alert-danger" role="alert">@Model.Error</div>
+}
+
+@if (!Model.ReviewEnabled)
+{
+    <div class="alert alert-info" role="alert">
+        Automated review is off right now. Your submission still goes to a human editor.
+    </div>
+}
+
+<form method="post" enctype="multipart/form-data">
+    <div class="row g-3">
+        <div class="col-lg-7">
+            <div class="card mb-3">
+                <div class="card-header">The paper</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="title">Submission title</label>
+                        <input class="form-control" id="title" name="title" required
+                               value="@Model.Title" placeholder="Reading practice, urban transport" />
+                        <div class="form-text">
+                            A short name for this submission. If you send paper JSON, its own
+                            title is used for the published paper.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" for="files">
+                            Paper and audio files
+                        </label>
+                        <input class="form-control" id="files" name="files" type="file" multiple required
+                               accept=".json,.txt,.md,.csv,.docx,.pdf,.m4a,.opus,.ogg,.wav,.mp3,.aac,.flac" />
+                        <div class="form-text">
+                            Send the paper as JSON, or as txt, md, csv, docx, or pdf text.
+                            Listening clips are m4a or opus, and the paper's <code>audioFile</code>
+                            must name them. You can attach several files at once.
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="source">Source</label>
+                            <input class="form-control" id="source" name="source" value="@Model.Source"
+                                   placeholder="Original, or a link to the licensed source" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="license">License</label>
+                            <input class="form-control" id="license" name="license" value="@Model.License"
+                                   placeholder="CC BY 4.0, original, and so on" />
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <label class="form-label" for="note">Note to the editor</label>
+                        <textarea class="form-control" id="note" name="note" rows="3">@Model.Note</textarea>
+                        <div class="form-text">Anything the editor should know about this submission.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Author confirmation</div>
+                <div class="card-body">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="authorConfirm"
+                               name="authorConfirm" value="true" required />
+                        <label class="form-check-label" for="authorConfirm">
+                            I am the author of this content, or I have the right to share it, and I
+                            agree it can be published in the open IELTop library.
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-5">
+            <div class="card mb-3">
+                <div class="card-header">Author</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="authorName">Published author name</label>
+                        <input class="form-control" id="authorName" name="authorName" required
+                               value="@Model.AuthorName" />
+                        <div class="form-text">Shown on the paper. Your account email is never shown.</div>
+                    </div>
+
+                    @await Html.PartialAsync("_Captcha")
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">What happens next</div>
+                <div class="card-body">
+                    <ol class="mb-0 small">
+                        <li>The paper is checked for a title, parts, and valid questions.</li>
+                        <li>A model reads it and suggests tags, or flags problems.</li>
+                        <li>A human editor accepts it or sends it back with a reason.</li>
+                        <li>You get an email either way.</li>
+                    </ol>
+                </div>
+            </div>
+
+            <button class="btn btn-primary w-100" type="submit">Submit for review</button>
+        </div>
+    </div>
+</form>

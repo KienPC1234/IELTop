@@ -1,0 +1,57 @@
+@page
+@model IELTop_Content_Server.Pages.Contrib.AccountModel
+@{
+    ViewData["Title"] = "Account";
+}
+
+<h1 class="h3 mb-3">Account</h1>
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="alert alert-danger" role="alert">@Model.Error</div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header">Profile</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Email</span><span>@Model.Me!.Email</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Display name</span><span>@Model.Me.DisplayName</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Joined</span><span>@Format.When(Model.Me.CreatedAt)</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Submissions</span><span>@Model.SubmissionCount</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Role</span>
+                    <span class="badge text-bg-light border">@(Model.IsEditor ? "Editor" : "Contributor")</span>                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header">Change password</div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="ChangePassword">
+                    <div class="mb-3">
+                        <label class="form-label" for="current">Current password</label>
+                        <input class="form-control" id="current" name="current" type="password" required />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="next">New password</label>
+                        <input class="form-control" id="next" name="next" type="password"
+                               minlength="8" required />
+                    </div>
+                    <button class="btn btn-primary" type="submit">Update password</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

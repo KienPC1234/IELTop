@@ -32,3 +32,5 @@ publish/
 releases/
 *.nupkg
 RELEASES
+# Content server runtime store: local database, uploaded audio, keys
+IELTop_Content_Server/App_Data/

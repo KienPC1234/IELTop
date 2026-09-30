@@ -1,0 +1,100 @@
+@page
+@model IELTop_Content_Server.Pages.Papers.EditModel
+@{
+    ViewData["Title"] = Model.IsNew ? "New paper" : "Edit paper";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">@ViewData["Title"]</h1>
+    <a class="btn btn-outline-secondary" asp-page="/Papers/Index">Back to papers</a>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <div class="alert alert-danger" role="alert">@Model.Error</div>
+}
+
+<form method="post">
+    <div class="row g-3">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">Paper JSON</div>
+                <div class="card-body">
+                    <p class="text-muted small mb-2">
+                        Paste the paper exactly as the app should read it. Title, parts,
+                        questions, materials, and audio file names stay as written.
+                    </p>
+                    <textarea class="form-control font-monospace" name="json" rows="24"
+                              spellcheck="false" required>@Model.Json</textarea>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-header">Identity</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="id">Paper id</label>
+                        <input class="form-control" id="id" name="id" value="@Model.Id"
+                               pattern="[A-Za-z0-9_-]+" required @(Model.IsNew ? null : "readonly") />
+                        <div class="form-text">
+                            Letters, digits, dash, underscore. The app fetches this paper by this id.
+                        </div>
+                    </div>
+                    @if (!Model.IsNew)
+                    {
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="overwrite"
+                                   name="overwrite" value="true" checked />
+                            <label class="form-check-label" for="overwrite">Overwrite existing paper</label>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            @if (!Model.IsNew && Model.Preview is not null)
+            {
+                <div class="card mb-3">
+                    <div class="card-header">Current summary</div>
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item">Title: @Model.Preview.Title</li>
+                        <li class="list-group-item">Category: @Model.Preview.Category</li>
+                        <li class="list-group-item">Level: @Model.Preview.Level</li>
+                        <li class="list-group-item">Parts: @Model.Preview.PartCount</li>
+                        <li class="list-group-item">Questions: @Model.Preview.QuestionCount</li>
+                        <li class="list-group-item">Downloads: @Model.Preview.DownloadCount</li>
+                    </ul>
+                </div>
+            }
+
+            <div class="card mb-3">
+                <div class="card-header">Audio files referenced</div>
+                <div class="card-body">
+                    @if (Model.MissingAudio.Count == 0 && Model.AudioFiles.Count == 0)
+                    {
+                        <span class="text-muted">No audio referenced.</span>
+                    }
+                    else
+                    {
+                        @foreach (var file in Model.AudioFiles)
+                        {
+                            <div class="d-flex justify-content-between">
+                                <code>@file</code>
+                                @if (Model.MissingAudio.Contains(file))
+                                {
+                                    <span class="badge text-bg-danger">Missing</span>
+                                }
+                                else
+                                {
+                                    <span class="badge text-bg-success">Ready</span>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+
+            <button class="btn btn-primary w-100" type="submit">Save paper</button>
+        </div>
+    </div>
+</form>

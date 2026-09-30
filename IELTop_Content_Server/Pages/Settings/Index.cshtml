@@ -1,0 +1,139 @@
+@page
+@model IELTop_Content_Server.Pages.Settings.IndexModel
+@{
+    ViewData["Title"] = "Settings";
+}
+
+<h1 class="h3 mb-3">Settings</h1>
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <form method="post">
+            <div class="card mb-3">
+                <div class="card-header">Server</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label" for="name">Server name</label>
+                        <input class="form-control" id="name" name="name" value="@Model.Server.Name" required />
+                        <div class="form-text">Shown in the app when a user connects.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="skills">Skills served</label>
+                        <input class="form-control" id="skills" name="skills"
+                               value="@string.Join(", ", Model.Server.Skills)" />
+                        <div class="form-text">Comma separated, for example listening, reading, writing, speaking.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header">How clients may connect</div>
+                <div class="card-body">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="anonymous"
+                               name="anonymous" value="true" @(Model.Server.AllowAnonymous ? "checked" : null) />
+                        <label class="form-check-label" for="anonymous">
+                            Anonymous. Anyone who knows the address can download.
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" id="code"
+                               name="code" value="true" @(Model.Server.AllowAccessCode ? "checked" : null) />
+                        <label class="form-check-label" for="code">
+                            Access code. The app sends X-Access-Code.
+                        </label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="login"
+                               name="login" value="true" @(Model.Server.AllowLogin ? "checked" : null) />
+                        <label class="form-check-label" for="login">
+                            Login. The app posts to /api/login and keeps the token.
+                        </label>
+                    </div>
+                    <div class="alert alert-warning mb-0 py-2 small" role="alert">
+                        Turning off every mode locks out all clients. The admin portal stays open
+                        because it uses its own sign in.
+                    </div>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" type="submit">Save settings</button>
+        </form>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card mb-3">
+            <div class="card-header">Admin accounts</div>
+            <div class="card-body">
+                <table class="table table-sm mb-3">
+                    <thead><tr><th>Username</th><th>Role</th><th>Last sign in</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var user in Model.Admins)
+                    {
+                        <tr>
+                            <td>@user.Username</td>
+                            <td>@user.Role</td>
+                            <td>@(user.LastLoginAt?.ToLocalTime().ToString("yyyy-MM-dd HH:mm") ?? "never")</td>
+                            <td class="text-end">
+                                @if (Model.Admins.Count > 1)
+                                {
+                                    <form method="post" asp-page-handler="DeleteAdmin" class="d-inline"
+                                          onsubmit="return confirm('Delete admin @user.Username?');">
+                                        <input type="hidden" name="id" value="@user.Id" />
+                                        <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                                    </form>
+                                }
+                            </td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+                <form method="post" asp-page-handler="AddAdmin" class="row g-2">
+                    <div class="col-sm-5">
+                        <input class="form-control form-control-sm" name="username" placeholder="username"
+                               required minlength="3" />
+                    </div>
+                    <div class="col-sm-5">
+                        <input class="form-control form-control-sm" name="password" type="password"
+                               placeholder="password" required minlength="8" />
+                    </div>
+                    <div class="col-sm-2">
+                        <button class="btn btn-sm btn-primary w-100" type="submit">Add</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">Change your password</div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="ChangePassword" class="row g-2">
+                    <div class="col-sm-6">
+                        <input class="form-control form-control-sm" name="current" type="password"
+                               placeholder="current password" required />
+                    </div>
+                    <div class="col-sm-6">
+                        <input class="form-control form-control-sm" name="next" type="password"
+                               placeholder="new password" required minlength="8" />
+                    </div>
+                    <div class="col-12">
+                        <button class="btn btn-sm btn-primary mt-2" type="submit">Update password</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">Content tools</div>
+            <div class="card-body">
+                <p class="small text-muted">
+                    Rebuild the list summaries from the stored paper JSON. Run this after a manual
+                    database edit, not after a normal save.
+                </p>
+                <form method="post" asp-page-handler="Rebuild">
+                    <button class="btn btn-outline-secondary" type="submit">Rebuild summaries</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,78 @@
+@page
+@model IELTop_Content_Server.Pages.Submissions.IndexModel
+@{
+    ViewData["Title"] = "Review queue";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-0">Review queue</h1>
+        <span class="text-muted">
+            @Model.InReview in review, @Model.Total total
+        </span>
+    </div>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-sm-4 col-md-3">
+        <select class="form-select" name="status">
+            <option value="">All statuses</option>
+            @foreach (var option in new[] { "InReview", "Draft", "Accepted", "Rejected", "Withdrawn" })
+            {
+                <option value="@option" selected="@(Model.Status == option)">@option</option>
+            }
+        </select>
+    </div>
+    <div class="col-sm-6 col-md-4">
+        <input class="form-control" type="search" name="q" value="@Model.Query"
+               placeholder="Search reference, title, or author" />
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-outline-secondary" type="submit">Filter</button>
+        <a class="btn btn-link" asp-page="/Submissions/Index">Clear</a>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead>
+        <tr>
+            <th>Reference</th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Status</th>
+            <th class="text-end">Score</th>
+            <th>Tags</th>
+            <th>Submitted</th>
+            <th class="text-end">Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.Reference</code></td>
+                <td>@row.Title</td>
+                <td>@row.AuthorName</td>
+                <td><span class="badge @Format.StatusColor(row.Status)">@Format.StatusLabel(row.Status)</span></td>
+                <td class="text-end">@(row.ReviewScore >= 0 ? row.ReviewScore.ToString() : "-")</td>
+                <td>
+                    @foreach (var tag in Model.TagsOf(row))
+                    {
+                        <span class="badge text-bg-secondary me-1">@tag</span>
+                    }
+                </td>
+                <td class="text-nowrap">@Format.When(row.CreatedAt)</td>
+                <td class="text-end">
+                    <a class="btn btn-sm btn-outline-primary" asp-page="/Submissions/Review"
+                       asp-route-id="@row.Id">Open</a>
+                </td>
+            </tr>
+        }
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="8" class="text-muted">Nothing matches.</td></tr>
+        }
+        </tbody>
+    </table>
+</div>

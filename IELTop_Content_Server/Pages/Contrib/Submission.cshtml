@@ -1,0 +1,146 @@
+@page "{id:int}"
+@model IELTop_Content_Server.Pages.Contrib.SubmissionModel
+@{
+    ViewData["Title"] = "Submission " + Model.Submission.Reference;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-0">@Model.Submission.Title</h1>
+        <span class="text-muted">
+            <code>@Model.Submission.Reference</code>,
+            <span class="badge @Format.StatusColor(Model.Submission.Status)">
+                @Format.StatusLabel(Model.Submission.Status)
+            </span>
+        </span>
+    </div>
+    <a class="btn btn-outline-secondary" asp-page="/Contrib/Dashboard">Back</a>
+</div>
+
+@if (Model.Submission.Status == SubmissionStatus.Rejected
+     && !string.IsNullOrEmpty(Model.Submission.DecisionReason))
+{
+    <div class="alert alert-danger" role="alert">
+        <strong>Not accepted.</strong> @Model.Submission.DecisionReason
+    </div>
+}
+
+@if (Model.Submission.Status == SubmissionStatus.Draft && !string.IsNullOrEmpty(Model.Submission.ReviewSummary))
+{
+    <div class="alert alert-warning" role="alert">
+        <strong>The automated review could not finish.</strong> @Model.Submission.ReviewSummary
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        @foreach (var file in Model.Files)
+        {
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><code>@file.FileName</code> <span class="text-muted small">(@file.Kind)</span></span>
+                    <span class="badge text-bg-light border">@Format.Size(file.SizeBytes)</span>
+                </div>
+                <div class="card-body">
+                    @if (file.Text.Length > 0)
+                    {
+                        <pre class="small mb-0" style="max-height:22rem;overflow:auto">@file.Text</pre>
+                    }
+                    else
+                    {
+                        <span class="text-muted">Audio clip, no text.</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card mb-3">
+            <div class="card-header">Details</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Author</span><span>@Model.Submission.AuthorName</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Source</span><span class="text-truncate">@Model.Submission.Source</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>License</span><span>@Model.Submission.License</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Submitted</span><span>@Format.When(Model.Submission.CreatedAt)</span>
+                </li>
+                @if (Model.Submission.PaperId.Length > 0)
+                {
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>Published as</span><code>@Model.Submission.PaperId</code>
+                    </li>
+                }
+            </ul>
+        </div>
+
+        @if (Model.Submission.ReviewScore >= 0 || Model.Tags.Count > 0)
+        {
+            <div class="card mb-3">
+                <div class="card-header">Automated review</div>
+                <div class="card-body">
+                    @if (Model.Submission.ReviewScore >= 0)
+                    {
+                        <p class="mb-2">Score: <strong>@Model.Submission.ReviewScore</strong> / 100</p>
+                    }
+                    @if (!string.IsNullOrEmpty(Model.Submission.ReviewSummary))
+                    {
+                        <p class="mb-2">@Model.Submission.ReviewSummary</p>
+                    }
+                    @if (Model.Tags.Count > 0)
+                    {
+                        <div>
+                            @foreach (var tag in Model.Tags)
+                            {
+                                <span class="badge text-bg-secondary me-1">@tag</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (Model.Problems.Count > 0 || Model.Suggestions.Count > 0)
+        {
+            <div class="card mb-3">
+                <div class="card-header">What to improve</div>
+                <div class="card-body">
+                    @if (Model.Problems.Count > 0)
+                    {
+                        <p class="mb-1 fw-semibold">Problems</p>
+                        <ul>
+                            @foreach (var p in Model.Problems)
+                            {
+                                <li>@p</li>
+                            }
+                        </ul>
+                    }
+                    @if (Model.Suggestions.Count > 0)
+                    {
+                        <p class="mb-1 fw-semibold">Suggestions</p>
+                        <ul class="mb-0">
+                            @foreach (var s in Model.Suggestions)
+                            {
+                                <li>@s</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        }
+
+        @if (Model.Submission.Status is SubmissionStatus.Draft or SubmissionStatus.InReview)
+        {
+            <form method="post" asp-page-handler="Withdraw"
+                  onsubmit="return confirm('Withdraw this submission?');">
+                <button class="btn btn-outline-danger w-100" type="submit">Withdraw submission</button>
+            </form>
+        }
+    </div>
+</div>

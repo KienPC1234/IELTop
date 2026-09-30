@@ -1,52 +1,131 @@
-﻿<!DOCTYPE html>
+﻿@{
+    var isAdmin = User.Identity?.IsAuthenticated == true
+        && User.HasClaim(System.Security.Claims.ClaimTypes.Role, "Admin");
+    var isContributor = !isAdmin
+        && User.Identity?.IsAuthenticated == true
+        && User.HasClaim(System.Security.Claims.ClaimTypes.Role, "Contributor");
+    var name = isAdmin || isContributor ? User.Identity!.Name : null;
+}
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>@ViewData["Title"] - IELTop_Content_Server</title>
-    <script type="importmap"></script>
+    <title>@ViewData["Title"] - IELTop Content Server</title>
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
-    <link rel="stylesheet" href="~/IELTop_Content_Server.styles.css" asp-append-version="true" />
 </head>
-<body>
-    <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container">
-                <a class="navbar-brand" asp-area="" asp-page="/Index">IELTop_Content_Server</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-page="/Index">Home</a>
+<body class="bg-body-tertiary">
+<header>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-3">
+        <div class="container-fluid">
+            <a class="navbar-brand" asp-page="/About">IELTop Content Server</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                    data-bs-target=".navbar-collapse" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="navbar-collapse collapse">
+                @if (isAdmin)
+                {
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item"><a class="nav-link" asp-page="/Index">Dashboard</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-page="/Submissions/Index">Review</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-page="/Catalog/Index">Catalog</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-page="/Papers/Index">Papers</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-page="/Audio/Index">Audio</a></li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button"
+                               data-bs-toggle="dropdown">People</a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" asp-page="/Contributors/Index">Contributors</a></li>
+                                <li><a class="dropdown-item" asp-page="/Editors/Index">Editor applications</a></li>
+                                <li><a class="dropdown-item" asp-page="/Credentials/Index">Client access</a></li>
+                            </ul>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark" asp-area="" asp-page="/Privacy">Privacy</a>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" role="button"
+                               data-bs-toggle="dropdown">System</a>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" asp-page="/Settings/Index">Settings</a></li>
+                                <li><a class="dropdown-item" asp-page="/Settings/Notifications">Email</a></li>
+                                <li><a class="dropdown-item" asp-page="/Notifications/Index">Outbox</a></li>
+                                <li><a class="dropdown-item" asp-page="/Audit/Index">Activity</a></li>
+                                <li><a class="dropdown-item" asp-page="/Health">Health</a></li>
+                            </ul>
                         </li>
                     </ul>
-                </div>
+                }
+                else if (isContributor)
+                {
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item"><a class="nav-link" asp-page="/Contrib/Dashboard">My submissions</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-page="/Contrib/Submit">Submit content</a></li>
+                        @if (ViewData["IsEditor"] as bool? ?? false)
+                        {
+                            <li class="nav-item"><a class="nav-link" asp-page="/Submissions/Index">Review queue</a></li>
+                        }
+                        <li class="nav-item"><a class="nav-link" asp-page="/Contrib/Account">Account</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-page="/About">About</a></li>
+                    </ul>
+                }
+                else
+                {
+                    <ul class="navbar-nav me-auto">
+                        <li class="nav-item"><a class="nav-link" asp-page="/About">About</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-page="/Contrib/ApplyEditor">Become an editor</a></li>
+                    </ul>
+                }
+                <ul class="navbar-nav">
+                    @if (name is not null)
+                    {
+                        <li class="nav-item"><span class="navbar-text me-3">Signed in as @name</span></li>
+                        <li class="nav-item">
+                            <form method="post" asp-page="@(isAdmin ? "/Account/Logout" : "/Contrib/SignOut")">
+                                <button type="submit" class="btn btn-outline-light btn-sm mt-1">Sign out</button>
+                            </form>
+                        </li>
+                    }
+                    else
+                    {
+                        <li class="nav-item"><a class="nav-link" asp-page="/Contrib/SignIn">Sign in</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-page="/Contrib/Register">Create account</a></li>
+                        <li class="nav-item"><a class="nav-link" asp-page="/Account/Login">Admin</a></li>
+                    }
+                </ul>
             </div>
-        </nav>
-    </header>
-    <div class="container">
-        <main role="main" class="pb-3">
-            @RenderBody()
-        </main>
-    </div>
-
-    <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2026 - IELTop_Content_Server - <a asp-area="" asp-page="/Privacy">Privacy</a>
         </div>
-    </footer>
-
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
-    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="~/js/site.js" asp-append-version="true"></script>
-
-    @await RenderSectionAsync("Scripts", required: false)
+    </nav>
+</header>
+<div class="container-fluid">
+    <main role="main" class="pb-3">
+        @if (TempData["Message"] is string message)
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                @message
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+        @if (TempData["Error"] is string error)
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                @error
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+        @RenderBody()
+    </main>
+</div>
+<footer class="border-top text-muted mt-4 py-3">
+    <div class="container-fluid">
+        <span>IELTop Content Server, protocol ieltop/1.</span>
+        <a class="ms-2" asp-page="/About">About</a>
+        <a class="ms-2" asp-page="/Legal">Content and licensing</a>
+        <a class="ms-2" asp-page="/Health">Health</a>
+    </div>
+</footer>
+<script src="~/lib/jquery/dist/jquery.min.js"></script>
+<script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+<script src="~/js/site.js" asp-append-version="true"></script>
+@await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

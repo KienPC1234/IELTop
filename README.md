@@ -113,6 +113,11 @@ The community list ships in `IELTop/servers.txt` (`Name | BaseUrl` per
 line). Users can add their own servers, which are kept on their
 computer.
 
+A full server with an admin portal and a contributor submission flow
+lives in `IELTop_Content_Server/` (ASP.NET Core, SQLite or Postgres,
+optional Redis, Cloudflare Turnstile, SMTP notifications, and an
+OpenAI compatible review step). See `IELTop_Content_Server/README.md`.
+
 Servers can be anonymous, need an access code, or need a username and
 password. Codes and passwords stay encrypted on the computer. Saved
 papers land in `%LocalAppData%/IELTop/content/Exams` with audio in

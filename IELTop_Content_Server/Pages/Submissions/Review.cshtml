@@ -1,0 +1,182 @@
+@page "{id:int}"
+@model IELTop_Content_Server.Pages.Submissions.ReviewModel
+@{
+    ViewData["Title"] = "Review " + Model.Submission.Reference;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-0">@Model.Submission.Title</h1>
+        <span class="text-muted">
+            <code>@Model.Submission.Reference</code> by @Model.Submission.AuthorName,
+            <span class="badge @Format.StatusColor(Model.Submission.Status)">
+                @Format.StatusLabel(Model.Submission.Status)
+            </span>
+        </span>
+    </div>
+    <a class="btn btn-outline-secondary" asp-page="/Submissions/Index">Back to queue</a>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.Submission.DecisionReason))
+{
+    <div class="alert alert-secondary" role="alert">
+        <strong>Decision note.</strong> @Model.Submission.DecisionReason
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-7">
+        @foreach (var file in Model.Files)
+        {
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>
+                        <code>@file.FileName</code>
+                        <span class="text-muted small">(@file.Kind)</span>
+                    </span>
+                    <span class="d-flex gap-2">
+                        <span class="badge text-bg-light border">@Format.Size(file.SizeBytes)</span>
+                        @if (file.HasBinary)
+                        {
+                            <a class="btn btn-sm btn-outline-secondary"
+                               asp-page="/Submissions/Download" asp-route-fileId="@file.Id">Download</a>
+                        }
+                    </span>
+                </div>
+                <div class="card-body">
+                    @if (file.Text.Length > 0)
+                    {
+                        <pre class="small mb-0" style="max-height:30rem;overflow:auto">@file.Text</pre>
+                    }
+                    else
+                    {
+                        <span class="text-muted">Audio clip. Download it to listen.</span>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="col-lg-5">
+        <div class="card mb-3">
+            <div class="card-header">Author and source</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Author</span><span>@Model.Submission.AuthorName</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Source</span><span class="text-truncate">@Model.Submission.Source</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>License</span><span>@Model.Submission.License</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between">
+                    <span>Submitted</span><span>@Format.When(Model.Submission.CreatedAt)</span>
+                </li>
+                <li class="list-group-item">
+                    <span class="text-muted small">Author note</span>
+                    <div>@Model.Submission.Note</div>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">Automated review</div>
+            <div class="card-body">
+                @if (Model.Submission.ReviewScore >= 0)
+                {
+                    <p class="mb-2">
+                        Score: <strong>@Model.Submission.ReviewScore</strong> / 100
+                        @if (Model.Submission.ReviewScore >= 70)
+                        {
+                            <span class="badge text-bg-success">Strong</span>
+                        }
+                        else if (Model.Submission.ReviewScore >= 40)
+                        {
+                            <span class="badge text-bg-warning">Borderline</span>
+                        }
+                        else
+                        {
+                            <span class="badge text-bg-danger">Weak</span>
+                        }
+                    </p>
+                }
+                else
+                {
+                    <p class="text-muted">No automated score. A model is not configured or review is off.</p>
+                }
+
+                @if (!string.IsNullOrEmpty(Model.Submission.ReviewSummary))
+                {
+                    <p class="mb-2">@Model.Submission.ReviewSummary</p>
+                }
+
+                @if (Model.Problems.Count > 0)
+                {
+                    <p class="mb-1 fw-semibold">Problems</p>
+                    <ul>
+                        @foreach (var p in Model.Problems)
+                        {
+                            <li>@p</li>
+                        }
+                    </ul>
+                }
+                @if (Model.Suggestions.Count > 0)
+                {
+                    <p class="mb-1 fw-semibold">Suggestions</p>
+                    <ul class="mb-0">
+                        @foreach (var s in Model.Suggestions)
+                        {
+                            <li>@s</li>
+                        }
+                    </ul>
+                }
+            </div>
+        </div>
+
+        @if (Model.Submission.Status == SubmissionStatus.Accepted)
+        {
+            <div class="alert alert-success" role="alert">
+                Published as <code>@Model.Submission.PaperId</code>.
+            </div>
+        }
+        else
+        {
+            <div class="card mb-3">
+                <div class="card-header">Accept and publish</div>
+                <div class="card-body">
+                    <form method="post" asp-page-handler="Accept">
+                        <div class="mb-2">
+                            <label class="form-label" for="extraTags">Add tags</label>
+                            <input class="form-control" id="extraTags" name="extraTags"
+                                   value="@Model.SuggestedTags"
+                                   placeholder="reading, academic, transport" />
+                            <div class="form-text">
+                                The model's tags are kept. Add or adjust here, comma separated.
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label" for="acceptNote">Note to the author</label>
+                            <input class="form-control" id="acceptNote" name="decisionNote" />
+                        </div>
+                        <button class="btn btn-success w-100" type="submit">Accept and publish</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">Reject</div>
+                <div class="card-body">
+                    <form method="post" asp-page-handler="Reject">
+                        <div class="mb-2">
+                            <label class="form-label" for="reason">Reason for the author</label>
+                            <textarea class="form-control" id="reason" name="reason" rows="3" required></textarea>
+                            <div class="form-text">The author gets this by email.</div>
+                        </div>
+                        <button class="btn btn-outline-danger w-100" type="submit">Reject submission</button>
+                    </form>
+                </div>
+            </div>
+        }
+    </div>
+</div>

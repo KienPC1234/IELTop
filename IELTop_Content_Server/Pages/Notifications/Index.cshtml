@@ -1,0 +1,61 @@
+@page
+@model IELTop_Content_Server.Pages.Notifications.IndexModel
+@{
+    ViewData["Title"] = "Outbox";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-0">Outbox</h1>
+        <span class="text-muted">
+            @Model.Pending pending, @Model.Failed failed. Delivered by the mail worker.
+        </span>
+    </div>
+    <a class="btn btn-outline-secondary" asp-page="/Settings/Notifications">Email settings</a>
+</div>
+
+@if (!Model.SmtpEnabled)
+{
+    <div class="alert alert-warning" role="alert">
+        SMTP is off. Notifications are queued but not sent. Configure it under Email settings.
+    </div>
+}
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead>
+        <tr>
+            <th>To</th>
+            <th>Subject</th>
+            <th>Status</th>
+            <th class="text-end">Tries</th>
+            <th>Created</th>
+            <th>Sent</th>
+            <th>Last error</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td>@row.ToAddress</td>
+                <td class="text-truncate" style="max-width:20rem">@row.Subject</td>
+                <td>
+                    <span class="badge @(row.Status == NotificationStatus.Sent ? "text-bg-success"
+                        : row.Status == NotificationStatus.Failed ? "text-bg-danger" : "text-bg-warning")">
+                        @row.Status
+                    </span>
+                </td>
+                <td class="text-end">@row.Attempts</td>
+                <td class="text-nowrap">@Format.When(row.CreatedAt)</td>
+                <td class="text-nowrap">@Format.When(row.SentAt)</td>
+                <td class="text-truncate" style="max-width:16rem">@row.LastError</td>
+            </tr>
+        }
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="7" class="text-muted">No notifications queued yet.</td></tr>
+        }
+        </tbody>
+    </table>
+</div>

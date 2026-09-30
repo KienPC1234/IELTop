@@ -1,0 +1,97 @@
+@page
+@model IELTop_Content_Server.Pages.Papers.ImportModel
+@{
+    ViewData["Title"] = "Import papers";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="h3 mb-0">Import papers</h1>
+    <a class="btn btn-outline-secondary" asp-page="/Papers/Index">Back to papers</a>
+</div>
+
+@if (Model.Results.Count > 0)
+{
+    <div class="card mb-3">
+        <div class="card-header">Result: @Model.Saved saved, @Model.Skipped skipped</div>
+        <ul class="list-group list-group-flush">
+            @foreach (var line in Model.Results)
+            {
+                <li class="list-group-item small">@line</li>
+            }
+        </ul>
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">Upload JSON files</div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="Upload" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <input class="form-control" type="file" name="files" accept=".json" multiple required />
+                        <div class="form-text">The paper id comes from each file name.</div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="upOverwrite"
+                               name="overwrite" value="true" />
+                        <label class="form-check-label" for="upOverwrite">Replace papers with the same id</label>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Upload</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">Paste one paper</div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="Paste">
+                    <div class="mb-3">
+                        <label class="form-label" for="pasteId">Paper id</label>
+                        <input class="form-control" id="pasteId" name="id" required
+                               pattern="[A-Za-z0-9_-]+" placeholder="sample-test-5" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="pasteJson">Paper JSON</label>
+                        <textarea class="form-control font-monospace" id="pasteJson" name="json"
+                                  rows="10" spellcheck="false" required></textarea>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="pasteOverwrite"
+                               name="overwrite" value="true" />
+                        <label class="form-check-label" for="pasteOverwrite">Replace a paper with the same id</label>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Save</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">Import from a folder on this server</div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="Folder">
+                    <div class="mb-3">
+                        <label class="form-label" for="folder">Folder path</label>
+                        <input class="form-control" id="folder" name="folder" value="@Model.SuggestedFolder" />
+                        <div class="form-text">Every .json file in the folder is read.</div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="folderOverwrite"
+                               name="overwrite" value="true" checked />
+                        <label class="form-check-label" for="folderOverwrite">Replace papers with the same id</label>
+                    </div>
+                    <button class="btn btn-primary" type="submit">Import folder</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="alert alert-info mt-3 mb-0" role="alert">
+    Imported papers are validated before they are stored. A file without a title
+    or without parts is skipped and listed above with the reason.
+</div>

@@ -1,0 +1,68 @@
+@page
+@model IELTop_Content_Server.Pages.Catalog.IndexModel
+@{
+    ViewData["Title"] = "Catalog";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-0">Catalog</h1>
+        <span class="text-muted">@Model.Total published paper(s) with author and license</span>
+    </div>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-sm-6 col-md-4">
+        <input class="form-control" type="search" name="q" value="@Model.Query"
+               placeholder="Search title, id, author, or tag" />
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        <a class="btn btn-link" asp-page="/Catalog/Index">Clear</a>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead>
+        <tr>
+            <th>Id</th>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Category</th>
+            <th>Level</th>
+            <th>Tags</th>
+            <th>License</th>
+            <th class="text-end">Parts</th>
+            <th class="text-end">Qs</th>
+            <th>Updated</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr>
+                <td><code>@row.PaperId</code></td>
+                <td>@row.Title</td>
+                <td>@row.AuthorName</td>
+                <td>@row.Category</td>
+                <td>@row.Level</td>
+                <td>
+                    @foreach (var tag in Model.TagsOf(row))
+                    {
+                        <span class="badge text-bg-secondary me-1">@tag</span>
+                    }
+                </td>
+                <td class="text-truncate" style="max-width:10rem">@row.License</td>
+                <td class="text-end">@row.PartCount</td>
+                <td class="text-end">@row.QuestionCount</td>
+                <td class="text-nowrap">@Format.Day(row.UpdatedAt)</td>
+            </tr>
+        }
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="10" class="text-muted">No catalog papers yet.</td></tr>
+        }
+        </tbody>
+    </table>
+</div>

@@ -1,0 +1,85 @@
+@page
+@model IELTop_Content_Server.Pages.Contributors.IndexModel
+@{
+    ViewData["Title"] = "Contributors";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-0">Contributors</h1>
+        <span class="text-muted">@Model.Rows.Count account(s)</span>
+    </div>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+    <div class="col-sm-6 col-md-4">
+        <input class="form-control" type="search" name="q" value="@Model.Query"
+               placeholder="Search email or name" />
+    </div>
+    <div class="col-auto">
+        <button class="btn btn-outline-secondary" type="submit">Search</button>
+        <a class="btn btn-link" asp-page="/Contributors/Index">Clear</a>
+    </div>
+</form>
+
+<div class="table-responsive">
+    <table class="table table-striped align-middle">
+        <thead>
+        <tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>State</th>
+            <th class="text-end">Submissions</th>
+            <th>Joined</th>
+            <th>Last sign in</th>
+            <th class="text-end">Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        @foreach (var row in Model.Rows)
+        {
+            <tr class="@(row.IsBlocked ? "table-danger" : null)">
+                <td>@row.Email</td>
+                <td>@row.DisplayName</td>
+                <td>
+                    @if (row.IsBlocked)
+                    {
+                        <span class="badge text-bg-danger">Blocked</span>
+                    }
+                    else if (row.IsActive)
+                    {
+                        <span class="badge text-bg-success">Active</span>
+                    }
+                    else
+                    {
+                        <span class="badge text-bg-secondary">Inactive</span>
+                    }
+                </td>
+                <td class="text-end">@Model.CountFor(row.Id)</td>
+                <td class="text-nowrap">@Format.When(row.CreatedAt)</td>
+                <td class="text-nowrap">@Format.When(row.LastLoginAt)</td>
+                <td class="text-end text-nowrap">
+                    <a class="btn btn-sm btn-outline-secondary"
+                       asp-page="/Submissions/Index" asp-route-q="@row.Email">Submissions</a>
+                    <form method="post" asp-page-handler="ToggleActive" class="d-inline">
+                        <input type="hidden" name="id" value="@row.Id" />
+                        <button class="btn btn-sm btn-outline-secondary" type="submit">
+                            @(row.IsActive ? "Deactivate" : "Activate")
+                        </button>
+                    </form>
+                    <form method="post" asp-page-handler="ToggleBlock" class="d-inline">
+                        <input type="hidden" name="id" value="@row.Id" />
+                        <button class="btn btn-sm btn-outline-danger" type="submit">
+                            @(row.IsBlocked ? "Unblock" : "Block")
+                        </button>
+                    </form>
+                </td>
+            </tr>
+        }
+        @if (Model.Rows.Count == 0)
+        {
+            <tr><td colspan="7" class="text-muted">No contributors yet.</td></tr>
+        }
+        </tbody>
+    </table>
+</div>
