@@ -1,6 +1,18 @@
 # IELTop
 
-A mock test only IELTS app for Windows. Built with WPF and .NET 10.
+A mock test only IELTS app. Built with .NET 10.
+
+One core, one cross platform client:
+
+- `IELTop.Desktop` is the app. A native Photino window hosts a React web UI,
+  and the web UI calls the offline services over a small local bridge. No
+  Electron, no Node at run time, nothing online. It runs on Windows, macOS,
+  and Linux.
+- `IELTop.Core` holds everything shared: models, SQLite, exam storage, AI,
+  scoring, and the exam engine. The web UI draws; Core does the work, so the
+  ONNX models and the banding logic are written once.
+- `Content` holds the shared read only content: exam papers, audio, images,
+  and the optional model files.
 
 There are no practice sections. You sit a full test or one skill
 (Reading, Writing, or Speaking), get a band range, and get detailed AI
@@ -28,9 +40,8 @@ Bands are estimates for practice only. They are not official IELTS scores.
 
 - Listening: 4 parts in a full test. The clip plays once and never
   replays, like the real test. If a paper ships no audio file, the
-  built-in Windows voice reads the transcript, so a part never stays
-  silent. Review lists wrong questions only, with no answers and no AI
-  feedback.
+  transcript is shown to read instead of a fake voice. Review lists wrong
+  questions only, with no answers and no AI feedback.
 - Reading: passages with a split screen. Can run alone or in a full
   test. Review shows every answer with an explanation, and AI explains
   wrong answers when a model is set.
@@ -43,52 +54,58 @@ Bands are estimates for practice only. They are not official IELTS scores.
 
 ## Requirements
 
-- Windows 10 or 11
 - .NET 10 desktop runtime
+- WebView2 runtime on Windows (already present on Windows 10 and 11),
+  WebKitGTK on Linux, WKWebView on macOS
+- Node.js 20.19 or newer to build the web UI
 - A microphone for the Speaking section
 - Speakers or headphones for the Listening section
 
 ## Build
 
+`dotnet build` builds the web UI first, then the host, so one command brings
+everything up to date:
+
 ```powershell
-cd IELTop
-dotnet build --nologo
+cd IELTop.Desktop
+dotnet build
 dotnet run
 ```
 
+For a live UI while editing, run the Vite dev server in one terminal and point
+the host at it. See `IELTop.Desktop/README.md` if one is present.
+
+The web UI is a static bundle of about 280 KB. The desktop app serves it from a
+loopback port inside the host process, so no server is installed and nothing
+leaves the machine.
+
 ## Package and release
 
-The app uses [Velopack](https://velopack.io) for the installer and self
-updates. One command publishes the app, builds the installer, and writes the
-update files:
+Publishes the app and zips it for a GitHub Release:
 
 ```powershell
-dotnet tool install -g vpk
 pwsh tools/pack-release.ps1 -Version 1.0.1
+pwsh tools/pack-release.ps1 -Version 1.0.1 -Runtime linux-x64
 ```
 
-Output lands in `releases/`: `IELTop-win-Setup.exe` for a fresh install,
-`IELTop-win-Portable.zip` for a no-install run, and the `*.nupkg` plus
-`RELEASES` files that the app downloads to update itself.
+Output lands in `releases/` as `IELTop-<version>-<runtime>.zip`. Attach it to a
+GitHub Release tagged `v<version>`; the app checks GitHub Releases for a newer
+version and opens the release page to install, which works the same on every OS.
 
-Upload the whole `releases` folder to a static host or a GitHub Releases page,
-then paste that URL into Settings under Updates. Leave the feed empty to keep
-auto update off. The app checks quietly on startup only when the setting is on,
-and it never blocks the first screen.
-
-The logo and icon come from `tools/make-icon.mjs`, a single Node script with no
-dependencies:
+The logo and icon come from `tools/make-icon/make_icon.py`, a Python script
+that reads `Content/Assets/Images/IELTop-rounded.png`:
 
 ```powershell
-node tools/make-icon.mjs
+conda env create -f tools/make-icon/environment.yml
+conda run -n ieltop-icon python tools/make-icon/make_icon.py
 ```
 
 It writes `app.ico`, `logo-256.png`, and `logo-64.png` into
-`IELTop/Assets/Images`. `app.ico` is wired into the build and used by the
+`Content/Assets/Images`. `app.ico` is wired into the build and used by the
 installer.
 
 ## Test papers and models
-Mock papers are plain JSON in `IELTop/Assets/Exams/`. Each part has a
+Mock papers are plain JSON in `Content/Assets/Exams/`. Each part has a
 skill, minutes, material, and questions. Listening parts read their
 `material` aloud when no `audioFile` is shipped. Reading questions can
 carry an `explanation` shown in review. Papers carry a category, a
@@ -109,7 +126,7 @@ asks the language model to rate one paper when it is configured.
 
 The Servers page downloads mock test papers from IELTop content
 servers (protocol `ieltop/1`), community or private, over plain HTTP.
-The community list ships in `IELTop/servers.txt` (`Name | BaseUrl` per
+The community list ships in `Content/servers.txt` (`Name | BaseUrl` per
 line). Users can add their own servers, which are kept on their
 computer.
 
@@ -137,16 +154,16 @@ Run the reference server (stdlib Python only, see
 
 ```powershell
 cd tools/content-server
-python server.py --papers ../../IELTop/Assets/Exams --port 8765
+python server.py --papers ../../Content/Assets/Exams --port 8765
 python server.py --papers ./papers --audio ./audio --code SECRET
 python server.py --papers ./papers --user teacher --password SECRET
 ```
 
-Offline models go in `IELTop/Assets/Models`. The list of models the app
-uses, with source and license, is in `IELTop/Assets/Models/README.md`.
+Offline models go in `Content/Assets/Models`. The list of models the app
+uses, with source and license, is in `Content/Assets/Models/README.md`.
 Missing files are fine. Objective parts still score offline, speaking
-answers fall back to a typed transcript, Writing falls back to AI
-marking alone, and the Windows voice reads aloud.
+answers fall back to a typed transcript, and Writing falls back to AI
+marking alone.
 
 ## Language model (optional)
 
@@ -188,23 +205,23 @@ python export_onnx.py
 Copy the `*-int8.onnx` files plus their companions
 (`mdd-labels.json`, `stt-whisper-tiny-en-vocab.json`,
 `gec-t5-spiece.model`, `tts-piper-lessac-medium.onnx.json` and the
-`espeak-ng/` folder) into `IELTop/Assets/Models/`. The full steps are in
-each tool folder README and in `IELTop/Assets/Models/README.md`.
+`espeak-ng/` folder) into `Content/Assets/Models/`. The full steps are in
+each tool folder README and in `Content/Assets/Models/README.md`.
 
 ## Project layout
 
 ```
-IELTop/
-  Assets/        exam papers, audio, and models
-  Data/          local database
-  Models/        data types
-  Services/      AI, audio, storage
-  ViewModels/    screen logic
-  Views, MainWindow.xaml
-tools/           Python helpers, each with its own conda environment
+IELTop.Core/       shared library: models, data, services, exam engine
+IELTop.Desktop/    the app: Photino host, JSON bridge, React web UI
+  Bridge/          method router between the web UI and C#
+  UserInterface/   React + Vite source
+  wwwroot/         built UI, written by npm build, not committed
+Content/           shared read only content: exams, audio, images, models
+IELTop_Content_Server/  optional ASP.NET content server with an admin portal
+tools/             Python helpers, each with its own conda environment
 ```
 
 ## License
 
 See the repository license. Model files keep their own licenses, listed in
-`IELTop/Assets/Models/README.md`.
+`Content/Assets/Models/README.md`.

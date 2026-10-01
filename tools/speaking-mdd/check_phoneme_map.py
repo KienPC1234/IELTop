@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 labels_path = Path("models/mdd-labels.json")
-map_path = Path("../../IELTop/Assets/Models/phoneme-map.json")
+map_path = Path("../../Content/Assets/Models/phoneme-map.json")
 
 labels = json.loads(labels_path.read_text(encoding="utf-8"))
 special = {"<pad>", "<unk>", "<s>", "</s>", "|"}

@@ -52,7 +52,7 @@ Trong `./models` sẽ có:
 | `mdd-labels.json` | bảng nhãn khớp đúng model, app đọc để giải mã |
 | `mdd-labels.txt` | danh sách nhãn dùng được, để đối chiếu với `phoneme-map.json` |
 
-Chép 2 file đầu tiên vào `IELTop/Assets/Models/`, mở app, vào mục Luyện nói.
+Chép 2 file đầu tiên vào `Content/Assets/Models/`, mở app, vào mục Luyện nói.
 Chưa có model thì app vẫn chạy và báo thiếu file rõ ràng, không crash.
 
 ## Mức tài nguyên trên CPU phổ thông
@@ -68,3 +68,23 @@ Phía C#, `session.Run` chạy trong `Task.Run` nên giao diện không bị đ�
 Lưu ý kỹ thuật: onnxruntime không lượng tử hóa được lớp Conv trong
 `pos_conv_embed` của wav2vec2, nên script chỉ lượng tử hóa `MatMul` và `Gemm`.
 Phần này chiếm gần hết trọng số và vẫn cho kết quả giải mã trùng khớp với bản FP32.
+
+
+
+## Full G2P dictionary (phoneme-map.json)
+
+The committed `phoneme-map.json` is generated from CMUdict (BSD-2-Clause):
+
+```powershell
+python build_phoneme_map.py
+```
+
+The script downloads CMUdict into a cached `cmudict.dict` (gitignored), maps
+ARPABET to the exact IPA symbols the model emits, and checks the result against
+the previous map. It writes about 125,000 words, which covers everyday words
+such as "library" and "weekdays", so pronunciation scores are meaningful.
+Before this script the map held only 303 words, so most words were skipped and
+every score came out wrong.
+
+After generating the map, run `python check_phoneme_map.py` to confirm every
+symbol in the map exists in the model labels.

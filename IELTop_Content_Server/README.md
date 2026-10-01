@@ -34,7 +34,7 @@ Change the admin password before you put this anywhere public. The seed
 admin is created once, the first time the user table is empty.
 
 On first start the server creates `App_Data/`, the database, an admin
-user, and imports the sample papers from `../IELTop/Assets/Exams`.
+user, and imports the sample papers from `../Content/Assets/Exams`.
 
 ## The protocol
 

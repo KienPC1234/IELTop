@@ -19,8 +19,8 @@ Script tu doc bo tu vung tu tokenizer nen app C# van giai ma dung
 ma khong can sua code. Doi checkpoint khac bang --model neu can.
 
 Ket qua trong ./models:
-    mdd-wav2vec2-base-int8.onnx  (chep vao IELTop/Assets/Models/)
-    mdd-labels.json              (chep vao IELTop/Assets/Models/)
+    mdd-wav2vec2-base-int8.onnx  (chep vao Content/Assets/Models/)
+    mdd-labels.json              (chep vao Content/Assets/Models/)
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ def main() -> None:
     final_mb = final_path.stat().st_size / 1e6
     print(f"Xong: FP32 {fp32_mb:.0f}MB -> INT8 {final_mb:.0f}MB.", flush=True)
     print("Chep 2 file mdd-wav2vec2-base-int8.onnx va mdd-labels.json "
-          "vao IELTop/Assets/Models/ de app nhan model.", flush=True)
+          "vao Content/Assets/Models/ de app nhan model.", flush=True)
 
 
 if __name__ == "__main__":

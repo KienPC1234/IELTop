@@ -6,7 +6,7 @@ Runs once on a dev machine, not in the app:
     python export_onnx.py
 
 Copies gec-t5-small-encoder-int8.onnx, gec-t5-small-decoder-int8.onnx,
-and gec-t5-spiece.model into IELTop/Assets/Models/.
+and gec-t5-spiece.model into Content/Assets/Models/.
 """
 
 import urllib.request
@@ -52,7 +52,7 @@ def main() -> None:
         quantize(src, OUT / dst_name)
         print(f"wrote {dst_name}")
     fetch_spiece()
-    print("Copy the *-int8.onnx and gec-t5-spiece.model files into IELTop/Assets/Models/.")
+    print("Copy the *-int8.onnx and gec-t5-spiece.model files into Content/Assets/Models/.")
 
 
 if __name__ == "__main__":
