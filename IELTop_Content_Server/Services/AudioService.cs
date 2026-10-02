@@ -16,6 +16,7 @@ public interface IAudioService
 {
     string Root { get; }
     string? ResolveExisting(string fileName);
+    Task<string?> EnsureLocalAsync(string fileName, CancellationToken ct = default);
     string ContentTypeFor(string fileName);
     Task<List<AudioAsset>> ListAsync(CancellationToken ct = default);
     Task<(bool Ok, string Error)> ImportFileAsync(string sourcePath, bool overwrite, CancellationToken ct = default);
@@ -30,6 +31,7 @@ public sealed class AudioService(
     IDbContextFactory<AppDbContext> dbFactory,
     IWriteThrottle throttle,
     IOptions<StorageOptions> storage,
+    IS3StorageService s3,
     ILogger<AudioService> logger) : IAudioService
 {
     private static readonly Dictionary<string, string> Types = new(StringComparer.OrdinalIgnoreCase)
@@ -66,6 +68,26 @@ public sealed class AudioService(
         if (!IsInside(root, full))
             return null;
         return File.Exists(full) ? full : null;
+    }
+
+    public async Task<string?> EnsureLocalAsync(string fileName, CancellationToken ct = default)
+    {
+        string? existing = ResolveExisting(fileName);
+        if (existing is not null)
+            return existing;
+
+        if (!s3.Enabled)
+            return null;
+
+        string safe = SafeFileName(fileName);
+        if (safe.Length == 0)
+            return null;
+
+        Directory.CreateDirectory(Root);
+        string localPath = Path.Combine(Root, safe);
+
+        bool downloaded = await s3.DownloadToFileAsync($"audio/{safe}", localPath, ct);
+        return downloaded && File.Exists(localPath) ? localPath : null;
     }
 
     private static bool IsInside(string root, string full)
@@ -163,8 +185,7 @@ public sealed class AudioService(
                 hash = Convert.ToHexString(sha.Hash ?? Array.Empty<byte>()).ToLowerInvariant();
             }
 
-            // Cap by a real size check rather than in memory, uploads
-            // may be large.
+            // Cap by a real size check rather than in memory, uploads may be large.
             length = new FileInfo(temp).Length;
             long cap = Math.Max(1, _storage.MaxUploadMb) * 1024L * 1024L;
             if (length > cap)
@@ -173,12 +194,59 @@ public sealed class AudioService(
                 return (false, $"The file is larger than {_storage.MaxUploadMb} MB.");
             }
 
-            File.Move(temp, target, overwrite: true);
+            // Automatically standardize non-m4a/opus files to .m4a with AAC and faststart
+            string ext = Path.GetExtension(safe);
+            if (!StandardFormats.Contains(ext))
+            {
+                string standardizedSafe = Path.GetFileNameWithoutExtension(safe) + ".m4a";
+                string transcodeTemp = Path.Combine(Root, standardizedSafe + ".tmp.m4a");
+                var (transcodeOk, transcodePath, transcodeErr) = await TranscodeToM4aAsync(temp, transcodeTemp, ct);
+
+                if (transcodeOk && File.Exists(transcodePath))
+                {
+                    File.Delete(temp);
+                    safe = standardizedSafe;
+                    target = Path.Combine(Root, safe);
+                    File.Move(transcodePath, target, overwrite: true);
+
+                    // Recalculate hash and size for the standardized file
+                    var (recomputedHash, recomputedLength) = await ComputeFileHashAndLengthAsync(target, ct);
+                    hash = recomputedHash;
+                    length = recomputedLength;
+                    logger.LogInformation("Audio {Original} standardized to m4a format ({Size} bytes)", fileName, length);
+                }
+                else
+                {
+                    logger.LogWarning("Audio standardization failed ({Error}), keeping original format", transcodeErr);
+                    File.Move(temp, target, overwrite: true);
+                }
+            }
+            else
+            {
+                File.Move(temp, target, overwrite: true);
+            }
         }
         catch (IOException)
         {
             if (File.Exists(temp)) File.Delete(temp);
             return (false, "The file could not be saved.");
+        }
+
+        if (s3.Enabled)
+        {
+            try
+            {
+                await using var s3Stream = File.OpenRead(target);
+                var (s3Ok, s3Err) = await s3.UploadAsync($"audio/{safe}", s3Stream, ContentTypeFor(safe), ct);
+                if (!s3Ok)
+                    logger.LogWarning("Failed to upload audio {File} to S3: {Error}", safe, s3Err);
+                else
+                    logger.LogInformation("Audio {File} synchronized to S3 storage", safe);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to sync audio {File} to S3", safe);
+            }
         }
 
         if (row is null)
@@ -187,12 +255,76 @@ public sealed class AudioService(
             db.Audio.Add(row);
         }
         row.ContentType = ContentTypeFor(safe);
+        row.Format = Path.GetExtension(safe).TrimStart('.').ToLowerInvariant();
+        row.IsStandardized = StandardFormats.Contains(Path.GetExtension(safe));
+        row.S3Url = s3.Enabled ? s3.GetPublicUrl($"audio/{safe}") : string.Empty;
         row.SizeBytes = length;
         row.Sha256 = hash;
         row.UploadedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(ct);
         return (true, string.Empty);
+    }
+
+    private static readonly HashSet<string> StandardFormats = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".m4a", ".opus"
+    };
+
+    private static string FindFfmpegPath()
+    {
+        string? env = Environment.GetEnvironmentVariable("FFMPEG_PATH");
+        if (!string.IsNullOrWhiteSpace(env) && File.Exists(env))
+            return env;
+        if (File.Exists("/home/linuxbrew/.linuxbrew/bin/ffmpeg"))
+            return "/home/linuxbrew/.linuxbrew/bin/ffmpeg";
+        return "ffmpeg";
+    }
+
+    private async Task<(bool Ok, string Path, string Error)> TranscodeToM4aAsync(string sourcePath, string destPath, CancellationToken ct)
+    {
+        string ffmpeg = FindFfmpegPath();
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = ffmpeg,
+                Arguments = $"-i \"{sourcePath}\" -vn -c:a aac -b:a 128k -f ipod -movflags +faststart \"{destPath}\" -y",
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc is null)
+                return (false, string.Empty, "Could not start ffmpeg process.");
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(TimeSpan.FromMinutes(3));
+
+            await proc.WaitForExitAsync(timeoutCts.Token);
+            if (proc.ExitCode == 0 && File.Exists(destPath) && new FileInfo(destPath).Length > 0)
+            {
+                return (true, destPath, string.Empty);
+            }
+
+            string err = await proc.StandardError.ReadToEndAsync(ct);
+            return (false, string.Empty, $"Transcoding failed: {err}");
+        }
+        catch (Exception ex)
+        {
+            return (false, string.Empty, $"Transcoding error: {ex.Message}");
+        }
+    }
+
+    private static async Task<(string Hash, long Length)> ComputeFileHashAndLengthAsync(string path, CancellationToken ct)
+    {
+        using var sha = SHA256.Create();
+        await using var stream = File.OpenRead(path);
+        byte[] hashBytes = await sha.ComputeHashAsync(stream, ct);
+        long length = new FileInfo(path).Length;
+        return (Convert.ToHexString(hashBytes).ToLowerInvariant(), length);
     }
 
     public async Task<bool> DeleteAsync(string fileName, CancellationToken ct = default)
@@ -208,6 +340,18 @@ public sealed class AudioService(
 
         db.Audio.Remove(row);
         await db.SaveChangesAsync(ct);
+
+        if (s3.Enabled)
+        {
+            try
+            {
+                await s3.DeleteAsync($"audio/{safe}", ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to delete audio {File} from S3", safe);
+            }
+        }
 
         string? full = ResolveExisting(safe);
         if (full is not null)

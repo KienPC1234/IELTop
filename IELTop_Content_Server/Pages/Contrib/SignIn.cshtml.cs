@@ -16,7 +16,7 @@ public sealed class SignInModel(
     IContributorService contributors,
     ICaptchaService captcha,
     IAuditService audit,
-    IOptions<CaptchaOptions> captchaOptions,
+    IIpAbuseGuard abuseGuard,
     ILogger<SignInModel> logger) : PageModel
 {
     public string Email { get; private set; } = string.Empty;
@@ -24,16 +24,26 @@ public sealed class SignInModel(
 
     public void OnGet()
     {
-        ViewData["CaptchaEnabled"] = captchaOptions.Value.Enabled;
-        ViewData["CaptchaSiteKey"] = captchaOptions.Value.SiteKey;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
     }
 
     public async Task<IActionResult> OnPostAsync(
-        string email, string password, string? cfTurnstileResponse, CancellationToken ct)
+        string email,
+        string password,
+        [FromForm(Name = "cf-turnstile-response")] string? cfTurnstileResponse,
+        CancellationToken ct)
     {
         Email = email ?? string.Empty;
-        ViewData["CaptchaEnabled"] = captchaOptions.Value.Enabled;
-        ViewData["CaptchaSiteKey"] = captchaOptions.Value.SiteKey;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
+
+        if (!string.IsNullOrEmpty(Request.Form["hp_website"]))
+        {
+            await abuseGuard.RecordHoneypotTriggerAsync(Ip, "Contributor Sign In", ct);
+            Error = "Suspicious activity detected. Please try again.";
+            return Page();
+        }
 
         if (!await captcha.VerifyAsync(cfTurnstileResponse, Ip, ct))
         {
@@ -42,13 +52,13 @@ public sealed class SignInModel(
         }
 
         var (ok, error, user) = await contributors.SignInAsync(
-            email ?? string.Empty, password ?? string.Empty, ct);
+            email ?? string.Empty, password ?? string.Empty, Ip, ct);
         if (!ok || user is null)
         {
             Error = error;
             await audit.WriteAsync(email ?? "unknown", "contributor.login.failed",
                 email ?? string.Empty, error, Ip, ct);
-            logger.LogWarning("Failed contributor sign in from {Ip}", Ip);
+            logger.LogWarning("Failed contributor sign in for {Email} from {Ip}: {Reason}", email, Ip, error);
             return Page();
         }
 
@@ -69,5 +79,5 @@ public sealed class SignInModel(
         await HttpContext.SignInAsync("contrib", new ClaimsPrincipal(identity));
     }
 
-    private string Ip => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    private string Ip => HttpContext.GetClientIp();
 }

@@ -17,7 +17,7 @@ public sealed class RegisterModel(
     IContributorService contributors,
     ICaptchaService captcha,
     INotificationService notify,
-    IOptions<CaptchaOptions> captchaOptions,
+    IIpAbuseGuard abuseGuard,
     ILogger<RegisterModel> logger) : PageModel
 {
     public string Email { get; private set; } = string.Empty;
@@ -26,17 +26,28 @@ public sealed class RegisterModel(
 
     public void OnGet()
     {
-        ViewData["CaptchaEnabled"] = captchaOptions.Value.Enabled;
-        ViewData["CaptchaSiteKey"] = captchaOptions.Value.SiteKey;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
     }
 
     public async Task<IActionResult> OnPostAsync(
-        string email, string displayName, string password, string? cfTurnstileResponse, CancellationToken ct)
+        string email,
+        string displayName,
+        string password,
+        [FromForm(Name = "cf-turnstile-response")] string? cfTurnstileResponse,
+        CancellationToken ct)
     {
         Email = email ?? string.Empty;
         DisplayName = displayName ?? string.Empty;
-        ViewData["CaptchaEnabled"] = captchaOptions.Value.Enabled;
-        ViewData["CaptchaSiteKey"] = captchaOptions.Value.SiteKey;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
+
+        if (!string.IsNullOrEmpty(Request.Form["hp_website"]))
+        {
+            await abuseGuard.RecordHoneypotTriggerAsync(Ip, "Contributor Registration", ct);
+            Error = "Suspicious activity detected. Please try again.";
+            return Page();
+        }
 
         if (!await captcha.VerifyAsync(cfTurnstileResponse, Ip, ct))
         {
@@ -80,5 +91,5 @@ public sealed class RegisterModel(
         await HttpContext.SignInAsync("contrib", new ClaimsPrincipal(identity));
     }
 
-    private string Ip => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    private string Ip => HttpContext.GetClientIp();
 }

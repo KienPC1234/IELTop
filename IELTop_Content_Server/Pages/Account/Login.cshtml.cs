@@ -13,6 +13,8 @@ namespace IELTop_Content_Server.Pages.Account;
 public sealed class LoginModel(
     IAdminAuthService admins,
     IAuditService audit,
+    ICaptchaService captcha,
+    IIpAbuseGuard abuseGuard,
     ILogger<LoginModel> logger) : PageModel
 {
     private const string Scheme = "admin";
@@ -26,21 +28,45 @@ public sealed class LoginModel(
     public void OnGet()
     {
         Username = string.Empty;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
     }
 
-    public async Task<IActionResult> OnPostAsync(string username, string password, string? returnUrl, CancellationToken ct)
+    public async Task<IActionResult> OnPostAsync(
+        string username,
+        string password,
+        string? returnUrl,
+        [FromForm(Name = "cf-turnstile-response")] string? cfTurnstileResponse,
+        CancellationToken ct)
     {
         Username = username ?? string.Empty;
         ReturnUrl = returnUrl;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
 
-        string ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-        bool ok = await admins.ValidateAsync(username ?? string.Empty, password ?? string.Empty, ct);
+        string ip = HttpContext.GetClientIp();
+
+        if (!string.IsNullOrEmpty(Request.Form["hp_website"]))
+        {
+            await abuseGuard.RecordHoneypotTriggerAsync(ip, "Admin Sign In", ct);
+            Error = "Suspicious activity detected. Please try again.";
+            return Page();
+        }
+
+        if (!await captcha.VerifyAsync(cfTurnstileResponse, ip, ct))
+        {
+            Error = "The security check failed. Please try again.";
+            return Page();
+        }
+
+        var (ok, authError) = await admins.ValidateWithLockoutAsync(
+            username ?? string.Empty, password ?? string.Empty, ip, ct);
         if (!ok)
         {
-            Error = "Wrong username or password.";
+            Error = authError;
             await audit.WriteAsync(username ?? "unknown", "admin.login.failed", username ?? string.Empty,
-                string.Empty, ip, ct);
-            logger.LogWarning("Failed admin sign in for {User} from {Ip}", username, ip);
+                authError, ip, ct);
+            logger.LogWarning("Failed admin sign in for {User} from {Ip}: {Reason}", username, ip, authError);
             return Page();
         }
 

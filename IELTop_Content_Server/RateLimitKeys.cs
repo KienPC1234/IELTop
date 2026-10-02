@@ -52,7 +52,7 @@ public static class RateLimitKeys
     }
 
     public static string Address(HttpContext context) =>
-        "ip:" + (context.Connection.RemoteIpAddress?.ToString() ?? "unknown");
+        "ip:" + context.GetClientIp();
 
     /// <summary>
     /// Called after a credential is accepted, so the next request from it

@@ -12,13 +12,14 @@ html {
   box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
 }
 
-html {
-  position: relative;
+html, body {
   min-height: 100%;
 }
 
 body {
-  margin-bottom: 60px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
@@ -28,4 +29,118 @@ body {
 
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
   text-align: start;
+}
+
+/* Markdown Custom Page Styling */
+.markdown-content {
+  line-height: 1.75;
+  color: var(--bs-body-color);
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3,
+.markdown-content h4 {
+  font-weight: 700;
+  margin-top: 1.8rem;
+  margin-bottom: 0.8rem;
+  color: var(--bs-heading-color);
+}
+
+.markdown-content h1 {
+  font-size: 2.2rem;
+  border-bottom: 2px solid var(--bs-border-color);
+  padding-bottom: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.markdown-content h2 {
+  font-size: 1.6rem;
+  border-bottom: 1px solid var(--bs-border-color);
+  padding-bottom: 0.4rem;
+}
+
+.markdown-content h3 {
+  font-size: 1.25rem;
+}
+
+.markdown-content hr {
+  margin: 2.5rem 0;
+  opacity: 0.2;
+}
+
+.markdown-content table {
+  width: 100%;
+  margin: 1.5rem 0;
+}
+
+.markdown-content th {
+  background-color: var(--bs-tertiary-bg);
+}
+
+.markdown-content blockquote {
+  padding: 0.75rem 1.25rem;
+  margin: 1.5rem 0;
+  border-left: 4px solid var(--bs-primary);
+  background-color: var(--bs-tertiary-bg);
+  border-radius: 0 0.375rem 0.375rem 0;
+}
+
+.markdown-content code:not([class*="language-"]) {
+  padding: 0.2rem 0.4rem;
+  font-size: 87.5%;
+  color: var(--bs-primary);
+  background-color: var(--bs-tertiary-bg);
+  border-radius: 0.25rem;
+}
+
+.markdown-content pre {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background-color: var(--bs-tertiary-bg);
+  border: 1px solid var(--bs-border-color);
+}
+
+/* Card hover elevation */
+.card {
+  transition: transform 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.card-hover:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Icon badge box */
+.icon-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 0.75rem;
+  font-size: 1.4rem;
+}
+
+/* Smooth scrolling and font rendering */
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Nicer table borders */
+.table > :not(caption) > * > * {
+  padding: 0.65rem 0.75rem;
+}
+
+/* Navbar brand emphasis */
+.navbar-brand {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Readable body line-height */
+p, li {
+  line-height: 1.7;
 }

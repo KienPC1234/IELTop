@@ -19,6 +19,7 @@ builder.Services.Configure<ServerOptions>(builder.Configuration.GetSection(Serve
 builder.Services.Configure<DatabaseOptions>(builder.Configuration.GetSection(DatabaseOptions.Section));
 builder.Services.Configure<CacheOptions>(builder.Configuration.GetSection(CacheOptions.Section));
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection(StorageOptions.Section));
+builder.Services.Configure<S3Options>(builder.Configuration.GetSection(S3Options.Section));
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.Section));
 builder.Services.Configure<CaptchaOptions>(builder.Configuration.GetSection(CaptchaOptions.Section));
 builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.Section));
@@ -102,9 +103,17 @@ var cache = builder.Configuration
 if (string.Equals(cache.Provider, "Redis", StringComparison.OrdinalIgnoreCase)
     || string.Equals(cache.Provider, "RedisDistributed", StringComparison.OrdinalIgnoreCase))
 {
+    var redisOptions = StackExchange.Redis.ConfigurationOptions.Parse(
+        string.IsNullOrWhiteSpace(cache.RedisConnection) ? "localhost:6379" : cache.RedisConnection);
+    redisOptions.AbortOnConnectFail = false;
+    redisOptions.ConnectTimeout = 3000;
+    redisOptions.SyncTimeout = 3000;
+    var redisMultiplexer = StackExchange.Redis.ConnectionMultiplexer.Connect(redisOptions);
+    builder.Services.AddSingleton<StackExchange.Redis.IConnectionMultiplexer>(redisMultiplexer);
+
     builder.Services.AddStackExchangeRedisCache(options =>
     {
-        options.Configuration = cache.RedisConnection;
+        options.ConnectionMultiplexerFactory = () => Task.FromResult<StackExchange.Redis.IConnectionMultiplexer>(redisMultiplexer);
         options.InstanceName = "ieltop:";
     });
 }
@@ -114,6 +123,7 @@ else
 }
 
 builder.Services.AddMemoryCache();
+builder.Services.AddHealthChecks();
 builder.Services.AddSingleton<IWriteThrottle, WriteThrottle>();
 builder.Services.AddHttpClient("turnstile")
     .ConfigureHttpClient(c => c.Timeout = TimeSpan.FromSeconds(10));
@@ -124,10 +134,18 @@ builder.Services.AddSingleton<IContentCache, ContentCache>();
 builder.Services.AddSingleton<ITokenService, TokenService>();
 builder.Services.AddSingleton<IStatsService, StatsService>();
 builder.Services.AddSingleton<IPaperService, PaperService>();
+builder.Services.AddSingleton<IS3StorageService, S3StorageService>();
 builder.Services.AddSingleton<IAudioService, AudioService>();
 builder.Services.AddSingleton<ICaptchaService, CaptchaService>();
 builder.Services.AddSingleton<ILlmReviewService, LlmReviewService>();
+builder.Services.AddSingleton<IExamProtectionService, OpenSourceExamProtectionService>();
+builder.Services.AddSingleton<ICustomClientService, DefaultCustomClientService>();
+CenterModuleLoader.ConfigureCenterServices(builder.Services);
 builder.Services.AddSingleton<INotificationService, NotificationService>();
+builder.Services.AddSingleton<IEmailCheckService, EmailCheckService>();
+builder.Services.AddSingleton<IAccountLockoutService, AccountLockoutService>();
+builder.Services.AddSingleton<ICustomPageService, CustomPageService>();
+builder.Services.AddScoped<IIpAbuseGuard, IpAbuseGuard>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddScoped<IProtocolService, ProtocolService>();
@@ -198,7 +216,6 @@ builder.Services.AddScoped<
 builder.Services.AddRazorPages(options =>
 {
     // Admin area: every page under these folders needs an admin.
-    options.Conventions.AuthorizePage("/Index", "Admin");
     options.Conventions.AuthorizeFolder("/Papers", "Admin");
     options.Conventions.AuthorizeFolder("/Audio", "Admin");
     options.Conventions.AuthorizeFolder("/Credentials", "Admin");
@@ -209,6 +226,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AuthorizeFolder("/Contributors", "Admin");
     options.Conventions.AuthorizeFolder("/Catalog", "Admin");
     options.Conventions.AuthorizeFolder("/Notifications", "Admin");
+    options.Conventions.AuthorizeFolder("/Security", "Admin");
 
     // Contributor area: signed in contributors only, with the public
     // pages in the same folder opened back up.
@@ -218,6 +236,7 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AllowAnonymousToPage("/Contrib/ApplyEditor");
 
     options.Conventions.AllowAnonymousToPage("/About");
+    options.Conventions.AllowAnonymousToPage("/P");
     options.Conventions.AllowAnonymousToPage("/Error");
     options.Conventions.AllowAnonymousToPage("/Health");
     options.Conventions.AllowAnonymousToPage("/Legal");
@@ -295,7 +314,7 @@ if (serverOptions.TrustProxy)
     {
         options.ForwardedHeaders =
             ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-        options.KnownNetworks.Clear();
+        options.KnownIPNetworks.Clear();
         options.KnownProxies.Clear();
         options.ForwardLimit = 2;
     });
@@ -332,20 +351,35 @@ app.Use(async (context, next) =>
 
     bool isForm = context.Request.Path.StartsWithSegments("/Contrib")
                   || context.Request.Path.StartsWithSegments("/Account");
-    if (isForm && !context.Response.Headers.ContainsKey("Content-Security-Policy"))
+    if (!context.Response.Headers.ContainsKey("Content-Security-Policy"))
     {
-        headers["Content-Security-Policy"] =
-            "default-src 'self'; "
-            + "script-src 'self' https://challenges.cloudflare.com; "
-            + "frame-src https://challenges.cloudflare.com; "
-            + "style-src 'self' 'unsafe-inline'; "
-            + "img-src 'self' data:; "
-            + "connect-src 'self' https://challenges.cloudflare.com; "
-            + "base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
+        if (isForm)
+        {
+            headers["Content-Security-Policy"] =
+                "default-src 'self'; "
+                + "script-src 'self' https://challenges.cloudflare.com; "
+                + "frame-src https://challenges.cloudflare.com; "
+                + "style-src 'self' 'unsafe-inline'; "
+                + "img-src 'self' data:; "
+                + "connect-src 'self' https://challenges.cloudflare.com; "
+                + "base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
+        }
+        else
+        {
+            headers["Content-Security-Policy"] =
+                "default-src 'self'; "
+                + "script-src 'self' 'unsafe-inline'; "
+                + "style-src 'self' 'unsafe-inline'; "
+                + "img-src 'self' data:; "
+                + "connect-src 'self'; "
+                + "base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
+        }
     }
 
     await next();
 });
+
+app.UseMiddleware<IELTop_Content_Server.Services.IpAbuseMiddleware>();
 
 app.UseResponseCompression();
 app.UseRouting();
@@ -355,7 +389,9 @@ app.UseAuthorization();
 app.UseStaticFiles();
 app.UseStatusCodePagesWithReExecute("/Error");
 
+app.MapHealthChecks("/healthz");
 app.MapProtocolApi();
+CenterModuleLoader.MapCenterEndpoints(app);
 app.MapRazorPages();
 
 app.Run();

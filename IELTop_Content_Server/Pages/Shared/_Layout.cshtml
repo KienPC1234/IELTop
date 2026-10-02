@@ -1,4 +1,4 @@
-﻿@{
+@{
     var isAdmin = User.Identity?.IsAuthenticated == true
         && User.HasClaim(System.Security.Claims.ClaimTypes.Role, "Admin");
     var isContributor = !isAdmin
@@ -12,14 +12,22 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - IELTop Content Server</title>
+    <link rel="icon" type="image/png" href="~/IELTop-rounded.png" />
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/lib/bootstrap-icons/font/bootstrap-icons.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <script>
+        (function() {
+            var theme = localStorage.getItem('ieltop_theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            document.documentElement.setAttribute('data-bs-theme', theme);
+        })();
+    </script>
 </head>
-<body class="bg-body-tertiary">
+<body class="bg-body-tertiary d-flex flex-column min-vh-100">
 <header>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-3">
-        <div class="container-fluid">
-            <a class="navbar-brand" asp-page="/About">IELTop Content Server</a>
+        <div class="container">
+            <a class="navbar-brand fw-bold fs-5 text-white" asp-page="/About">IELTop</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
                     data-bs-target=".navbar-collapse" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
@@ -47,9 +55,12 @@
                                data-bs-toggle="dropdown">System</a>
                             <ul class="dropdown-menu">
                                 <li><a class="dropdown-item" asp-page="/Settings/Index">Settings</a></li>
+                                <li><a class="dropdown-item" asp-page="/Settings/Llm">AI review model</a></li>
                                 <li><a class="dropdown-item" asp-page="/Settings/Notifications">Email</a></li>
                                 <li><a class="dropdown-item" asp-page="/Notifications/Index">Outbox</a></li>
                                 <li><a class="dropdown-item" asp-page="/Audit/Index">Activity</a></li>
+                                <li><a class="dropdown-item" asp-page="/Security/Index">Security shield</a></li>
+                                <li><a class="dropdown-item" asp-page="/P" asp-route-slug="pro">Commercial Pro page</a></li>
                                 <li><a class="dropdown-item" asp-page="/Health">Health</a></li>
                             </ul>
                         </li>
@@ -65,6 +76,7 @@
                             <li class="nav-item"><a class="nav-link" asp-page="/Submissions/Index">Review queue</a></li>
                         }
                         <li class="nav-item"><a class="nav-link" asp-page="/Contrib/Account">Account</a></li>
+                        <li class="nav-item"><a class="nav-link text-warning fw-semibold" asp-page="/P" asp-route-slug="pro">Pro</a></li>
                         <li class="nav-item"><a class="nav-link" asp-page="/About">About</a></li>
                     </ul>
                 }
@@ -72,10 +84,26 @@
                 {
                     <ul class="navbar-nav me-auto">
                         <li class="nav-item"><a class="nav-link" asp-page="/About">About</a></li>
+                        <li class="nav-item"><a class="nav-link text-warning fw-semibold" asp-page="/P" asp-route-slug="pro">Pro Edition</a></li>
                         <li class="nav-item"><a class="nav-link" asp-page="/Contrib/ApplyEditor">Become an editor</a></li>
                     </ul>
                 }
-                <ul class="navbar-nav">
+                <ul class="navbar-nav align-items-center">
+                    <li class="nav-item">
+                        <button id="themeToggleBtn" type="button" class="btn btn-outline-light btn-sm my-1 me-2 d-inline-flex align-items-center gap-1" aria-label="Toggle theme" title="Toggle dark/light theme">
+                            <i id="themeIconSun" class="bi bi-sun-fill d-none"></i>
+                            <i id="themeIconMoon" class="bi bi-moon-stars-fill"></i>
+                            <span class="small" id="themeText">Theme</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-white fw-semibold d-inline-flex align-items-center gap-1 my-1 me-2" href="https://github.com/KienPC1234/IELTop" target="_blank" rel="noopener noreferrer" title="View repository on GitHub">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-github flex-shrink-0" viewBox="0 0 16 16" aria-hidden="true">
+                                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/>
+                            </svg>
+                            <span>GitHub</span>
+                        </a>
+                    </li>
                     @if (name is not null)
                     {
                         <li class="nav-item"><span class="navbar-text me-3">Signed in as @name</span></li>
@@ -87,17 +115,35 @@
                     }
                     else
                     {
-                        <li class="nav-item"><a class="nav-link" asp-page="/Contrib/SignIn">Sign in</a></li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="authDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Sign in
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end shadow-sm" aria-labelledby="authDropdown">
+                                <li>
+                                    <a class="dropdown-item d-flex align-items-center gap-2" asp-page="/Contrib/SignIn">
+                                        <i class="bi bi-person"></i>
+                                        <span>Contributor</span>
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider my-1" /></li>
+                                <li>
+                                    <a class="dropdown-item d-flex align-items-center gap-2 text-body-secondary small" asp-page="/Account/Login">
+                                        <i class="bi bi-shield-lock"></i>
+                                        <span>Admin portal</span>
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
                         <li class="nav-item"><a class="nav-link" asp-page="/Contrib/Register">Create account</a></li>
-                        <li class="nav-item"><a class="nav-link" asp-page="/Account/Login">Admin</a></li>
                     }
                 </ul>
             </div>
         </div>
     </nav>
 </header>
-<div class="container-fluid">
-    <main role="main" class="pb-3">
+<div class="container flex-grow-1 d-flex flex-column">
+    <main role="main" class="flex-grow-1 pb-3">
         @if (TempData["Message"] is string message)
         {
             <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -112,15 +158,39 @@
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         }
+        @if (TempData["Warning"] is string warning)
+        {
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                @warning
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
         @RenderBody()
     </main>
 </div>
-<footer class="border-top text-muted mt-4 py-3">
-    <div class="container-fluid">
-        <span>IELTop Content Server, protocol ieltop/1.</span>
-        <a class="ms-2" asp-page="/About">About</a>
-        <a class="ms-2" asp-page="/Legal">Content and licensing</a>
-        <a class="ms-2" asp-page="/Health">Health</a>
+<footer class="border-top text-body-secondary mt-auto py-3 bg-body">
+    <div class="container d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <img src="~/IELTop-rounded.png" alt="IELTop Logo" width="22" height="22" class="shadow-sm" />
+            <span class="fw-semibold">IELTop Content Server</span>
+            <span class="text-body-tertiary">|</span>
+            <span>Hosted by <a href="https://acmc.vn" target="_blank" rel="noopener noreferrer" class="text-decoration-none fw-semibold">ACM Cloud</a></span>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-3 small">
+            <a class="text-decoration-none text-body-secondary" asp-page="/About">About</a>
+            <a class="text-decoration-none text-body-secondary" asp-page="/Legal">Content and licensing</a>
+            <a class="text-decoration-none text-body-secondary" asp-page="/Health">Service status</a>
+            @if (isAdmin)
+            {
+                <a class="text-decoration-none text-body-secondary" asp-page="/Security/Index">Security</a>
+            }
+            <a class="text-decoration-none text-body-secondary d-inline-flex align-items-center gap-1" href="https://github.com/KienPC1234/IELTop" target="_blank" rel="noopener noreferrer">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-github" viewBox="0 0 16 16">
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8"/>
+                </svg>
+                <span>GitHub</span>
+            </a>
+        </div>
     </div>
 </footer>
 <script src="~/lib/jquery/dist/jquery.min.js"></script>

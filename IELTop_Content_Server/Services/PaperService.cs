@@ -24,6 +24,7 @@ public sealed class PaperSummary
     public int Questions { get; set; }
     public string Updated { get; set; } = string.Empty;
     public long Size { get; set; }
+    public bool IsExclusive { get; set; }
 }
 
 /// <summary>
@@ -283,7 +284,8 @@ public sealed class PaperService(
         Parts = row.PartCount,
         Questions = row.QuestionCount,
         Updated = row.UpdatedAt.UtcDateTime.ToString("yyyy-MM-dd"),
-        Size = row.SizeBytes
+        Size = row.SizeBytes,
+        IsExclusive = row.IsExclusive
     };
 
     public async Task<string?> GetJsonAsync(string id, CancellationToken ct = default)

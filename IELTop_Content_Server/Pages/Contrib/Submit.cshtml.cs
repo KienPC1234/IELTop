@@ -17,8 +17,8 @@ public sealed class SubmitModel(
     ILlmReviewService review,
     IStatsService stats,
     IAuditService audit,
-    IOptions<ContributeOptions> limits,
-    IOptions<CaptchaOptions> captchaOptions) : ContribPageModel(contributors)
+    IIpAbuseGuard abuseGuard,
+    IOptions<ContributeOptions> limits) : ContribPageModel(contributors)
 {
     private readonly ContributeOptions _limits = limits.Value;
 
@@ -27,6 +27,7 @@ public sealed class SubmitModel(
     public string Source { get; private set; } = string.Empty;
     public string License { get; private set; } = string.Empty;
     public string Note { get; private set; } = string.Empty;
+    public string OnlineContent { get; private set; } = string.Empty;
     public string? Error { get; private set; }
     public int MaxFiles => Math.Max(1, _limits.MaxFilesPerSubmission);
     public int MaxMb => Math.Max(1, _limits.MaxSubmissionMb);
@@ -38,14 +39,20 @@ public sealed class SubmitModel(
             return RedirectToPage("/Contrib/SignIn");
 
         AuthorName = Me!.DisplayName;
-        ViewData["CaptchaEnabled"] = captchaOptions.Value.Enabled;
-        ViewData["CaptchaSiteKey"] = captchaOptions.Value.SiteKey;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
+        if (!captcha.Enabled)
+            ViewData["MathChallenge"] = captcha.CreateMathChallenge();
         return Page();
     }
 
     public async Task<IActionResult> OnPostAsync(
         string title, string authorName, string source, string license, string note,
-        bool authorConfirm, string? cfTurnstileResponse,
+        bool authorConfirm,
+        [FromForm(Name = "cf-turnstile-response")] string? cfTurnstileResponse,
+        [FromForm(Name = "captcha_answer")] string? captchaAnswer,
+        [FromForm(Name = "captcha_signature")] string? captchaSignature,
+        string? onlineContent,
         List<IFormFile>? files, CancellationToken ct)
     {
         if (!await LoadAsync(ct))
@@ -56,12 +63,24 @@ public sealed class SubmitModel(
         Source = source ?? string.Empty;
         License = license ?? string.Empty;
         Note = note ?? string.Empty;
-        ViewData["CaptchaEnabled"] = captchaOptions.Value.Enabled;
-        ViewData["CaptchaSiteKey"] = captchaOptions.Value.SiteKey;
+        OnlineContent = onlineContent ?? string.Empty;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
 
-        if (!await captcha.VerifyAsync(cfTurnstileResponse, Ip, ct))
+        if (!string.IsNullOrEmpty(Request.Form["hp_website"]))
         {
-            Error = "The anti bot check failed. Try again.";
+            await abuseGuard.RecordHoneypotTriggerAsync(Ip, "Paper Submission", ct);
+            Error = "Suspicious activity detected. Please try again.";
+            if (!captcha.Enabled)
+                ViewData["MathChallenge"] = captcha.CreateMathChallenge();
+            return Page();
+        }
+
+        if (!await captcha.VerifySubmissionAsync(cfTurnstileResponse, captchaAnswer, captchaSignature, Ip, ct))
+        {
+            Error = "The human verification check failed. Please complete the verification challenge.";
+            if (!captcha.Enabled)
+                ViewData["MathChallenge"] = captcha.CreateMathChallenge();
             return Page();
         }
 
@@ -113,9 +132,20 @@ public sealed class SubmitModel(
                 memory.ToArray()));
         }
 
+        if (!string.IsNullOrWhiteSpace(onlineContent))
+        {
+            byte[] bytes = System.Text.Encoding.UTF8.GetBytes(onlineContent.Trim());
+            string ext = onlineContent.TrimStart().StartsWith("{") ? ".json" : ".txt";
+            string docName = ext == ".json" ? "paper.json" : "paper.txt";
+            string contentType = ext == ".json" ? "application/json" : "text/plain";
+            uploads.Insert(0, new SubmissionUpload(docName, contentType, bytes));
+        }
+
         if (uploads.Count == 0)
         {
-            Error = "Attach at least one file.";
+            Error = "Provide your paper content either by writing in the editor or by attaching files.";
+            if (!captcha.Enabled)
+                ViewData["MathChallenge"] = captcha.CreateMathChallenge();
             return Page();
         }
 

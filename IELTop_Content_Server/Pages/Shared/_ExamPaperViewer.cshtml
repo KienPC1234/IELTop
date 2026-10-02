@@ -1,0 +1,242 @@
+@using System.Text.Json
+@model string
+@{
+    JsonDocument? doc = null;
+    bool isPaper = false;
+    string title = string.Empty;
+    string category = string.Empty;
+    string level = string.Empty;
+    List<string> tags = new();
+    JsonElement parts = default;
+
+    if (!string.IsNullOrWhiteSpace(Model))
+    {
+        try
+        {
+            doc = JsonDocument.Parse(Model);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("parts", out parts) && parts.ValueKind == JsonValueKind.Array)
+            {
+                isPaper = true;
+                if (root.TryGetProperty("title", out var t)) title = t.GetString() ?? string.Empty;
+                if (root.TryGetProperty("category", out var c)) category = c.GetString() ?? string.Empty;
+                if (root.TryGetProperty("level", out var l)) level = l.GetString() ?? string.Empty;
+                if (root.TryGetProperty("tags", out var tg) && tg.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var elem in tg.EnumerateArray())
+                    {
+                        if (elem.GetString() is string s && s.Length > 0) tags.Add(s);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            isPaper = false;
+        }
+    }
+}
+
+@if (isPaper && doc is not null)
+{
+    <div class="exam-paper-preview">
+        <!-- Paper Metadata Header -->
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 mb-3 bg-body-tertiary border rounded">
+            <div>
+                <h4 class="h5 mb-1 text-primary fw-bold">@title</h4>
+                <div class="d-flex flex-wrap gap-2 align-items-center small text-body-secondary">
+                    @if (!string.IsNullOrEmpty(category))
+                    {
+                        <span class="badge bg-secondary-subtle text-secondary border">@category</span>
+                    }
+                    @if (!string.IsNullOrEmpty(level))
+                    {
+                        <span class="badge bg-info-subtle text-info border">Level: @level</span>
+                    }
+                    <span>Parts: @parts.GetArrayLength()</span>
+                </div>
+            </div>
+            @if (tags.Count > 0)
+            {
+                <div class="d-flex flex-wrap gap-1">
+                    @foreach (var tag in tags)
+                    {
+                        <span class="badge bg-light text-dark border small">@tag</span>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Parts Container -->
+        <div class="d-flex flex-column gap-4">
+            @{ int partIdx = 1; }
+            @foreach (var part in parts.EnumerateArray())
+            {
+                if (part.ValueKind != JsonValueKind.Object) continue;
+
+                string pSkill = part.TryGetProperty("skill", out var sk) ? sk.GetString() ?? "General" : "General";
+                string pTitle = part.TryGetProperty("title", out var pt) ? pt.GetString() ?? $"Part {partIdx}" : $"Part {partIdx}";
+                string pTopic = part.TryGetProperty("topic", out var top) ? top.GetString() ?? string.Empty : string.Empty;
+                string pTaskType = part.TryGetProperty("taskType", out var tt) ? tt.GetString() ?? string.Empty : string.Empty;
+                int pMinutes = part.TryGetProperty("minutes", out var pm) && pm.TryGetInt32(out var mins) ? mins : 0;
+                string pInstructions = part.TryGetProperty("instructions", out var ins) ? ins.GetString() ?? string.Empty : string.Empty;
+                string pMaterial = part.TryGetProperty("material", out var mat) ? mat.GetString() ?? string.Empty : string.Empty;
+                string pAudioFile = part.TryGetProperty("audioFile", out var af) ? af.GetString() ?? string.Empty : string.Empty;
+                bool hasQuestions = part.TryGetProperty("questions", out var questions) && questions.ValueKind == JsonValueKind.Array && questions.GetArrayLength() > 0;
+
+                string badgeClass = pSkill.ToLowerInvariant() switch
+                {
+                    "listening" => "bg-success text-white",
+                    "reading" => "bg-primary text-white",
+                    "writing" => "bg-warning text-dark",
+                    "speaking" => "bg-info text-dark",
+                    _ => "bg-secondary text-white"
+                };
+
+                <div class="card border-1 shadow-sm">
+                    <div class="card-header bg-body-tertiary d-flex flex-wrap justify-content-between align-items-center py-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge @badgeClass">@pSkill</span>
+                            <span class="fw-semibold">@pTitle</span>
+                            @if (!string.IsNullOrEmpty(pTopic))
+                            {
+                                <span class="badge bg-light text-secondary border small">@pTopic</span>
+                            }
+                        </div>
+                        <div class="small text-body-secondary">
+                            @if (pMinutes > 0)
+                            {
+                                <span><i class="bi bi-clock me-1"></i>@pMinutes mins</span>
+                            }
+                            @if (!string.IsNullOrEmpty(pTaskType))
+                            {
+                                <span class="ms-2">@pTaskType</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        @if (!string.IsNullOrEmpty(pInstructions))
+                        {
+                            <div class="alert alert-light border small py-2 mb-3">
+                                <strong>Instructions:</strong> @pInstructions
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(pAudioFile))
+                        {
+                            <div class="d-flex align-items-center gap-2 p-2 mb-3 border rounded bg-success-subtle text-success small">
+                                <i class="bi bi-soundwave fs-5"></i>
+                                <span>Audio clip reference: <code>@pAudioFile</code></span>
+                            </div>
+                        }
+
+                        @if (!string.IsNullOrEmpty(pMaterial))
+                        {
+                            <div class="p-3 mb-3 border rounded bg-body">
+                                <div class="small text-body-secondary fw-semibold mb-2">Reading Passage / Prompt Material:</div>
+                                <div class="exam-material" style="white-space: pre-wrap; line-height: 1.8;">@pMaterial</div>
+                            </div>
+                        }
+
+                        @if (hasQuestions)
+                        {
+                            <h6 class="border-bottom pb-2 mb-3 fw-bold">Questions (@questions.GetArrayLength())</h6>
+                            <div class="d-flex flex-column gap-3">
+                                @foreach (var q in questions.EnumerateArray())
+                                {
+                                    if (q.ValueKind != JsonValueKind.Object) continue;
+
+                                    int qNum = q.TryGetProperty("number", out var qn) && qn.TryGetInt32(out var n) ? n : 0;
+                                    string qPrompt = q.TryGetProperty("prompt", out var qp) ? qp.GetString() ?? string.Empty : string.Empty;
+                                    string qKind = q.TryGetProperty("kind", out var qk) ? qk.GetString() ?? string.Empty : string.Empty;
+                                    string correctKey = q.TryGetProperty("correctKey", out var ck) ? ck.GetString() ?? string.Empty : string.Empty;
+                                    string gapAnswer = q.TryGetProperty("gapAnswer", out var ga) ? ga.GetString() ?? string.Empty : string.Empty;
+                                    string explanation = q.TryGetProperty("explanation", out var exp) ? exp.GetString() ?? string.Empty : string.Empty;
+                                    bool hasOptions = q.TryGetProperty("options", out var opts) && opts.ValueKind == JsonValueKind.Array && opts.GetArrayLength() > 0;
+                                    bool hasMatch = q.TryGetProperty("matchRows", out var matchRows) && matchRows.ValueKind == JsonValueKind.Array;
+
+                                    <div class="p-3 border rounded bg-body-tertiary">
+                                        <div class="d-flex align-items-start gap-2 mb-2">
+                                            <span class="badge bg-dark rounded-pill">@(qNum > 0 ? $"Q{qNum}" : "?")</span>
+                                            <div class="fw-medium flex-grow-1">@qPrompt</div>
+                                            @if (!string.IsNullOrEmpty(qKind))
+                                            {
+                                                <span class="badge bg-secondary-subtle text-secondary small">@qKind</span>
+                                            }
+                                        </div>
+
+                                        @if (hasOptions)
+                                        {
+                                            <div class="list-group list-group-flush mb-2">
+                                                @foreach (var opt in opts.EnumerateArray())
+                                                {
+                                                    string oKey = opt.TryGetProperty("key", out var ok) ? ok.GetString() ?? string.Empty : string.Empty;
+                                                    string oText = opt.TryGetProperty("text", out var ot) ? ot.GetString() ?? string.Empty : string.Empty;
+                                                    bool isCorrect = !string.IsNullOrEmpty(correctKey) && string.Equals(oKey, correctKey, StringComparison.OrdinalIgnoreCase);
+
+                                                    <div class="list-group-item d-flex justify-content-between align-items-center py-2 px-3 @(isCorrect ? "bg-success-subtle text-success border-success" : "")">
+                                                        <div>
+                                                            <strong class="me-2">@oKey.</strong> @oText
+                                                        </div>
+                                                        @if (isCorrect)
+                                                        {
+                                                            <span class="badge bg-success"><i class="bi bi-check-lg me-1"></i>Correct Answer</span>
+                                                        }
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+
+                                        @if (!string.IsNullOrEmpty(gapAnswer))
+                                        {
+                                            <div class="p-2 border rounded bg-success-subtle text-success small mb-2">
+                                                <strong>Accepted answers:</strong> <code>@gapAnswer</code>
+                                            </div>
+                                        }
+
+                                        @if (hasMatch)
+                                        {
+                                            <table class="table table-sm table-bordered bg-body mb-2">
+                                                <thead class="table-light">
+                                                    <tr>
+                                                        <th>Item</th>
+                                                        <th>Correct Match</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    @foreach (var row in matchRows.EnumerateArray())
+                                                    {
+                                                        string label = row.TryGetProperty("label", out var lb) ? lb.GetString() ?? string.Empty : string.Empty;
+                                                        string ans = row.TryGetProperty("answer", out var an) ? an.GetString() ?? string.Empty : string.Empty;
+                                                        <tr>
+                                                            <td>@label</td>
+                                                            <td><strong class="text-success">@ans</strong></td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        }
+
+                                        @if (!string.IsNullOrEmpty(explanation))
+                                        {
+                                            <div class="small text-body-secondary border-start border-3 border-info ps-2 mt-2">
+                                                <em>Explanation:</em> @explanation
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+                partIdx++;
+            }
+        </div>
+    </div>
+}
+else
+{
+    <div class="p-3 border rounded bg-body" style="white-space: pre-wrap; line-height: 1.75; max-height: 35rem; overflow-y: auto;">
+        @Model
+    </div>
+}

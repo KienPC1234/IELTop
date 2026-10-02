@@ -34,3 +34,11 @@ releases/
 RELEASES
 # Content server runtime store: local database, uploaded audio, keys
 IELTop_Content_Server/App_Data/
+IELTop_Content_Server/appsettings.Production.json
+IELTop_Content_Server/appsettings.*.local.json
+*.env
+IELTop_Content_Server/Content/
+IELTop_Content_Server/Center/
+Center/
+
+

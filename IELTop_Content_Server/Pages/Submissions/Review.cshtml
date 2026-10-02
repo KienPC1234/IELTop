@@ -28,31 +28,101 @@
     <div class="col-lg-7">
         @foreach (var file in Model.Files)
         {
-            <div class="card mb-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span>
-                        <code>@file.FileName</code>
-                        <span class="text-muted small">(@file.Kind)</span>
-                    </span>
-                    <span class="d-flex gap-2">
+            <div class="card mb-3 shadow-sm border">
+                <div class="card-header d-flex flex-wrap justify-content-between align-items-center py-2 bg-body-tertiary">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge @(file.Kind == "paper" ? "bg-primary" : file.Kind == "audio" ? "bg-success" : "bg-secondary")">@file.Kind</span>
+                        <code class="fw-bold">@file.FileName</code>
+                    </div>
+                    <div class="d-flex gap-2 align-items-center">
                         <span class="badge text-bg-light border">@Format.Size(file.SizeBytes)</span>
                         @if (file.HasBinary)
                         {
-                            <a class="btn btn-sm btn-outline-secondary"
+                            <a class="btn btn-sm btn-outline-secondary py-0 px-2"
                                asp-page="/Submissions/Download" asp-route-fileId="@file.Id">Download</a>
                         }
-                    </span>
+                    </div>
                 </div>
-                <div class="card-body">
-                    @if (file.Text.Length > 0)
-                    {
-                        <pre class="small mb-0" style="max-height:30rem;overflow:auto">@file.Text</pre>
-                    }
-                    else
-                    {
-                        <span class="text-muted">Audio clip. Download it to listen.</span>
-                    }
-                </div>
+
+                @if (file.Kind == "paper")
+                {
+                    <div class="border-bottom px-3 pt-2 bg-body-tertiary">
+                        <ul class="nav nav-tabs border-bottom-0" id="fileTab-@file.Id" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active py-1 px-3 small" id="preview-tab-@file.Id" data-bs-toggle="tab" data-bs-target="#preview-pane-@file.Id" type="button" role="tab">
+                                    <i class="bi bi-eye me-1"></i>Exam Preview
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-1 px-3 small" id="edit-tab-@file.Id" data-bs-toggle="tab" data-bs-target="#edit-pane-@file.Id" type="button" role="tab">
+                                    <i class="bi bi-pencil-square me-1"></i>Edit Paper
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-1 px-3 small" id="source-tab-@file.Id" data-bs-toggle="tab" data-bs-target="#source-pane-@file.Id" type="button" role="tab">
+                                    <i class="bi bi-code-slash me-1"></i>Raw Source
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="card-body p-3">
+                        <div class="tab-content" id="fileTabContent-@file.Id">
+                            <div class="tab-pane fade show active" id="preview-pane-@file.Id" role="tabpanel">
+                                @await Html.PartialAsync("_ExamPaperViewer", file.Text)
+                            </div>
+                            <div class="tab-pane fade" id="edit-pane-@file.Id" role="tabpanel">
+                                <form method="post" asp-page-handler="SavePaper">
+                                    <input type="hidden" name="id" value="@Model.Submission.Id" />
+                                    <input type="hidden" name="fileId" value="@file.Id" />
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold text-body-secondary" for="paperContent-@file.Id">
+                                            Edit Paper JSON definition:
+                                        </label>
+                                        <textarea class="form-control font-monospace small" id="paperContent-@file.Id" name="paperContent" rows="18" required style="line-height: 1.5;">@file.Text</textarea>
+                                    </div>
+                                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                        <span class="small text-body-secondary">
+                                            <i class="bi bi-info-circle me-1"></i>Changes will be validated against paper schema and saved immediately.
+                                        </span>
+                                        <button class="btn btn-sm btn-primary" type="submit">
+                                            <i class="bi bi-check2-circle me-1"></i>Save Paper Changes
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="tab-pane fade" id="source-pane-@file.Id" role="tabpanel">
+                                <pre class="small mb-0 p-3 bg-body-tertiary border rounded" style="max-height:35rem;overflow:auto">@file.Text</pre>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else if (file.Kind == "text")
+                {
+                    <div class="card-body p-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="small text-body-secondary fw-semibold">Extracted Document Text:</span>
+                        </div>
+                        <div class="p-3 border rounded bg-body" style="white-space: pre-wrap; line-height: 1.75; max-height: 30rem; overflow-y: auto;">
+                            @file.Text
+                        </div>
+                    </div>
+                }
+                else if (file.Kind == "audio")
+                {
+                    <div class="card-body p-3">
+                        <span class="text-body-secondary small d-block mb-2">Listening test audio track:</span>
+                        <audio controls class="w-100" preload="metadata">
+                            <source src="@Url.Page("/Submissions/Download", new { fileId = file.Id, inline = true })" />
+                            Your browser does not support audio playback.
+                        </audio>
+                    </div>
+                }
+                else
+                {
+                    <div class="card-body p-3">
+                        <span class="text-muted">Binary file. Download it to inspect.</span>
+                    </div>
+                }
             </div>
         }
     </div>

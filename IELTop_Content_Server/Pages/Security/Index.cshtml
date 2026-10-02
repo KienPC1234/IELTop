@@ -1,0 +1,169 @@
+@page "/Security"
+@model IELTop_Content_Server.Pages.Security.IndexModel
+@{
+    ViewData["Title"] = "Security Center";
+}
+
+<div class="container py-4">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h1 class="h3 mb-1">Security and Access Control</h1>
+            <p class="text-body-secondary mb-0">Monitor network protection, abuse detection, and active IP restrictions.</p>
+        </div>
+        <span class="badge bg-primary-subtle text-primary border border-primary-subtle px-3 py-2 fs-6">
+            Active Bans: @Model.BlockedIps.Count
+        </span>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-lg-5">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-transparent py-3">
+                    <h2 class="h5 mb-0">Restrict IP Address</h2>
+                </div>
+                <div class="card-body">
+                    <form method="post" asp-page-handler="Block">
+                        <partial name="_Honeypot" />
+                        <div class="mb-3">
+                            <label class="form-label" for="ipAddressInput">IP Address</label>
+                            <input class="form-control font-monospace" id="ipAddressInput" asp-for="IpAddress" placeholder="e.g. 198.51.100.42" required />
+                            <div class="form-text">Loopback and internal addresses are automatically protected from restrictions.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="reasonInput">Reason</label>
+                            <input class="form-control" id="reasonInput" asp-for="Reason" placeholder="e.g. Malicious scanning or repeated credential abuse" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="durationSelect">Restriction Duration</label>
+                            <select class="form-select" id="durationSelect" asp-for="DurationHours">
+                                <option value="1">1 Hour</option>
+                                <option value="6">6 Hours</option>
+                                <option value="24" selected>24 Hours</option>
+                                <option value="72">3 Days</option>
+                                <option value="168">7 Days</option>
+                                <option value="0">Permanent</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-danger w-100">
+                            Apply Restriction
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-transparent py-3">
+                    <h2 class="h5 mb-0">Protection Layers Active</h2>
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item px-0 py-3">
+                            <div class="d-flex w-100 justify-content-between mb-1">
+                                <span class="fw-semibold">Cloudflare Tunnel Real IP Detection</span>
+                                <span class="badge bg-success-subtle text-success">Active</span>
+                            </div>
+                            <small class="text-body-secondary">
+                                Validates client identity via CF-Connecting-IP, ensuring tunnel reverse-proxy traffic never collapses to a single loopback IP.
+                            </small>
+                        </div>
+                        <div class="list-group-item px-0 py-3">
+                            <div class="d-flex w-100 justify-content-between mb-1">
+                                <span class="fw-semibold">Automated Scanner and Probe Shield</span>
+                                <span class="badge bg-success-subtle text-success">Active</span>
+                            </div>
+                            <small class="text-body-secondary">
+                                Intercepts malicious attempts to access hidden configuration files, Git repositories, or unauthorized administrative scripts.
+                            </small>
+                        </div>
+                        <div class="list-group-item px-0 py-3">
+                            <div class="d-flex w-100 justify-content-between mb-1">
+                                <span class="fw-semibold">Honeypot Trap Protection</span>
+                                <span class="badge bg-success-subtle text-success">Active</span>
+                            </div>
+                            <small class="text-body-secondary">
+                                Catches headless automated spambots targeting sign-in, registration, and submission forms.
+                            </small>
+                        </div>
+                        <div class="list-group-item px-0 py-3">
+                            <div class="d-flex w-100 justify-content-between mb-1">
+                                <span class="fw-semibold">Credential Brute Force Shield</span>
+                                <span class="badge bg-success-subtle text-success">Active</span>
+                            </div>
+                            <small class="text-body-secondary">
+                                Imposes temporary rate throttling and IP strikes after repeated authentication failures.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-header bg-transparent py-3 d-flex align-items-center justify-content-between">
+            <h2 class="h5 mb-0">Active IP Restrictions</h2>
+            <span class="text-body-secondary small">Auto refreshed on page reload</span>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">IP Address</th>
+                        <th scope="col">Reason</th>
+                        <th scope="col">Restricted At</th>
+                        <th scope="col">Expires At</th>
+                        <th scope="col">Initiated By</th>
+                        <th scope="col" class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @if (Model.BlockedIps.Count == 0)
+                {
+                    <tr>
+                        <td colspan="6" class="text-center py-4 text-body-secondary">
+                            No IP restrictions currently in effect.
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    @foreach (var item in Model.BlockedIps)
+                    {
+                        <tr>
+                            <td>
+                                <code class="fw-bold">@item.Ip</code>
+                            </td>
+                            <td>@item.Reason</td>
+                            <td>@item.BlockedAt.ToString("yyyy-MM-dd HH:mm:ss") UTC</td>
+                            <td>
+                                @if (item.ExpiresAt.HasValue)
+                                {
+                                    <span>@item.ExpiresAt.Value.ToString("yyyy-MM-dd HH:mm:ss") UTC</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger-subtle text-danger">Permanent</span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary-subtle text-secondary">@item.CreatedBy</span>
+                            </td>
+                            <td class="text-end">
+                                <form method="post" asp-page-handler="Unblock" class="d-inline">
+                                    <input type="hidden" name="ip" value="@item.Ip" />
+                                    <button type="submit" class="btn btn-sm btn-outline-success">
+                                        Unblock
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                    }
+                }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+

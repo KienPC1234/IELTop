@@ -13,6 +13,7 @@ namespace IELTop_Content_Server.Services;
 public interface IAdminAuthService
 {
     Task<bool> ValidateAsync(string username, string password, CancellationToken ct = default);
+    Task<(bool Ok, string Error)> ValidateWithLockoutAsync(string username, string password, string ip, CancellationToken ct = default);
     Task<AdminUser?> FindAsync(string username, CancellationToken ct = default);
     Task EnsureSeedAsync(CancellationToken ct = default);
     Task<(bool Ok, string Error)> ChangePasswordAsync(int userId, string current, string next, CancellationToken ct = default);
@@ -23,6 +24,8 @@ public interface IAdminAuthService
 
 public sealed class AdminAuthService(
     IDbContextFactory<AppDbContext> dbFactory,
+    IAccountLockoutService lockout,
+    IIpAbuseGuard abuseGuard,
     IOptions<ServerOptions> serverOptions,
     ILogger<AdminAuthService> logger) : IAdminAuthService
 {
@@ -36,17 +39,45 @@ public sealed class AdminAuthService(
 
     public async Task<bool> ValidateAsync(string username, string password, CancellationToken ct = default)
     {
+        var (ok, _) = await ValidateWithLockoutAsync(username, password, "internal", ct);
+        return ok;
+    }
+
+    public async Task<(bool Ok, string Error)> ValidateWithLockoutAsync(
+        string username, string password, string ip, CancellationToken ct = default)
+    {
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
-            return false;
+            return (false, "Username and password are required.");
+
+        string key = $"admin:{username.Trim().ToLowerInvariant()}";
+        var (isLocked, remaining) = await lockout.CheckLockoutAsync(key);
+        if (isLocked)
+        {
+            int mins = Math.Max(1, (int)Math.Ceiling(remaining.TotalMinutes));
+            return (false, $"Account is temporarily locked due to repeated failed logins. Please try again in {mins} minutes.");
+        }
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var user = await db.AdminUsers.FirstOrDefaultAsync(a => a.Username == username && a.IsActive, ct);
         if (user is null || !PasswordHasher.Verify(password, user.PasswordHash, user.PasswordSalt))
-            return false;
+        {
+            var (nowLocked, count) = await lockout.RecordFailedAttemptAsync(key, ip, ct);
+            await abuseGuard.RecordFailedLoginStrikeAsync(ip, username, ct);
 
+            if (nowLocked)
+            {
+                return (false, "Account has been locked for 15 minutes due to 5 failed sign in attempts.");
+            }
+
+            int left = Math.Max(0, 5 - count);
+            string extra = left > 0 ? $" ({left} attempts remaining before temporary lockout)" : string.Empty;
+            return (false, $"Wrong username or password.{extra}");
+        }
+
+        await lockout.ResetFailedAttemptsAsync(key);
         user.LastLoginAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
-        return true;
+        return (true, string.Empty);
     }
 
     public async Task EnsureSeedAsync(CancellationToken ct = default)

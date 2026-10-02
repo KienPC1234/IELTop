@@ -1,0 +1,199 @@
+@page
+@model IELTop_Content_Server.Pages.Settings.LlmModel
+@{
+    ViewData["Title"] = "AI Review Settings";
+}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="h3 mb-0">AI Review Settings</h1>
+        <span class="text-body-secondary small">OpenAI-compatible endpoint for automated paper review.</span>
+    </div>
+    <a class="btn btn-outline-secondary" asp-page="/Settings/Index">Back to Settings</a>
+</div>
+
+@if (Model.ReviewEnabled)
+{
+    <div class="alert alert-success d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+        <i class="bi bi-check-circle-fill"></i>
+        <span>AI review is active. Model: <code>@Model.Model</code> at <code>@Model.BaseUrl</code></span>
+    </div>
+}
+else
+{
+    <div class="alert alert-warning d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i>
+        <span>AI review is off. Set Base URL and Model name in <code>appsettings.Production.json</code> and restart the server.</span>
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-lg-6">
+        <div class="card mb-3">
+            <div class="card-header d-flex align-items-center gap-2">
+                <i class="bi bi-gear"></i>
+                Current configuration
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span class="text-body-secondary">Base URL</span>
+                    @if (!string.IsNullOrEmpty(Model.BaseUrl))
+                    {
+                        <code>@Model.BaseUrl</code>
+                    }
+                    else
+                    {
+                        <span class="text-danger">Not set</span>
+                    }
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span class="text-body-secondary">Model</span>
+                    @if (!string.IsNullOrEmpty(Model.Model))
+                    {
+                        <code>@Model.Model</code>
+                    }
+                    else
+                    {
+                        <span class="text-danger">Not set</span>
+                    }
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span class="text-body-secondary">API key</span>
+                    <span>@(Model.HasApiKey ? "Configured" : "None (open endpoint)")</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span class="text-body-secondary">Temperature</span>
+                    <span>@Model.Temperature</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span class="text-body-secondary">Max tokens</span>
+                    <span>@Model.MaxTokens</span>
+                </li>
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span class="text-body-secondary">Timeout</span>
+                    <span>@Model.TimeoutSeconds s</span>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">Test connection</div>
+            <div class="card-body">
+                <p class="text-body-secondary small mb-3">
+                    Sends a short test prompt to the configured endpoint and shows the raw JSON reply.
+                    This does not change any settings.
+                    Rate-limited to @(120) requests per minute (admin only).
+                </p>
+                <form method="post" asp-page-handler="Test">
+                    @Html.AntiForgeryToken()
+                    <button class="btn btn-primary @(!Model.ReviewEnabled ? "disabled" : "")"
+                            type="submit"
+                            @(!Model.ReviewEnabled ? "disabled" : "")>
+                        <i class="bi bi-play-circle me-1"></i>
+                        Run test
+                    </button>
+                    @if (!Model.ReviewEnabled)
+                    {
+                        <span class="ms-2 small text-body-secondary">Configure the model first.</span>
+                    }
+                </form>
+
+                @if (Model.TestOk.HasValue)
+                {
+                    <div class="mt-3 alert @(Model.TestOk.Value ? "alert-success" : "alert-danger") py-2" role="alert">
+                        <i class="bi @(Model.TestOk.Value ? "bi-check-circle" : "bi-x-circle") me-1"></i>
+                        @Model.TestMessage
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.TestRaw))
+                    {
+                        <details class="mt-2">
+                            <summary class="small text-body-secondary" style="cursor:pointer">Raw JSON reply</summary>
+                            <pre class="small mt-2 p-2 bg-body-tertiary rounded" style="max-height:16rem;overflow:auto">@Model.TestRaw</pre>
+                        </details>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-shield-lock me-1"></i>
+                Abuse protection
+            </div>
+            <div class="card-body small">
+                <ul class="mb-0">
+                    <li class="mb-1">
+                        <strong>Submit form</strong> (contributor): Cloudflare Turnstile captcha + rate limit 120/min per address.
+                    </li>
+                    <li class="mb-1">
+                        <strong>Re-run review</strong> (editor/admin): requires authenticated session, rate limit 120/min (form policy).
+                    </li>
+                    <li class="mb-1">
+                        <strong>Test connection</strong> (admin only): requires admin session, rate limit 120/min (form policy).
+                        No external exposure.
+                    </li>
+                    <li>
+                        <strong>Protocol API</strong>: no AI endpoints are exposed. LLM is server-side only.
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header">
+                <i class="bi bi-lightbulb me-1"></i>
+                Quick setup examples
+            </div>
+            <div class="card-body">
+                <p class="text-body-secondary small mb-3">
+                    Edit <code>appsettings.Production.json</code> and restart. The file is never overwritten by the UI.
+                </p>
+
+                <h6 class="mb-2">Local Ollama</h6>
+                <pre class="small p-2 bg-body-tertiary rounded mb-3" style="overflow-x:auto">"Llm": {
+  "BaseUrl": "http://localhost:11434/v1",
+  "Model":   "deepseek-v4.1-flash:cloud",
+  "ApiKey":  "",
+  "Temperature": 0.2,
+  "MaxTokens": 2000,
+  "TimeoutSeconds": 180
+}</pre>
+
+                <h6 class="mb-2">OpenAI</h6>
+                <pre class="small p-2 bg-body-tertiary rounded mb-3" style="overflow-x:auto">"Llm": {
+  "BaseUrl": "https://api.openai.com/v1",
+  "Model":   "gpt-4o-mini",
+  "ApiKey":  "sk-...",
+  "Temperature": 0.2,
+  "MaxTokens": 2000,
+  "TimeoutSeconds": 60
+}</pre>
+
+                <h6 class="mb-2">LM Studio (local)</h6>
+                <pre class="small p-2 bg-body-tertiary rounded" style="overflow-x:auto">"Llm": {
+  "BaseUrl": "http://localhost:1234/v1",
+  "Model":   "local-model",
+  "ApiKey":  "lm-studio",
+  "Temperature": 0.2,
+  "MaxTokens": 2000,
+  "TimeoutSeconds": 120
+}</pre>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">How it works</div>
+            <div class="card-body small text-body-secondary">
+                <ol class="mb-0">
+                    <li class="mb-1">When a contributor submits a paper, the server sends it to the model after captcha passes.</li>
+                    <li class="mb-1">The model returns a JSON object with a score (0-100), tags, problems, and suggestions.</li>
+                    <li class="mb-1">The editor sees the score and tags on the review page and can re-run at any time (rate-limited).</li>
+                    <li>If no model is configured, submissions go straight to human review with no score.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+

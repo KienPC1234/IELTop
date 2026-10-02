@@ -7,15 +7,27 @@
 <div class="d-flex justify-content-between align-items-center mb-3">
     <div>
         <h1 class="h3 mb-0">Review queue</h1>
-        <span class="text-muted">
+        <span class="text-body-secondary small">
             @Model.InReview in review, @Model.Total total
+        </span>
+    </div>
+    <div class="d-flex gap-2">
+        <span class="badge bg-success-subtle text-success border border-success-subtle py-2 px-3">
+            @Model.StrongCount Strong (&ge; 70)
+        </span>
+        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle py-2 px-3">
+            @Model.BorderlineCount Borderline
+        </span>
+        <span class="badge bg-danger-subtle text-danger border border-danger-subtle py-2 px-3">
+            @Model.WeakCount Weak (&lt; 40)
         </span>
     </div>
 </div>
 
-<form method="get" class="row g-2 mb-3">
-    <div class="col-sm-4 col-md-3">
-        <select class="form-select" name="status">
+<form method="get" class="row g-2 mb-3 align-items-center">
+    <div class="col-sm-3 col-md-2">
+        <label class="visually-hidden" for="statusSelect">Status</label>
+        <select class="form-select form-select-sm" id="statusSelect" name="status">
             <option value="">All statuses</option>
             @foreach (var option in new[] { "InReview", "Draft", "Accepted", "Rejected", "Withdrawn" })
             {
@@ -23,13 +35,33 @@
             }
         </select>
     </div>
-    <div class="col-sm-6 col-md-4">
-        <input class="form-control" type="search" name="q" value="@Model.Query"
+    <div class="col-sm-3 col-md-2">
+        <label class="visually-hidden" for="tierSelect">Score tier</label>
+        <select class="form-select form-select-sm" id="tierSelect" name="tier">
+            <option value="">All score tiers</option>
+            <option value="strong" selected="@(Model.Tier == "strong")">Strong (&ge; 70)</option>
+            <option value="borderline" selected="@(Model.Tier == "borderline")">Borderline (40 to 69)</option>
+            <option value="weak" selected="@(Model.Tier == "weak")">Weak (&lt; 40)</option>
+            <option value="unreviewed" selected="@(Model.Tier == "unreviewed")">Unreviewed</option>
+        </select>
+    </div>
+    <div class="col-sm-3 col-md-2">
+        <label class="visually-hidden" for="sortSelect">Sort</label>
+        <select class="form-select form-select-sm" id="sortSelect" name="sort">
+            <option value="">Sort: Newest first</option>
+            <option value="score_desc" selected="@(Model.Sort == "score_desc")">Highest score</option>
+            <option value="score_asc" selected="@(Model.Sort == "score_asc")">Lowest score</option>
+            <option value="oldest" selected="@(Model.Sort == "oldest")">Oldest first</option>
+        </select>
+    </div>
+    <div class="col-sm-3 col-md-4">
+        <label class="visually-hidden" for="queryInput">Search</label>
+        <input class="form-control form-control-sm" id="queryInput" type="search" name="q" value="@Model.Query"
                placeholder="Search reference, title, or author" />
     </div>
     <div class="col-auto">
-        <button class="btn btn-outline-secondary" type="submit">Filter</button>
-        <a class="btn btn-link" asp-page="/Submissions/Index">Clear</a>
+        <button class="btn btn-sm btn-outline-secondary" type="submit">Filter</button>
+        <a class="btn btn-sm btn-link" asp-page="/Submissions/Index">Clear</a>
     </div>
 </form>
 
@@ -41,7 +73,7 @@
             <th>Title</th>
             <th>Author</th>
             <th>Status</th>
-            <th class="text-end">Score</th>
+            <th class="text-end">AI Score</th>
             <th>Tags</th>
             <th>Submitted</th>
             <th class="text-end">Actions</th>
@@ -55,7 +87,24 @@
                 <td>@row.Title</td>
                 <td>@row.AuthorName</td>
                 <td><span class="badge @Format.StatusColor(row.Status)">@Format.StatusLabel(row.Status)</span></td>
-                <td class="text-end">@(row.ReviewScore >= 0 ? row.ReviewScore.ToString() : "-")</td>
+                <td class="text-end">
+                    @if (row.ReviewScore >= 70)
+                    {
+                        <span class="badge text-bg-success">@row.ReviewScore</span>
+                    }
+                    else if (row.ReviewScore >= 40)
+                    {
+                        <span class="badge text-bg-warning">@row.ReviewScore</span>
+                    }
+                    else if (row.ReviewScore >= 0)
+                    {
+                        <span class="badge text-bg-danger">@row.ReviewScore</span>
+                    }
+                    else
+                    {
+                        <span class="badge text-bg-secondary">None</span>
+                    }
+                </td>
                 <td>
                     @foreach (var tag in Model.TagsOf(row))
                     {
@@ -71,7 +120,7 @@
         }
         @if (Model.Rows.Count == 0)
         {
-            <tr><td colspan="8" class="text-muted">Nothing matches.</td></tr>
+            <tr><td colspan="8" class="text-muted">No submissions match the selected filters.</td></tr>
         }
         </tbody>
     </table>

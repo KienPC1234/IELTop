@@ -86,6 +86,23 @@ public sealed class StorageOptions
 }
 
 /// <summary>
+/// S3-compatible object storage (S3, MinIO, etc.).
+/// </summary>
+public sealed class S3Options
+{
+    public const string Section = "S3";
+
+    public bool Enabled { get; set; } = true;
+    public string ServiceUrl { get; set; } = "http://127.0.0.1:30900";
+    public string BucketName { get; set; } = "ieltop";
+    public string AccessKey { get; set; } = string.Empty;
+    public string SecretKey { get; set; } = string.Empty;
+    public string Region { get; set; } = "us-east-1";
+    public bool ForcePathStyle { get; set; } = true;
+    public string PublicUrl { get; set; } = "https://s3.fptoj.com";
+}
+
+/// <summary>
 /// Requests per minute per client. Anonymous callers are capped lower
 /// than callers that present a code or a token.
 /// </summary>
@@ -156,6 +173,9 @@ public sealed class SmtpOptions
     public string FromAddress { get; set; } = "no-reply@example.com";
     public string FromName { get; set; } = "IELTop Content Server";
     public string BaseUrl { get; set; } = string.Empty;
+    public bool CheckDisposableEmail { get; set; } = true;
+    public bool CheckDnsMx { get; set; } = true;
+    public bool CheckSmtpHandshake { get; set; } = false;
 }
 
 /// <summary>

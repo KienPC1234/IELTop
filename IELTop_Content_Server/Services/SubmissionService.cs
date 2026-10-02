@@ -47,7 +47,8 @@ public interface ISubmissionService
     Task<(bool Ok, string Error, Submission? Created)> CreateAsync(
         SubmissionRequest request, ReviewResult? reviewOverride, CancellationToken ct = default);
     Task<List<Submission>> ListForContributorAsync(int contributorId, CancellationToken ct = default);
-    Task<List<Submission>> ListForReviewAsync(string? status, string? query, CancellationToken ct = default);
+    Task<List<Submission>> ListForReviewAsync(
+        string? status, string? query, string? tier = null, string? sort = null, CancellationToken ct = default);
     Task<Submission?> GetAsync(int id, CancellationToken ct = default);
     Task<List<SubmissionFileView>> FilesAsync(int submissionId, CancellationToken ct = default);
     Task<SubmissionFile?> FileAsync(long fileId, CancellationToken ct = default);
@@ -59,6 +60,8 @@ public interface ISubmissionService
     Task<int> CountByStatusAsync(SubmissionStatus status, CancellationToken ct = default);
     Task<int> CountForContributorAsync(int contributorId, CancellationToken ct = default);
     Task<int> CountRecentForContributorAsync(int contributorId, TimeSpan window, CancellationToken ct = default);
+    Task<bool> SaveReviewAsync(int id, ReviewResult result, CancellationToken ct = default);
+    Task<(bool Ok, string Error)> UpdatePaperFileAsync(int submissionId, long fileId, string newContent, CancellationToken ct = default);
 }
 
 public sealed class SubmissionService(
@@ -70,6 +73,7 @@ public sealed class SubmissionService(
     IContentCache cache,
     IOptions<StorageOptions> storage,
     IOptions<ContributeOptions> contribute,
+    IS3StorageService s3,
     ILogger<SubmissionService> logger) : ISubmissionService
 {
     private static readonly string[] AudioTypes =
@@ -100,7 +104,6 @@ public sealed class SubmissionService(
         Directory.CreateDirectory(folder);
 
         var staged = new List<SubmissionFile>();
-        bool hasPaper = false;
         string? paperText = null;
 
         foreach (var upload in request.Files)
@@ -129,6 +132,19 @@ public sealed class SubmissionService(
             string target = Path.Combine(folder, storedName);
             await File.WriteAllBytesAsync(target, upload.Bytes, ct);
 
+            if (s3.Enabled)
+            {
+                try
+                {
+                    using var s3Stream = new MemoryStream(upload.Bytes);
+                    await s3.UploadAsync($"submissions/{reference}/{storedName}", s3Stream, upload.ContentType, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to upload submission file {File} to S3", storedName);
+                }
+            }
+
             string hash = Convert.ToHexString(SHA256.HashData(upload.Bytes)).ToLowerInvariant();
             var file = new SubmissionFile
             {
@@ -152,10 +168,13 @@ public sealed class SubmissionService(
                 file.Text = text;
                 if (kind == "paper")
                 {
-                    hasPaper = true;
                     paperText = string.IsNullOrEmpty(paperText) || text.Length > paperText.Length
                         ? text
                         : paperText;
+                }
+                else if (kind == "text")
+                {
+                    paperText = string.IsNullOrEmpty(paperText) ? text : paperText + "\n\n---\n\n" + text;
                 }
             }
 
@@ -167,20 +186,92 @@ public sealed class SubmissionService(
             Cleanup(folder);
             return (false, "None of the attached files could be read.", null);
         }
-        if (!hasPaper)
+
+        bool hasJsonPaper = staged.Any(f => f.Kind == "paper");
+        bool hasTextFiles = staged.Any(f => f.Kind == "text");
+
+        if (!hasJsonPaper && !hasTextFiles)
         {
             Cleanup(folder);
             return (false, "Attach the paper as JSON, or as txt, md, csv, docx, or pdf text.", null);
         }
 
-        // A JSON paper must parse as a paper before it is stored, so a
-        // reviewer never has to open a broken file.
-        var paperFile = staged.First(f => f.Kind == "paper");
-        var (paperOk, paperError, parsed) = PaperService.ParseText(paperFile.Text);
-        if (!paperOk || parsed is null)
+        ParsedPaper? parsed = null;
+        if (hasJsonPaper)
         {
-            Cleanup(folder);
-            return (false, $"The paper JSON is not valid: {paperError}", null);
+            // A JSON paper must parse as a paper before it is stored, so a
+            // reviewer never has to open a broken file.
+            var paperFile = staged.First(f => f.Kind == "paper");
+            var (paperOk, paperError, p) = PaperService.ParseText(paperFile.Text);
+            if (!paperOk || p is null)
+            {
+                Cleanup(folder);
+                return (false, $"The paper JSON is not valid: {paperError}", null);
+            }
+            parsed = p;
+        }
+        else
+        {
+            // Synthesize a draft paper JSON from the submitted text/docx/pdf/md content
+            string combinedText = string.Join("\n\n---\n\n", staged.Where(f => f.Kind == "text").Select(f => f.Text));
+            bool hasAudio = staged.Any(f => f.Kind == "audio");
+            string skill = hasAudio ? "listening" : "reading";
+
+            var draftObj = new
+            {
+                title = string.IsNullOrWhiteSpace(request.Title) ? "Untitled practice paper" : request.Title.Trim(),
+                skill = skill,
+                category = "academic",
+                level = "B2-C1",
+                source = request.Source,
+                license = request.License,
+                parts = new object[]
+                {
+                    new
+                    {
+                        part = 1,
+                        skill = skill,
+                        material = combinedText.Length > 24000 ? combinedText[..24000] : combinedText,
+                        minutes = 30,
+                        questions = Array.Empty<object>()
+                    }
+                }
+            };
+
+            string draftJson = JsonSerializer.Serialize(draftObj, new JsonSerializerOptions { WriteIndented = true });
+            string draftStoredName = "00-draft-paper.json";
+            string draftPath = Path.Combine(folder, draftStoredName);
+            await File.WriteAllTextAsync(draftPath, draftJson, ct);
+
+            var draftFile = new SubmissionFile
+            {
+                FileName = "draft-paper.json",
+                Kind = "paper",
+                ContentType = "application/json",
+                SizeBytes = Encoding.UTF8.GetByteCount(draftJson),
+                Sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(draftJson))).ToLowerInvariant(),
+                StoredName = draftStoredName,
+                Text = draftJson,
+                Note = "Auto-generated draft from submitted documents"
+            };
+
+            if (s3.Enabled)
+            {
+                try
+                {
+                    using var s3Stream = new MemoryStream(Encoding.UTF8.GetBytes(draftJson));
+                    await s3.UploadAsync($"submissions/{reference}/{draftStoredName}", s3Stream, "application/json", ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to upload generated draft paper to S3");
+                }
+            }
+
+            staged.Insert(0, draftFile);
+            paperText = combinedText;
+            var (_, _, p) = PaperService.ParseText(draftJson);
+            parsed = p;
         }
 
         // Run the model review unless the caller already supplied one.
@@ -189,8 +280,9 @@ public sealed class SubmissionService(
         {
             if (review.Enabled && _limits.AutoReview)
             {
+                string textToReview = paperText ?? staged.First(f => f.Kind == "paper").Text;
                 verdict = await review.ReviewAsync(
-                    request.Title, request.Source, request.License, paperText ?? paperFile.Text, ct);
+                    request.Title, request.Source, request.License, textToReview, ct);
             }
             else
             {
@@ -205,9 +297,9 @@ public sealed class SubmissionService(
             Reference = reference,
             ContributorId = request.ContributorId,
             AuthorName = Clamp(request.AuthorName, 200),
-            Title = parsed.Title.Length > 0 ? Clamp(parsed.Title, 300) : Clamp(request.Title.Trim(), 300),
+            Title = (parsed is not null && parsed.Title.Length > 0) ? Clamp(parsed.Title, 300) : Clamp(request.Title.Trim(), 300),
             Note = Clamp(request.Note, 2000),
-            Source = parsed.Source.Length > 0 ? Clamp(parsed.Source, 500) : Clamp(request.Source, 500),
+            Source = (parsed is not null && parsed.Source.Length > 0) ? Clamp(parsed.Source, 500) : Clamp(request.Source, 500),
             License = Clamp(request.License, 200),
             Status = SubmissionStatus.Draft
         };
@@ -285,7 +377,7 @@ public sealed class SubmissionService(
     }
 
     public async Task<List<Submission>> ListForReviewAsync(
-        string? status, string? query, CancellationToken ct = default)
+        string? status, string? query, string? tier = null, string? sort = null, CancellationToken ct = default)
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         IQueryable<Submission> rows = db.Submissions.AsNoTracking();
@@ -299,11 +391,28 @@ public sealed class SubmissionService(
                 || s.Reference.Contains(query)
                 || s.AuthorName.Contains(query));
 
-        return await rows
-            .OrderBy(s => s.Status == SubmissionStatus.InReview ? 0 : 1)
-            .ThenByDescending(s => s.CreatedAt)
-            .AsNoTracking()
-            .ToListAsync(ct);
+        if (!string.IsNullOrWhiteSpace(tier))
+        {
+            rows = tier.ToLowerInvariant() switch
+            {
+                "strong" => rows.Where(s => s.ReviewScore >= 70),
+                "borderline" => rows.Where(s => s.ReviewScore >= 40 && s.ReviewScore < 70),
+                "weak" => rows.Where(s => s.ReviewScore >= 0 && s.ReviewScore < 40),
+                "unreviewed" => rows.Where(s => s.ReviewScore < 0),
+                _ => rows
+            };
+        }
+
+        rows = (sort?.ToLowerInvariant()) switch
+        {
+            "score_desc" => rows.OrderByDescending(s => s.ReviewScore).ThenByDescending(s => s.CreatedAt),
+            "score_asc" => rows.OrderBy(s => s.ReviewScore >= 0 ? s.ReviewScore : 999).ThenByDescending(s => s.CreatedAt),
+            "oldest" => rows.OrderBy(s => s.CreatedAt),
+            _ => rows.OrderBy(s => s.Status == SubmissionStatus.InReview ? 0 : 1)
+                     .ThenByDescending(s => s.CreatedAt)
+        };
+
+        return await rows.AsNoTracking().ToListAsync(ct);
     }
 
     public async Task<Submission?> GetAsync(int id, CancellationToken ct = default)
@@ -634,6 +743,80 @@ public sealed class SubmissionService(
         }
         name = builder.ToString().Trim().TrimStart('.');
         return name.Length > 180 ? name[..180] : name;
+    }
+
+    public async Task<bool> SaveReviewAsync(int id, ReviewResult result, CancellationToken ct = default)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var row = await db.Submissions.FindAsync(new object[] { id }, ct);
+        if (row is null) return false;
+
+        row.ReviewScore = result.Score;
+        row.ReviewJson = result.RawJson;
+        row.ReviewSummary = result.Summary;
+        if (result.Tags.Count > 0)
+            row.TagsJson = System.Text.Json.JsonSerializer.Serialize(result.Tags);
+
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<(bool Ok, string Error)> UpdatePaperFileAsync(
+        int submissionId, long fileId, string newContent, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(newContent))
+            return (false, "Content cannot be empty.");
+
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var submission = await db.Submissions.FirstOrDefaultAsync(s => s.Id == submissionId, ct);
+        if (submission is null)
+            return (false, "Submission not found.");
+
+        if (submission.Status is SubmissionStatus.Accepted or SubmissionStatus.Rejected or SubmissionStatus.Withdrawn)
+            return (false, "Decided submissions cannot be edited.");
+
+        var file = await db.SubmissionFiles.FirstOrDefaultAsync(f => f.Id == fileId && f.SubmissionId == submissionId, ct);
+        if (file is null)
+            return (false, "Submission file not found.");
+
+        if (file.Kind == "paper" || file.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+        {
+            var (paperOk, paperError, parsed) = PaperService.ParseText(newContent);
+            if (!paperOk || parsed is null)
+                return (false, $"Invalid paper JSON: {paperError}");
+
+            if (!string.IsNullOrWhiteSpace(parsed.Title))
+                submission.Title = Clamp(parsed.Title, 300);
+            if (!string.IsNullOrWhiteSpace(parsed.Source))
+                submission.Source = Clamp(parsed.Source, 500);
+        }
+
+        file.Text = newContent;
+        file.SizeBytes = Encoding.UTF8.GetByteCount(newContent);
+        file.Sha256 = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(newContent))).ToLowerInvariant();
+
+        string? diskPath = StoredPath(submission.Reference, file.StoredName);
+        if (diskPath is not null)
+        {
+            await File.WriteAllTextAsync(diskPath, newContent, ct);
+        }
+
+        if (s3.Enabled)
+        {
+            try
+            {
+                using var s3Stream = new MemoryStream(Encoding.UTF8.GetBytes(newContent));
+                await s3.UploadAsync($"submissions/{submission.Reference}/{file.StoredName}", s3Stream, file.ContentType, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to update edited file {File} on S3", file.StoredName);
+            }
+        }
+
+        submission.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return (true, string.Empty);
     }
 }
 

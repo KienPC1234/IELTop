@@ -37,21 +37,77 @@
                         <input class="form-control" id="title" name="title" required
                                value="@Model.Title" placeholder="Reading practice, urban transport" />
                         <div class="form-text">
-                            A short name for this submission. If you send paper JSON, its own
-                            title is used for the published paper.
+                            A short descriptive title for this submission.
                         </div>
                     </div>
 
+                    <!-- Input Mode Tabs -->
                     <div class="mb-3">
-                        <label class="form-label" for="files">
-                            Paper and audio files
+                        <label class="form-label fw-semibold">Paper content method</label>
+                        <ul class="nav nav-pills nav-fill mb-3" id="inputMethodTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="editor-method-tab" data-bs-toggle="pill" data-bs-target="#editor-pane" type="button" role="tab">
+                                    <i class="bi bi-pencil-square me-1"></i>Online Editor & Templates
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="upload-method-tab" data-bs-toggle="pill" data-bs-target="#upload-pane" type="button" role="tab">
+                                    <i class="bi bi-cloud-arrow-up me-1"></i>Upload Files (DOCX, PDF, JSON, Audio)
+                                </button>
+                            </li>
+                        </ul>
+
+                        <div class="tab-content border rounded p-3 bg-body-tertiary" id="inputMethodContent">
+                            <!-- Online Editor Tab -->
+                            <div class="tab-pane fade show active" id="editor-pane" role="tabpanel">
+                                <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                                    <span class="small text-body-secondary fw-semibold">Insert IELTS Template:</span>
+                                    <button class="btn btn-sm btn-outline-primary py-0 px-2" type="button" onclick="loadTemplate('reading')">
+                                        <i class="bi bi-book me-1"></i>Reading
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success py-0 px-2" type="button" onclick="loadTemplate('listening')">
+                                        <i class="bi bi-headphones me-1"></i>Listening
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-warning py-0 px-2 text-dark" type="button" onclick="loadTemplate('writing')">
+                                        <i class="bi bi-pencil me-1"></i>Writing
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-info py-0 px-2 text-dark" type="button" onclick="loadTemplate('speaking')">
+                                        <i class="bi bi-chat-quote me-1"></i>Speaking
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary py-0 px-2" type="button" onclick="clearEditor()">
+                                        Clear
+                                    </button>
+                                </div>
+                                <textarea class="form-control font-monospace small" id="onlineContent" name="onlineContent" rows="14"
+                                          placeholder="Type or paste IELTS JSON paper structure here, or select a template above...">@Model.OnlineContent</textarea>
+                                <div class="form-text small mt-1">
+                                    Select an IELTS template above to start, or paste standard IELTS exam JSON or raw practice text.
+                                </div>
+                            </div>
+
+                            <!-- File Upload Tab -->
+                            <div class="tab-pane fade" id="upload-pane" role="tabpanel">
+                                <label class="form-label small fw-semibold" for="files">
+                                    Attach exam documents (.docx, .pdf, .json, .txt, .md, .csv)
+                                </label>
+                                <input class="form-control" id="files" name="files" type="file" multiple
+                                       accept=".json,.txt,.md,.csv,.docx,.pdf,.m4a,.opus,.ogg,.wav,.mp3,.aac,.flac" />
+                                <div class="form-text small mt-2">
+                                    You can attach Word (.docx), PDF, Markdown, JSON, or text documents. Text will be extracted and converted automatically into a draft paper.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Audio Clips Attachment (Optional) -->
+                    <div class="mb-3">
+                        <label class="form-label small fw-semibold" for="audioFiles">
+                            Optional audio clips (.m4a, .opus, .mp3, .wav)
                         </label>
-                        <input class="form-control" id="files" name="files" type="file" multiple required
-                               accept=".json,.txt,.md,.csv,.docx,.pdf,.m4a,.opus,.ogg,.wav,.mp3,.aac,.flac" />
-                        <div class="form-text">
-                            Send the paper as JSON, or as txt, md, csv, docx, or pdf text.
-                            Listening clips are m4a or opus, and the paper's <code>audioFile</code>
-                            must name them. You can attach several files at once.
+                        <input class="form-control form-control-sm" id="audioFiles" name="files" type="file" multiple
+                               accept=".m4a,.opus,.ogg,.wav,.mp3,.aac,.flac" />
+                        <div class="form-text small">
+                            Attach listening tracks referenced by <code>audioFile</code> in listening sections.
                         </div>
                     </div>
 
@@ -122,3 +178,156 @@
         </div>
     </div>
 </form>
+
+@section Scripts {
+    <script>
+        const ieltsTemplates = {
+            reading: {
+                title: "Reading Practice: Environmental Innovations",
+                category: "Academic",
+                level: "6.0-7.5",
+                tags: ["energy", "environment", "innovation"],
+                parts: [
+                    {
+                        id: "R1",
+                        skill: "Reading",
+                        title: "Reading Passage 1: Solar Power Developments",
+                        topic: "Clean Energy",
+                        taskType: "Passage 1",
+                        minutes: 20,
+                        instructions: "Read the passage carefully, then answer questions 1 and 2.",
+                        material: "Solar energy has emerged as one of the most viable alternatives to fossil fuels over the past two decades. Advances in photovoltaic cell efficiency have reduced production costs significantly, making residential solar panels accessible to millions of homeowners worldwide. However, energy storage remains a critical hurdle during periods of low sunlight.",
+                        questions: [
+                            {
+                                number: 1,
+                                prompt: "What has made residential solar panels accessible worldwide?",
+                                options: [
+                                    { key: "A", text: "Subsidies from international banks" },
+                                    { key: "B", text: "Improvements in photovoltaic cell efficiency" },
+                                    { key: "C", text: "A sudden shortage of coal and oil" }
+                                ],
+                                correctKey: "B",
+                                explanation: "The text directly states advances in photovoltaic cell efficiency reduced production costs significantly."
+                            },
+                            {
+                                number: 2,
+                                kind: "gap",
+                                prompt: "Energy ___ remains a critical challenge during low sunlight periods.",
+                                gapAnswer: "storage|storing"
+                            }
+                        ]
+                    }
+                ]
+            },
+            listening: {
+                title: "Listening Practice: University Library Tour",
+                category: "Academic",
+                level: "5.5-6.5",
+                tags: ["campus", "library", "education"],
+                parts: [
+                    {
+                        id: "L1",
+                        skill: "Listening",
+                        title: "Section 1: Library Services Orientation",
+                        topic: "Student services",
+                        taskType: "Section 1",
+                        minutes: 10,
+                        instructions: "Listen to the conversation and complete the notes below. Write no more than two words or a number.",
+                        audioFile: "library_tour.mp3",
+                        material: "Staff: Good morning, campus library information desk. How may I help you today?\nStudent: Hello, I am a new postgraduate student and would like to know about laptop borrowing hours.",
+                        questions: [
+                            {
+                                number: 1,
+                                kind: "gap",
+                                prompt: "The student is inquiring about laptop borrowing ___.",
+                                gapAnswer: "hours|times"
+                            },
+                            {
+                                number: 2,
+                                kind: "gap",
+                                prompt: "Laptops can be borrowed for a maximum of ___ hours.",
+                                gapAnswer: "two|2|2 hours|two hours"
+                            }
+                        ]
+                    }
+                ]
+            },
+            writing: {
+                title: "Writing Practice: Urbanization and Remote Work",
+                category: "Academic",
+                level: "6.0-8.0",
+                tags: ["writing", "society", "workplace"],
+                parts: [
+                    {
+                        id: "W1",
+                        skill: "Writing",
+                        title: "Writing Task 1: Chart Description",
+                        topic: "Employment trends",
+                        taskType: "Task 1 Report",
+                        minutes: 20,
+                        instructions: "Summarize the information by selecting and reporting the main features. Write at least 150 words.",
+                        material: "The chart below illustrates remote work percentages across five major European cities between 2019 and 2024. Summarize the key trends and compare where relevant.",
+                        questions: []
+                    },
+                    {
+                        id: "W2",
+                        skill: "Writing",
+                        title: "Writing Task 2: Opinion Essay",
+                        topic: "Urban life",
+                        taskType: "Task 2 Opinion",
+                        minutes: 40,
+                        instructions: "Write an essay of at least 250 words discussing both views and giving your own opinion.",
+                        material: "Some argue that remote work leads to the decline of city center economies, while others believe it revitalizes suburban communities. Discuss both views and give your own opinion.",
+                        questions: []
+                    }
+                ]
+            },
+            speaking: {
+                title: "Speaking Practice: Technology and Daily Life",
+                category: "Academic",
+                level: "5.0-7.5",
+                tags: ["speaking", "technology", "communication"],
+                parts: [
+                    {
+                        id: "S1",
+                        skill: "Speaking",
+                        title: "Speaking Part 1: Digital Habits",
+                        topic: "Technology",
+                        taskType: "Part 1 Interview",
+                        minutes: 4,
+                        instructions: "Answer the examiner questions clearly with complete sentences.",
+                        material: "1. How often do you use electronic devices for study?\n2. What is your favorite smartphone application and why?\n3. Do you prefer reading physical books or digital e-books?",
+                        questions: []
+                    },
+                    {
+                        id: "S2",
+                        skill: "Speaking",
+                        title: "Speaking Part 2: A Helpful Electronic Device",
+                        topic: "Gadgets",
+                        taskType: "Part 2 Cue Card",
+                        minutes: 3,
+                        instructions: "You have 1 minute to prepare notes. Talk for 1 to 2 minutes.",
+                        material: "Describe an electronic device you find particularly useful.\nYou should say:\n- What device it is\n- How often you use it\n- What you use it for\nAnd explain why you consider it so useful in your life.",
+                        questions: []
+                    }
+                ]
+            }
+        };
+
+        function loadTemplate(type) {
+            if (ieltsTemplates[type]) {
+                const area = document.getElementById('onlineContent');
+                const titleInput = document.getElementById('title');
+                area.value = JSON.stringify(ieltsTemplates[type], null, 2);
+                if (titleInput && (!titleInput.value || titleInput.value.trim().length === 0)) {
+                    titleInput.value = ieltsTemplates[type].title;
+                }
+            }
+        }
+
+        function clearEditor() {
+            const area = document.getElementById('onlineContent');
+            if (area) area.value = '';
+        }
+    </script>
+}

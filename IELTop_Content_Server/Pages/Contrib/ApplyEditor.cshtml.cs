@@ -15,7 +15,7 @@ public sealed class ApplyEditorModel(
     ICaptchaService captcha,
     INotificationService notify,
     IAuditService audit,
-    IOptions<CaptchaOptions> captchaOptions,
+    IIpAbuseGuard abuseGuard,
     ILogger<ApplyEditorModel> logger) : PageModel
 {    public string Email { get; private set; } = string.Empty;
     public string FullName { get; private set; } = string.Empty;
@@ -27,21 +27,28 @@ public sealed class ApplyEditorModel(
 
     public void OnGet()
     {
-        ViewData["CaptchaEnabled"] = captchaOptions.Value.Enabled;
-        ViewData["CaptchaSiteKey"] = captchaOptions.Value.SiteKey;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
     }
 
     public async Task<IActionResult> OnPostAsync(
         string email, string fullName, string languages, string portfolioUrl, string reason,
-        string? cfTurnstileResponse, CancellationToken ct)
+        [FromForm(Name = "cf-turnstile-response")] string? cfTurnstileResponse, CancellationToken ct)
     {
         Email = email ?? string.Empty;
         FullName = fullName ?? string.Empty;
         Languages = languages ?? string.Empty;
         PortfolioUrl = portfolioUrl ?? string.Empty;
         Reason = reason ?? string.Empty;
-        ViewData["CaptchaEnabled"] = captchaOptions.Value.Enabled;
-        ViewData["CaptchaSiteKey"] = captchaOptions.Value.SiteKey;
+        ViewData["CaptchaEnabled"] = captcha.Enabled;
+        ViewData["CaptchaSiteKey"] = captcha.SiteKey;
+
+        if (!string.IsNullOrEmpty(Request.Form["hp_website"]))
+        {
+            await abuseGuard.RecordHoneypotTriggerAsync(Ip, "Editor Application", ct);
+            Error = "Suspicious activity detected. Please try again.";
+            return Page();
+        }
 
         if (!await captcha.VerifyAsync(cfTurnstileResponse, Ip, ct))
         {
@@ -72,5 +79,5 @@ public sealed class ApplyEditorModel(
         return Page();
     }
 
-    private string Ip => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    private string Ip => HttpContext.GetClientIp();
 }

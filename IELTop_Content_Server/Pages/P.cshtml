@@ -1,0 +1,72 @@
+@page "/p/{slug?}"
+@model IELTop_Content_Server.Pages.PModel
+@{
+    Layout = "_Layout";
+}
+
+<div class="container py-4">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb mb-0">
+                <li class="breadcrumb-item"><a asp-page="/About" class="text-decoration-none">Home</a></li>
+                <li class="breadcrumb-item active" aria-current="page">@(Model.PageItem?.Title ?? "Page")</li>
+            </ol>
+        </nav>
+
+        @if (Model.PageItem is not null && (Model.PageItem.HasVietnamese || Model.PageItem.HasEnglish))
+        {
+            <div class="btn-group btn-group-sm shadow-sm" role="group" aria-label="Language selection">
+                <a href="/p/@(Model.PageItem.BaseSlug)?lang=en"
+                   class="btn @(Model.CurrentLang == "en" ? "btn-primary" : "btn-outline-secondary")"
+                   onclick="if(window.setIeltopLang){setIeltopLang('en');return false;}">
+                    English
+                </a>
+                <a href="/p/@(Model.PageItem.BaseSlug)?lang=vi"
+                   class="btn @(Model.CurrentLang == "vi" ? "btn-primary" : "btn-outline-secondary")"
+                   onclick="if(window.setIeltopLang){setIeltopLang('vi');return false;}">
+                    Tiếng Việt
+                </a>
+            </div>
+        }
+    </div>
+
+    @if (Model.PageItem is not null)
+    {
+        <article class="custom-markdown-article card shadow-sm border-0">
+            <div class="card-body p-4 p-md-5">
+                <div class="markdown-content">
+                    @Html.Raw(Model.PageItem.HtmlContent)
+                </div>
+
+                <hr class="my-5" />
+
+                <div class="d-flex flex-wrap align-items-center justify-content-between text-body-secondary small gap-3">
+                    <span>Last updated: @Model.PageItem.LastModified.ToString("MMMM dd, yyyy")</span>
+                    <div>
+                        <a asp-page="/About" class="btn btn-sm btn-outline-secondary me-2">Back to Overview</a>
+                        <a href="https://github.com/KienPC1234/IELTop" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary">
+                            Explore Code on GitHub
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </article>
+    }
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Automatically make markdown tables responsive
+            document.querySelectorAll('.markdown-content table').forEach(function(table) {
+                if (!table.parentElement.classList.contains('table-responsive')) {
+                    var wrapper = document.createElement('div');
+                    wrapper.className = 'table-responsive my-3';
+                    table.parentNode.insertBefore(wrapper, table);
+                    wrapper.appendChild(table);
+                    table.classList.add('table', 'table-bordered', 'table-hover', 'align-middle');
+                }
+            });
+        });
+    </script>
+}

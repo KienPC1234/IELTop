@@ -62,5 +62,5 @@ public abstract class ContribPageModel : PageModel
         }
     }
 
-    protected string Ip => HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    protected string Ip => HttpContext.GetClientIp();
 }

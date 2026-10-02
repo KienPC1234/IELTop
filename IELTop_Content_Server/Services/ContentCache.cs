@@ -20,6 +20,7 @@ public interface IContentCache
 {
     Task<long> VersionAsync(CancellationToken ct = default);
     Task BumpVersionAsync(CancellationToken ct = default);
+    Task<bool> PingAsync(CancellationToken ct = default);
 
     Task<T?> GetAsync<T>(string key, CancellationToken ct = default);
     Task SetAsync<T>(string key, T value, TimeSpan ttl, CancellationToken ct = default);
@@ -34,11 +35,20 @@ public sealed class ContentCache(
     IMemoryCache memory,
     IDistributedCache distributed,
     IDbContextFactory<AppDbContext> dbFactory,
-    IOptions<CacheOptions> options) : IContentCache
+    IOptions<CacheOptions> options,
+    StackExchange.Redis.IConnectionMultiplexer? redisMultiplexer = null) : IContentCache
 {
     private const string VersionKey = "content:version";
     private readonly CacheOptions _options = options.Value;
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _gates = new();
+    private readonly SemaphoreSlim[] _stripeGates = Enumerable.Range(0, 128)
+        .Select(_ => new SemaphoreSlim(1, 1))
+        .ToArray();
+
+    private SemaphoreSlim GetGate(string key)
+    {
+        uint hash = (uint)string.GetHashCode(key, StringComparison.Ordinal);
+        return _stripeGates[hash % (uint)_stripeGates.Length];
+    }
 
     private static readonly JsonSerializerOptions Json = new()
     {
@@ -47,10 +57,46 @@ public sealed class ContentCache(
 
     private static readonly TimeSpan VersionTtl = TimeSpan.FromSeconds(30);
 
+    public async Task<bool> PingAsync(CancellationToken ct = default)
+    {
+        if (string.Equals(_options.Provider, "Redis", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(_options.Provider, "RedisDistributed", StringComparison.OrdinalIgnoreCase))
+        {
+            if (redisMultiplexer is not null && redisMultiplexer.IsConnected)
+                return true;
+
+            try
+            {
+                await distributed.GetAsync("content:ping", ct);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public async Task<long> VersionAsync(CancellationToken ct = default)
     {
         if (memory.TryGetValue<long>(VersionKey, out var cached))
             return cached;
+
+        try
+        {
+            var distributedVersion = await distributed.GetStringAsync(VersionKey, ct);
+            if (!string.IsNullOrEmpty(distributedVersion) && long.TryParse(distributedVersion, out var dVersion))
+            {
+                memory.Set(VersionKey, dVersion, VersionTtl);
+                return dVersion;
+            }
+        }
+        catch
+        {
+            // Distributed cache unavailable, proceed to database
+        }
 
         long version = await ReadVersionAsync(ct);
         memory.Set(VersionKey, version, VersionTtl);
@@ -101,9 +147,22 @@ public sealed class ContentCache(
         }
 
         memory.Set(VersionKey, next, VersionTtl);
+        try
+        {
+            await distributed.SetStringAsync(
+                VersionKey,
+                next.ToString(),
+                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = VersionTtl },
+                ct);
+        }
+        catch
+        {
+            // Distributed cache unavailable, memory cache already updated
+        }
+
         // Drop the paper payloads so a stale detail page cannot outlive
         // a fresh list. Keys are versioned, so this is belt and braces.
-        await SafeRemoveAsync($"{VersionKey}:detail:{next - 1}");
+        await SafeRemoveAsync($"{VersionKey}:detail:{next - 1}", ct);
     }
 
     public async Task<T?> GetAsync<T>(string key, CancellationToken ct = default)
@@ -152,8 +211,7 @@ public sealed class ContentCache(
         if (existing is not null)
             return existing;
 
-        // One builder per key, so a stampede of clients builds once.
-        var gate = _gates.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+        var gate = GetGate(key);
         await gate.WaitAsync(ct);
         try
         {
@@ -169,8 +227,6 @@ public sealed class ContentCache(
         finally
         {
             gate.Release();
-            if (gate.CurrentCount == 1)
-                _gates.TryRemove(key, out _);
         }
     }
 
@@ -215,7 +271,7 @@ public sealed class ContentCache(
         if (existing is not null)
             return existing;
 
-        var gate = _gates.GetOrAdd(key, _ => new SemaphoreSlim(1, 1));
+        var gate = GetGate(key);
         await gate.WaitAsync(ct);
         try
         {
@@ -231,8 +287,6 @@ public sealed class ContentCache(
         finally
         {
             gate.Release();
-            if (gate.CurrentCount == 1)
-                _gates.TryRemove(key, out _);
         }
     }
 

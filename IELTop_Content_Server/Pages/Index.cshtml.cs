@@ -2,6 +2,7 @@ using IELTop_Content_Server.Data;
 using IELTop_Content_Server.Models;
 using IELTop_Content_Server.Options;
 using IELTop_Content_Server.Services;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -76,8 +77,14 @@ public sealed class IndexModel : PageModel
     public bool CaptchaEnabled => _captcha.Value.Enabled;
     public bool SmtpEnabled => _smtp.Value.Enabled;
 
-    public async Task OnGetAsync(CancellationToken ct)
+    public async Task<IActionResult> OnGetAsync(CancellationToken ct)
     {
+        if (User.Identity?.IsAuthenticated != true
+            || !User.HasClaim(System.Security.Claims.ClaimTypes.Role, "Admin"))
+        {
+            return RedirectToPage("/About");
+        }
+
         var greeting = await _protocol.GreetingAsync(ct);
         AuthModes = greeting.Auth;
         Skills = greeting.Skills;
@@ -114,5 +121,6 @@ public sealed class IndexModel : PageModel
                 : $"{(int)up.TotalMinutes}m {up.Seconds}s";
         WorkingSet = $"{System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024)} MB";
         Recent = await _audit.RecentAsync(8, ct);
+        return Page();
     }
 }

@@ -70,6 +70,8 @@ public sealed class ExamPaper
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public long DownloadCount { get; set; }
+    public bool IsExclusive { get; set; } = false;
+    public string ExclusiveCode { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -81,6 +83,9 @@ public sealed class AudioAsset
     public int Id { get; set; }
     public string FileName { get; set; } = string.Empty;
     public string ContentType { get; set; } = "application/octet-stream";
+    public string Format { get; set; } = "m4a";
+    public bool IsStandardized { get; set; } = true;
+    public string S3Url { get; set; } = string.Empty;
     public long SizeBytes { get; set; }
     public string Sha256 { get; set; } = string.Empty;
     public bool IsPublished { get; set; } = true;
@@ -100,6 +105,19 @@ public sealed class AuditLog
     public string Target { get; set; } = string.Empty;
     public string Ip { get; set; } = string.Empty;
     public string Detail { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// An IP address that is blocked from accessing the server.
+/// </summary>
+public sealed class BlockedIp
+{
+    public int Id { get; set; }
+    public string Ip { get; set; } = string.Empty;
+    public string Reason { get; set; } = string.Empty;
+    public DateTimeOffset BlockedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? ExpiresAt { get; set; }
+    public string CreatedBy { get; set; } = "System";
 }
 
 /// <summary>
@@ -271,6 +289,8 @@ public sealed class CatalogPaper
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
     public long DownloadCount { get; set; }
+    public bool IsExclusive { get; set; } = false;
+    public string ExclusiveCode { get; set; } = string.Empty;
 }
 
 /// <summary>

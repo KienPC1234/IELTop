@@ -38,6 +38,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CatalogPaper> Catalog => Set<CatalogPaper>();
     public DbSet<DailyStat> DailyStats => Set<DailyStat>();
+    public DbSet<BlockedIp> BlockedIps => Set<BlockedIp>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -172,6 +173,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.HasKey(x => x.Day);
             e.Property(x => x.Day).HasMaxLength(16);
             e.Property(x => x.UpdatedAt).HasConversion(required);
+        });
+
+        model.Entity<BlockedIp>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.Ip).IsUnique();
+            e.Property(x => x.Ip).HasMaxLength(64).IsRequired();
+            e.Property(x => x.Reason).HasMaxLength(256);
+            e.Property(x => x.CreatedBy).HasMaxLength(64);
+            e.Property(x => x.BlockedAt).HasConversion(required);
+            e.Property(x => x.ExpiresAt).HasConversion(optional);
         });
     }
 }

@@ -15,6 +15,8 @@ public sealed class HealthModel(
     IProtocolService protocol,
     IPaperService papers,
     IAudioService audio,
+    IContentCache cacheService,
+    IS3StorageService s3,
     IOptions<DatabaseOptions> database,
     IOptions<CacheOptions> cache) : PageModel
 {
@@ -27,12 +29,21 @@ public sealed class HealthModel(
     public List<string> AuthModes { get; private set; } = new();
     public string DatabaseProvider { get; private set; } = string.Empty;
     public string CacheProvider { get; private set; } = string.Empty;
+    public string CacheStatus { get; private set; } = string.Empty;
+    public string DatabaseStatus { get; private set; } = string.Empty;
+    public string StorageStatus { get; private set; } = string.Empty;
 
     public async Task OnGetAsync(CancellationToken ct)
     {
         DatabaseProvider = database.Value.Provider;
         CacheProvider = cache.Value.Provider;
         BaseUrl = $"{Request.Scheme}://{Request.Host}";
+
+        bool cacheOk = await cacheService.PingAsync(ct);
+        CacheStatus = cacheOk ? "Operational" : "Degraded";
+
+        bool s3Ok = !s3.Enabled || await s3.PingAsync(ct);
+        StorageStatus = s3Ok ? "Operational" : "Degraded";
 
         try
         {
@@ -41,16 +52,22 @@ public sealed class HealthModel(
             PaperCount = await papers.CountAsync(ct);
             AudioCount = (await audio.ListAsync(ct)).Count;
             Protocol = greeting.Protocol;
+            DatabaseStatus = "Operational";
 
-            Healthy = AuthModes.Count > 0;
+            Healthy = AuthModes.Count > 0 && cacheOk && s3Ok;
             Message = Healthy
-                ? "Clients can connect. Papers and audio are served through the cache."
-                : "No auth mode is enabled, so every client is refused.";
+                ? "All public services are operational."
+                : (!cacheOk
+                    ? "Cache acceleration is currently degraded."
+                    : (!s3Ok
+                        ? "Object storage service is currently degraded."
+                        : "Client authentication is currently restricted."));
         }
-        catch (Exception e)
+        catch (Exception)
         {
             Healthy = false;
-            Message = $"The store could not be read: {e.GetType().Name}.";
+            DatabaseStatus = "Degraded";
+            Message = "Database connectivity is currently degraded.";
         }
     }
 }

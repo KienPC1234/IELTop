@@ -101,7 +101,17 @@
         @foreach (var clip in Model.Clips)
         {
             <tr>
-                <td><code>@clip.FileName</code></td>
+                <td>
+                    <code>@clip.FileName</code>
+                    @if (!string.IsNullOrWhiteSpace(clip.Format))
+                    {
+                        <span class="badge @(clip.IsStandardized ? "text-bg-success" : "text-bg-secondary") ms-1">@clip.Format.ToUpperInvariant()</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(clip.S3Url))
+                    {
+                        <span class="badge text-bg-info ms-1">S3</span>
+                    }
+                </td>
                 <td>@clip.ContentType</td>
                 <td class="text-end">@Model.Size(clip.SizeBytes)</td>
                 <td class="text-end">@clip.DownloadCount</td>

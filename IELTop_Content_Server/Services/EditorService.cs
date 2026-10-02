@@ -31,6 +31,7 @@ public sealed class EditorService(
     IContributorService contributors,
     INotificationService notify,
     IOptions<SmtpOptions> smtp,
+    IEmailCheckService emailCheck,
     ILogger<EditorService> logger) : IEditorService
 {
     private readonly SmtpOptions _smtp = smtp.Value;
@@ -56,8 +57,9 @@ public sealed class EditorService(
         CancellationToken ct = default)
     {
         email = ContributorService.Normalize(email);
-        if (!ContributorService.LooksLikeEmail(email))
-            return (false, "Enter a valid email address.", null);
+        var check = await emailCheck.ValidateAsync(email, ct);
+        if (!check.Valid)
+            return (false, check.Error, null);
         if (string.IsNullOrWhiteSpace(fullName))
             return (false, "Enter your name.", null);
         var reason2 = (reason ?? string.Empty).Trim();

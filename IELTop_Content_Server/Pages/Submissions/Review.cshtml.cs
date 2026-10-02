@@ -12,6 +12,7 @@ namespace IELTop_Content_Server.Pages.Submissions;
 [EnableRateLimiting("form")]
 public sealed class ReviewModel(
     ISubmissionService submissions,
+    ILlmReviewService llm,
     IAuditService audit) : PageModel
 {
     public Submission Submission { get; private set; } = new();
@@ -19,6 +20,7 @@ public sealed class ReviewModel(
     public List<string> Problems { get; private set; } = new();
     public List<string> Suggestions { get; private set; } = new();
     public string SuggestedTags { get; private set; } = string.Empty;
+    public bool LlmEnabled => llm.Enabled;
 
     public async Task<IActionResult> OnGetAsync(int id, CancellationToken ct)
     {
@@ -55,6 +57,51 @@ public sealed class ReviewModel(
             ? "The submission was rejected and the author was notified."
             : error;
         return RedirectToPage("/Submissions/Index");
+    }
+
+    public async Task<IActionResult> OnPostReRunAsync(int id, CancellationToken ct)
+    {
+        var row = await submissions.GetAsync(id, ct);
+        if (row is null)
+            return RedirectToPage("/Submissions/Index");
+
+        if (!llm.Enabled)
+        {
+            TempData["Warning"] = "No AI model is configured. Go to Settings to set up the model.";
+            return RedirectToPage(new { id });
+        }
+
+        var files = await submissions.FilesAsync(id, ct);
+        string paperText = string.Join("\n\n", files.Where(f => f.Text.Length > 0).Select(f => f.Text));
+
+        var result = await llm.ReviewAsync(row.Title, row.Source, row.License, paperText, ct);
+
+        if (!result.Ran)
+        {
+            TempData["Error"] = $"AI review failed: {result.Error}";
+            return RedirectToPage(new { id });
+        }
+
+        await submissions.SaveReviewAsync(id, result, ct);
+        await audit.WriteAsync(Actor, "submission.rerun-review", id.ToString(),
+            $"score={result.Score} passed={result.Passed}", Ip, ct);
+        TempData["Message"] = $"AI review done. Score: {result.Score}/100, passed: {result.Passed}.";
+        return RedirectToPage(new { id });
+    }
+
+    public async Task<IActionResult> OnPostSavePaperAsync(int id, long fileId, string paperContent, CancellationToken ct)
+    {
+        var (ok, error) = await submissions.UpdatePaperFileAsync(id, fileId, paperContent ?? string.Empty, ct);
+        if (!ok)
+        {
+            TempData["Error"] = $"Could not save paper: {error}";
+        }
+        else
+        {
+            TempData["Message"] = "Paper content saved successfully.";
+            await audit.WriteAsync(Actor, "submission.edit-paper", id.ToString(), $"fileId={fileId}", Ip, ct);
+        }
+        return RedirectToPage(new { id });
     }
 
     private void ReadReview(string json)

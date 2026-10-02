@@ -1,53 +1,95 @@
 @page
 @{
-    ViewData["Title"] = "Content and licensing";
+    ViewData["Title"] = "Content and Licensing Policy";
 }
 
-<div class="row">
-    <div class="col-lg-8">
-        <h1 class="h3 mb-3">Content and licensing</h1>
+<div class="container py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-9">
+            <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+                <div>
+                    <h1 class="h3 fw-bold mb-1">Content and Licensing Policy</h1>
+                    <p class="text-body-secondary small mb-0">Legal safeguards, content provenance, and privacy practices.</p>
+                </div>
+                <a asp-page="/About" class="btn btn-sm btn-outline-secondary">Overview</a>
+            </div>
 
-        <p>
-            This server only serves practice content that someone has the right to share.
-            Every paper carries a source and a license, and every accepted submission was
-            confirmed by its author before review.
-        </p>
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4 p-md-5">
+                    <h2 class="h5 fw-bold mb-3">Acceptable Practice Content</h2>
+                    <p class="text-body-secondary">
+                        The IELTop Content Server strictly hosts practice material that has been confirmed for redistribution under open or permissive licenses. Every published test paper documents its origin and specific license terms.
+                    </p>
+                    <div class="row g-3 my-3">
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-body-tertiary h-100">
+                                <h3 class="h6 fw-semibold text-primary mb-1">Original Works</h3>
+                                <p class="small text-body-secondary mb-0">Original questions, essays, and reading passages crafted explicitly for IELTop.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-body-tertiary h-100">
+                                <h3 class="h6 fw-semibold text-success mb-1">Permissive Creative Commons</h3>
+                                <p class="small text-body-secondary mb-0">Material distributed under compatible Creative Commons attribution licenses.</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 border rounded bg-body-tertiary h-100">
+                                <h3 class="h6 fw-semibold text-secondary mb-1">Public Domain</h3>
+                                <p class="small text-body-secondary mb-0">Educational and reference resources in the public domain.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="alert alert-secondary small mb-0">
+                        <strong>Notice:</strong> We do not accept proprietary, leaked, or commercial examination papers that violate copyright protections.
+                    </div>
+                </div>
+            </div>
 
-        <h2 class="h5 mt-4">What we accept</h2>
-        <ul>
-            <li>Original content written for IELTop.</li>
-            <li>Content released under a license that allows redistribution, for example
-                Creative Commons.</li>
-            <li>Public domain material.</li>
-        </ul>
-        <p>We do not accept paid exam papers, copyrighted passages, or anything the
-            author cannot redistribute.</p>
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4 p-md-5">
+                    <h2 class="h5 fw-bold mb-3">Editorial Review and Quality Lifecycle</h2>
+                    <ol class="list-group list-group-numbered list-group-flush small">
+                        <li class="list-group-item px-0 py-2 border-0">
+                            <strong>Authorship declaration:</strong> Contributors certify ownership or redistribution rights upon submission.
+                        </li>
+                        <li class="list-group-item px-0 py-2 border-0">
+                            <strong>Automated checks:</strong> Automated validation inspects structure, formatting integrity, and question completeness.
+                        </li>
+                        <li class="list-group-item px-0 py-2 border-0">
+                            <strong>Editorial decision:</strong> A qualified human editor reviews the test for pedagogical quality before approving release.
+                        </li>
+                        <li class="list-group-item px-0 py-2 border-0">
+                            <strong>Notification:</strong> The author is promptly notified via automated email regarding the decision and feedback notes.
+                        </li>
+                    </ol>
+                </div>
+            </div>
 
-        <h2 class="h5 mt-4">How review works</h2>
-        <ol>
-            <li>You confirm authorship when you submit.</li>
-            <li>A model reads the paper, suggests tags, and lists any problems.</li>
-            <li>A human editor accepts it, or sends it back with a reason.</li>
-            <li>You get an email either way.</li>
-        </ol>
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4 p-md-5">
+                    <h2 class="h5 fw-bold mb-3">Privacy and Data Protection</h2>
+                    <ul class="text-body-secondary small mb-3">
+                        <li class="mb-2">Account email addresses are strictly used for authentication and service communications, and are never exposed publicly on exam cards.</li>
+                        <li class="mb-2">User passwords are protected with industry standard salted PBKDF2 hashing (120,000 rounds) and are never stored in plain text.</li>
+                        <li class="mb-0">Uploaded practice content and audio files are preserved with immutable cryptographic hashes to guarantee reproducibility.</li>
+                    </ul>
+                </div>
+            </div>
 
-        <h2 class="h5 mt-4">Your data</h2>
-        <ul>
-            <li>Your account email is used to sign in and to notify you. It is never shown
-                on a published paper.</li>
-            <li>Passwords are hashed with PBKDF2 and never stored as text.</li>
-            <li>Submitted files are kept with the submission so a review is reproducible.</li>
-        </ul>
+            <div class="card border-0 shadow-sm border-start border-4 border-warning mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h6 fw-bold mb-2">Examination Score Disclaimer</h2>
+                    <p class="small text-body-secondary mb-0">
+                        Band scores, analytical diagnostics, and automated assessments provided by the IELTop desktop application and content platform are practice estimates designed for training. They do not constitute official IELTS results or certificates issued by IELTS Australia, the British Council, or Cambridge English.
+                    </p>
+                </div>
+            </div>
 
-        <h2 class="h5 mt-4">Scores</h2>
-        <p>
-            Any band or score shown in the app is a practice estimate, not an official
-            IELTS result.
-        </p>
-
-        <p class="mt-4">
-            <a class="btn btn-primary" asp-page="/Contrib/Register">Create an account</a>
-            <a class="btn btn-outline-secondary" asp-page="/About">Back to about</a>
-        </p>
+            <div class="d-flex gap-2">
+                <a class="btn btn-primary" asp-page="/Contrib/Register">Create Contributor Account</a>
+                <a class="btn btn-outline-secondary" asp-page="/About">Back to Overview</a>
+            </div>
+        </div>
     </div>
 </div>

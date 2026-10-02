@@ -1,12 +1,31 @@
 @{
     bool enabled = ViewData["CaptchaEnabled"] as bool? ?? false;
     string siteKey = ViewData["CaptchaSiteKey"] as string ?? string.Empty;
+    var math = ViewData["MathChallenge"] as IELTop_Content_Server.Services.MathChallenge;
 }
+<div style="display:none !important; visibility:hidden !important; position:absolute; left:-9999px;">
+    <label for="hp_website">Leave this empty</label>
+    <input type="text" id="hp_website" name="hp_website" tabindex="-1" autocomplete="off" />
+</div>
 @if (enabled)
 {
     <div class="mb-3">
         <div class="cf-turnstile" data-sitekey="@siteKey" data-theme="light"></div>
-        <div class="form-text">Complete the check so we know you are a person.</div>
+        <div class="form-text">Complete the verification check.</div>
     </div>
     <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+}
+else if (math is not null)
+{
+    <div class="mb-3 p-3 border rounded bg-body-tertiary">
+        <label class="form-label small fw-semibold" for="captcha_answer">
+            Anti-bot verification: What is @math.Question
+        </label>
+        <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="bi bi-shield-check"></i></span>
+            <input class="form-control font-monospace" type="number" id="captcha_answer" name="captcha_answer" required placeholder="Answer" />
+            <input type="hidden" name="captcha_signature" value="@math.Signature" />
+        </div>
+        <div class="form-text small">Human verification required to process AI evaluation.</div>
+    </div>
 }

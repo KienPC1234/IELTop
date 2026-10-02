@@ -27,6 +27,9 @@ public sealed class ServerGreeting
     public string Protocol { get; set; } = "ieltop/1";
     public List<string> Auth { get; set; } = new();
     public List<string> Skills { get; set; } = new();
+    public Dictionary<string, bool> Features { get; set; } = new();
+    public List<string> AudioCodecs { get; set; } = new() { "m4a", "opus" };
+    public Dictionary<string, string> Endpoints { get; set; } = new();
 }
 
 /// <summary>
@@ -99,7 +102,29 @@ public sealed class ProtocolService(
                     Name = name,
                     Protocol = "ieltop/1",
                     Auth = auth,
-                    Skills = skills
+                    Skills = skills,
+                    Features = new Dictionary<string, bool>
+                    {
+                        ["centerEdition"] = CenterModuleLoader.IsCenterModuleLoaded,
+                        ["exclusiveExamProtection"] = CenterModuleLoader.IsCenterModuleLoaded,
+                        ["antiLeakWatermark"] = CenterModuleLoader.IsCenterModuleLoaded,
+                        ["customClientProfile"] = true,
+                        ["deferredAnswers"] = true,
+                        ["audioStandardization"] = true,
+                        ["s3Storage"] = true
+                    },
+                    AudioCodecs = new List<string> { "m4a", "opus" },
+                    Endpoints = new Dictionary<string, string>
+                    {
+                        ["GET /api/info"] = "Server greeting, capability discovery, and endpoint specification",
+                        ["GET /api/health"] = "Health and subsystem readiness diagnostic",
+                        ["GET /api/client/profile"] = "Custom client branding profile, theme, and center server configuration",
+                        ["POST /api/login"] = "Authenticates user and exchanges for bearer access token",
+                        ["GET /api/papers"] = "Catalog listing with skill, category, and query filters",
+                        ["GET /api/papers/{id}"] = "Full exam paper payload with optional anti-leak watermark and mode=exam answer hiding",
+                        ["POST /api/papers/verify-watermark"] = "Verifies leaked paper watermark to identify leaker identity and origin",
+                        ["GET /api/audio/{file}"] = "HTTP byte-range streaming for standardized m4a and opus audio tracks"
+                    }
                 };
             },
             ct);

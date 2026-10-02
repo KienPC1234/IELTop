@@ -10,11 +10,15 @@ namespace IELTop_Content_Server.Services;
 /// The check is off when no keys are set, so the server works offline
 /// and a developer is not blocked.
 /// </summary>
+public sealed record MathChallenge(string Question, string Signature);
+
 public interface ICaptchaService
 {
     bool Enabled { get; }
     string SiteKey { get; }
+    MathChallenge CreateMathChallenge();
     Task<bool> VerifyAsync(string? token, string remoteIp, CancellationToken ct = default);
+    Task<bool> VerifySubmissionAsync(string? turnstileToken, string? mathAnswer, string? mathSignature, string remoteIp, CancellationToken ct = default);
 }
 
 public sealed class CaptchaService(
@@ -30,13 +34,56 @@ public sealed class CaptchaService(
     private const string TestSiteKey = "1x00000000000000000000AA";
     private const string TestSecretKey = "1x0000000000000000000000000000000AA";
 
+    private static readonly byte[] InternalSecret = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
     private readonly CaptchaOptions _options = options.Value;
 
     public bool Enabled => _options.Enabled && !IsTestKeyInRelease();
     public string SiteKey => _options.SiteKey;
 
     private bool IsTestKeyInRelease() =>
-        !environment.IsDevelopment() && _options.SecretKey == TestSecretKey;
+        !environment.IsDevelopment() && !_options.AllowTestKeys && _options.SecretKey == TestSecretKey;
+
+    public MathChallenge CreateMathChallenge()
+    {
+        int a = Random.Shared.Next(2, 19);
+        int b = Random.Shared.Next(1, 14);
+        int expected = a + b;
+        long timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        string payload = $"{expected}:{timestamp}";
+        using var hmac = new System.Security.Cryptography.HMACSHA256(InternalSecret);
+        string hash = Convert.ToHexString(hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
+        string signature = $"{timestamp}:{hash}";
+        return new MathChallenge($"{a} + {b} = ?", signature);
+    }
+
+    public async Task<bool> VerifySubmissionAsync(
+        string? turnstileToken, string? mathAnswer, string? mathSignature, string remoteIp, CancellationToken ct = default)
+    {
+        if (Enabled)
+        {
+            return await VerifyAsync(turnstileToken, remoteIp, ct);
+        }
+
+        if (string.IsNullOrWhiteSpace(mathAnswer) || string.IsNullOrWhiteSpace(mathSignature))
+            return false;
+
+        var parts = mathSignature.Split(':', 2);
+        if (parts.Length != 2 || !long.TryParse(parts[0], out long ts))
+            return false;
+
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        if (Math.Abs(now - ts) > 900)
+            return false;
+
+        string expectedHash = parts[1];
+        string payload = $"{mathAnswer.Trim()}:{ts}";
+        using var hmac = new System.Security.Cryptography.HMACSHA256(InternalSecret);
+        string actualHash = Convert.ToHexString(hmac.ComputeHash(System.Text.Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
+
+        return System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Text.Encoding.UTF8.GetBytes(actualHash),
+            System.Text.Encoding.UTF8.GetBytes(expectedHash));
+    }
 
     public async Task<bool> VerifyAsync(string? token, string remoteIp, CancellationToken ct = default)
     {
@@ -53,7 +100,7 @@ public sealed class CaptchaService(
                 ["secret"] = _options.SecretKey,
                 ["response"] = token
             };
-            if (!string.IsNullOrWhiteSpace(remoteIp))
+            if (!string.IsNullOrWhiteSpace(remoteIp) && !IpAbuseGuard.IsInternalOrLoopback(remoteIp))
                 payload["remoteip"] = remoteIp;
 
             using var response = await client.PostAsync(

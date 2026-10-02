@@ -1,50 +1,80 @@
 @page
 @model IELTop_Content_Server.Pages.HealthModel
 @{
-    Layout = null;
+    ViewData["Title"] = "Server Health Diagnostic";
+    Layout = "_Layout";
 }
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8" />
-    <title>Health - IELTop Content Server</title>
-    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
-</head>
-<body class="bg-body-tertiary">
+
 <div class="container py-4">
-    <div class="card">
-        <div class="card-body">
-            <h1 class="h4">@(Model.Healthy ? "Server is ready" : "Server has a problem")</h1>
-            <p class="mb-2">@Model.Message</p>
-            <ul class="list-group list-group-flush mb-3">
-                <li class="list-group-item d-flex justify-content-between">
-                    <span>Protocol</span><code>@Model.Protocol</code>
-                </li>
-                <li class="list-group-item d-flex justify-content-between">
-                    <span>Address</span><code>@Model.BaseUrl</code>
-                </li>
-                <li class="list-group-item d-flex justify-content-between">
-                    <span>Papers ready</span><span>@Model.PaperCount</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between">
-                    <span>Audio ready</span><span>@Model.AudioCount</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between">
-                    <span>Auth modes</span><span>@string.Join(", ", Model.AuthModes)</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between">
-                    <span>Database</span><span>@Model.DatabaseProvider</span>
-                </li>
-                <li class="list-group-item d-flex justify-content-between">
-                    <span>Cache</span><span>@Model.CacheProvider</span>
-                </li>
-            </ul>
-            <a class="btn btn-primary" asp-page="/Index">Back to the dashboard</a>
+    <div class="row justify-content-center">
+        <div class="col-lg-7">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-4 pb-2 border-bottom">
+                <div>
+                    <h1 class="h3 fw-bold mb-1">Service Status</h1>
+                    <p class="text-body-secondary small mb-0">System operational metrics and service availability.</p>
+                </div>
+                <span class="badge @(Model.Healthy ? "bg-success" : "bg-danger") px-3 py-2 fs-6">
+                    @(Model.Healthy ? "All Systems Operational" : "Service Disruption")
+                </span>
+            </div>
+
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h2 class="h6 text-uppercase text-body-secondary fw-bold mb-3 tracking-wide">Public Services</h2>
+                    <ul class="list-group list-group-flush mb-4">
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-3">
+                            <div>
+                                <div class="fw-semibold">Content API Gateway</div>
+                                <div class="small text-body-secondary">Client connection and authentication endpoint</div>
+                            </div>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">Operational</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-3">
+                            <div>
+                                <div class="fw-semibold">Exam Paper Catalog</div>
+                                <div class="small text-body-secondary">@Model.PaperCount verified exam papers ready for practice</div>
+                            </div>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">Operational</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-3">
+                            <div>
+                                <div class="fw-semibold">Audio Delivery Network</div>
+                                <div class="small text-body-secondary">@Model.AudioCount listening test audio tracks</div>
+                            </div>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">Operational</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-3">
+                            <div>
+                                <div class="fw-semibold">Storage & Distribution Engine</div>
+                                <div class="small text-body-secondary">Paper materials, documents, and media storage</div>
+                            </div>
+                            <span class="badge @(Model.StorageStatus == "Operational" ? "bg-success-subtle text-success border border-success-subtle" : "bg-danger-subtle text-danger border border-danger-subtle") px-2 py-1">@Model.StorageStatus</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-3">
+                            <div>
+                                <div class="fw-semibold">Database & Content Records</div>
+                                <div class="small text-body-secondary">Catalog indexing, questions, and metadata records</div>
+                            </div>
+                            <span class="badge @(Model.DatabaseStatus == "Operational" ? "bg-success-subtle text-success border border-success-subtle" : "bg-danger-subtle text-danger border border-danger-subtle") px-2 py-1">@Model.DatabaseStatus</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-3">
+                            <div>
+                                <div class="fw-semibold">Cache & Acceleration Layer</div>
+                                <div class="small text-body-secondary">High-speed client response caching</div>
+                            </div>
+                            <span class="badge @(Model.CacheStatus == "Operational" ? "bg-success-subtle text-success border border-success-subtle" : "bg-danger-subtle text-danger border border-danger-subtle") px-2 py-1">@Model.CacheStatus</span>
+                        </li>
+                    </ul>
+
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-outline-secondary" asp-page="/About">Back to Home</a>
+                        @if (User.IsInRole("Admin"))
+                        {
+                            <a class="btn btn-primary" asp-page="/Index">Open Admin Dashboard</a>
+                        }
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
-    <p class="text-muted small mt-3 mb-0">
-        Add <code>/api/info</code> to the address above to see the greeting the app reads.
-    </p>
 </div>
-</body>
-</html>
