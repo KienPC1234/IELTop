@@ -13,7 +13,7 @@ optimum-cli export onnx --model Unbabel/gec-t5_small --task text2text-generation
 python export_onnx.py
 ```
 
-Copy into `IELTop/Assets/Models/`:
+Copy into `Content/Assets/Models/`:
 
 - `gec-t5-small-encoder-int8.onnx`
 - `gec-t5-small-decoder-int8.onnx`

@@ -20,7 +20,7 @@ Guarded endpoints need `X-Access-Code` or `Authorization: Bearer`.
 
 ```powershell
 cd tools/content-server
-python server.py --papers ../../IELTop/Assets/Exams --port 8765
+python server.py --papers ../../Content/Assets/Exams --port 8765
 python server.py --papers ./papers --audio ./audio --code SECRET
 python server.py --papers ./papers --user teacher --password SECRET
 ```

@@ -1,0 +1,95 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>IELTop.Desktop</RootNamespace>
+    <AssemblyName>IELTop.Desktop</AssemblyName>
+    <Version>1.0.0</Version>
+    <Company>IELTop</Company>
+    <Product>IELTop</Product>
+    <Description>IELTop desktop client. Cross platform shell with a web UI.</Description>
+    <ApplicationIcon>..\Content\Assets\Images\app.ico</ApplicationIcon>
+
+    <!-- A self contained build is not needed: the .NET runtime is already on
+         the machine. Trimming and ReadyToRun stay off so the model runtime is
+         never stripped and the build stays small. -->
+    <SelfContained>false</SelfContained>
+    <PublishTrimmed>false</PublishTrimmed>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!-- Photino.Native ships one native library per platform, so a RID is
+         needed even for a framework dependent build. Derive it from the OS. -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' AND $([MSBuild]::IsOSPlatform('Windows'))">win-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' AND $([MSBuild]::IsOSPlatform('Linux'))">linux-x64</RuntimeIdentifier>
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == '' AND $([MSBuild]::IsOSPlatform('OSX'))">osx-x64</RuntimeIdentifier>
+  </PropertyGroup>
+
+  <!-- Build the web UI before the C# build, so dotnet build alone brings
+       everything up to date. Skipped when npm is missing, so a machine without
+       Node still builds the app from the committed output if present. -->
+  <PropertyGroup>
+    <UiDir>$(MSBuildProjectDirectory)\UserInterface</UiDir>
+    <UiStamp>$(UiDir)\node_modules\.install-stamp</UiStamp>
+  </PropertyGroup>
+
+  <Target Name="WebUiInstall" Condition="!Exists('$(UiStamp)')">
+    <Exec Command="npm install --no-fund --no-audit" WorkingDirectory="$(UiDir)" ContinueOnError="true" />
+    <Touch Files="$(UiStamp)" AlwaysCreate="true" Condition="Exists('$(UiDir)\node_modules')" />
+  </Target>
+
+  <Target Name="WebUiBuild" DependsOnTargets="WebUiInstall" BeforeTargets="PrepareForBuild">
+    <Exec Command="npm run build" WorkingDirectory="$(UiDir)" ContinueOnError="true" />
+    <Warning Text="The web UI build was skipped. Run 'npm run build' in IELTop.Desktop/UserInterface if the app shows a blank page."
+             Condition="!Exists('$(MSBuildProjectDirectory)\wwwroot\index.html')" />
+  </Target>
+
+  <ItemGroup>
+    <PackageReference Include="Photino.NET" Version="4.0.16" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\IELTop.Core\IELTop.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The built web UI. npm build writes here, and it is copied next to
+         the app so the local file server can read it. -->
+    <None Update="wwwroot\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Shared read only content: exams, audio, and images. The big ONNX
+         models are left out on purpose: they are large, optional, and added by
+         the user next to the app when wanted. A missing model is a clear,
+         handled state, never a crash. -->
+    <None Include="..\Content\Assets\Exams\**" Link="Assets\Exams\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Content\Assets\Audio\**" Link="Assets\Audio\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Content\Assets\Images\**" Link="Assets\Images\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- The model folder readme and the phoneme map are small and useful. -->
+    <None Include="..\Content\Assets\Models\README.md" Link="Assets\Models\README.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Content\Assets\Models\phoneme-map.json" Link="Assets\Models\phoneme-map.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <!-- Community server list, read at startup for the Servers page. -->
+    <None Include="..\Content\servers.txt" Link="servers.txt">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

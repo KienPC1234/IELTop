@@ -7,7 +7,7 @@ Runs once on a dev machine, not in the app:
 
 Copies stt-whisper-tiny-en-encoder-int8.onnx,
 stt-whisper-tiny-en-decoder-int8.onnx, and stt-whisper-tiny-en-vocab.json
-into IELTop/Assets/Models/.
+into Content/Assets/Models/.
 """
 
 import json
@@ -58,7 +58,7 @@ def main() -> None:
         quantize(src, OUT / dst_name)
         print(f"wrote {dst_name}")
     fetch_vocab()
-    print("Copy the *-int8.onnx and *-vocab.json files into IELTop/Assets/Models/.")
+    print("Copy the *-int8.onnx and *-vocab.json files into Content/Assets/Models/.")
 
 
 if __name__ == "__main__":

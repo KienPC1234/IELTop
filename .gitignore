@@ -24,9 +24,20 @@ settings.json
 **/tools/**/.venv/
 **/tools/**/models/
 __pycache__/
+tools/speaking-mdd/cmudict.dict
+# Web UI dependencies, caches, and build output for the desktop client
+node_modules/
+**/node_modules/
+IELTop.Desktop/UserInterface/.vite/
+IELTop.Desktop/UserInterface/dist/
+IELTop.Desktop/UserInterface/build/
+IELTop.Desktop/wwwroot/
+*.tsbuildinfo
 bin/
 obj/
 .vs/
+.idea/
+*.user
 # Velopack build output
 publish/
 releases/
@@ -38,7 +49,6 @@ IELTop_Content_Server/appsettings.Production.json
 IELTop_Content_Server/appsettings.*.local.json
 *.env
 IELTop_Content_Server/Content/
+!IELTop_Content_Server/Content/Pages/
 IELTop_Content_Server/Center/
 Center/
-
-

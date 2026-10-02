@@ -6,7 +6,7 @@ Runs once on a dev machine, not in the app:
 Downloads en_US-lessac-medium (MIT, rhasspy/piper-voices) and the
 espeak-ng 1.52.0 Windows build, extracts the portable exe plus voice
 data, and runs a test synthesis. Copy the results into
-IELTop/Assets/Models/ as tts-piper-lessac-medium.onnx,
+Content/Assets/Models/ as tts-piper-lessac-medium.onnx,
 tts-piper-lessac-medium.onnx.json, and the espeak-ng folder.
 """
 
@@ -101,7 +101,7 @@ def main() -> None:
     exe = fetch_espeak()
     test_voice(exe)
     print("Copy tts-piper-lessac-medium.onnx, tts-piper-lessac-medium.onnx.json,")
-    print("and the espeak-ng folder into IELTop/Assets/Models/.")
+    print("and the espeak-ng folder into Content/Assets/Models/.")
 
 
 if __name__ == "__main__":

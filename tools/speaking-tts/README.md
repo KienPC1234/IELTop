@@ -12,7 +12,7 @@ conda activate .\.venv
 python fetch_models.py
 ```
 
-Copy into `IELTop/Assets/Models/`:
+Copy into `Content/Assets/Models/`:
 
 - `tts-piper-lessac-medium.onnx`
 - `tts-piper-lessac-medium.onnx.json`

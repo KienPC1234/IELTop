@@ -12,7 +12,7 @@ optimum-cli export onnx --model openai/whisper-tiny.en --task automatic-speech-r
 python export_onnx.py
 ```
 
-Copy into `IELTop/Assets/Models/`:
+Copy into `Content/Assets/Models/`:
 
 - `stt-whisper-tiny-en-encoder-int8.onnx`
 - `stt-whisper-tiny-en-decoder-int8.onnx`
