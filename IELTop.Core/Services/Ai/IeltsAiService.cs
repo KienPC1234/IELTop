@@ -63,7 +63,25 @@ public sealed class WritingFeedback
     [JsonPropertyName("corrected_excerpt")]
     public string CorrectedExcerpt { get; set; } = string.Empty;
 
+    [JsonPropertyName("grammar_errors")]
+    public List<GrammarErrorItem> GrammarErrors { get; set; } = new();
+
     public string BandLabel => $"{IeltsBanding.RoundHalf(BandLow):0.0} to {IeltsBanding.RoundHalf(BandHigh):0.0}";
+}
+
+public sealed class GrammarErrorItem
+{
+    [JsonPropertyName("original")]
+    public string Original { get; set; } = string.Empty;
+
+    [JsonPropertyName("correction")]
+    public string Correction { get; set; } = string.Empty;
+
+    [JsonPropertyName("rule")]
+    public string Rule { get; set; } = string.Empty;
+
+    [JsonPropertyName("explanation")]
+    public string Explanation { get; set; } = string.Empty;
 }
 
 public sealed record WritingFeedbackResult(bool Success, WritingFeedback? Feedback, string Error)
@@ -180,6 +198,12 @@ public sealed class IeltsAiService : IIeltsAiService
     private readonly ILlmService _llm;
     private readonly IELTop.Services.Storage.ISettingsStore _settings;
 
+    private static readonly JsonSerializerOptions FeedbackJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowReadingFromString
+    };
+
     public IeltsAiService(ILlmService llm, IELTop.Services.Storage.ISettingsStore settings)
     {
         _llm = llm;
@@ -287,7 +311,7 @@ public sealed class IeltsAiService : IIeltsAiService
         if (json is null) return SpeakingFeedbackResult.Fail("The model reply could not be read. Try again.");
         try
         {
-            var raw = JsonSerializer.Deserialize<SpeakingFeedback>(json);
+            var raw = JsonSerializer.Deserialize<SpeakingFeedback>(json, FeedbackJsonOptions);
             if (raw is null) return SpeakingFeedbackResult.Fail("The model reply could not be read. Try again.");
             var fluency = IeltsBanding.RoundHalf(raw.Fluency);
             var lexical = IeltsBanding.RoundHalf(raw.LexicalResource);
@@ -562,7 +586,8 @@ public sealed class IeltsAiService : IIeltsAiService
             Summary = summary,
             Strengths = raw.Strengths ?? new(),
             Improvements = raw.Improvements ?? new(),
-            CorrectedExcerpt = raw.CorrectedExcerpt ?? string.Empty
+            CorrectedExcerpt = raw.CorrectedExcerpt ?? string.Empty,
+            GrammarErrors = raw.GrammarErrors ?? new()
         };
     }
 
@@ -589,7 +614,7 @@ public sealed class IeltsAiService : IIeltsAiService
         if (json is null) return null;
         try
         {
-            return JsonSerializer.Deserialize<WritingFeedback>(json);
+            return JsonSerializer.Deserialize<WritingFeedback>(json, FeedbackJsonOptions);
         }
         catch (JsonException)
         {

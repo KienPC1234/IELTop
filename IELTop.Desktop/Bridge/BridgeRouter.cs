@@ -27,6 +27,16 @@ public sealed class BridgeRequest
     public JsonElement? Args { get; set; }
 }
 
+/// <summary>
+/// Thrown by a handler to send a short, user readable error to the web UI
+/// instead of the generic fallback line. The message must already be plain
+/// English with no technical terms.
+/// </summary>
+public sealed class BridgeException : Exception
+{
+    public BridgeException(string message) : base(message) { }
+}
+
 /// <summary>One answer back to the web UI. Exactly one of Result or Error is set.</summary>
 public sealed class BridgeResponse
 {
@@ -95,6 +105,10 @@ public sealed class BridgeRouter
         catch (OperationCanceledException)
         {
             return Serialize(new BridgeResponse { Id = request.Id, Error = "The action was cancelled." });
+        }
+        catch (BridgeException ex)
+        {
+            return Serialize(new BridgeResponse { Id = request.Id, Error = ex.Message });
         }
         catch (Exception ex)
         {

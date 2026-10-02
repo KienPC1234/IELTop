@@ -19,12 +19,9 @@ public sealed record OnnxModelSlot(
     string? ExtraFile = null);
 
 /// <summary>
-/// The offline models this app supports. Every entry points to a real,
-/// downloadable model with a recorded source and license, and every entry is
-/// loaded by a feature: MDD drives the old pronunciation check, STT feeds
-/// speaking transcripts to AI marking, GEC grounds writing grammar bands,
-/// and the Piper voice reads prompts aloud. All run on CPU.
-/// Large files are never committed to git.
+/// The offline models this app supports. MDD drives pronunciation error
+/// detection and STT transcribes speaking audio for AI assessment.
+/// All run on CPU. Large files are never committed to git.
 /// </summary>
 public static class OnnxModelRegistry
 {
@@ -42,18 +39,6 @@ public static class OnnxModelRegistry
             "MIT",
             "openai/whisper-tiny.en, exported by tools/speech-stt",
             ExtraFile: "stt-whisper-tiny-en-decoder-int8.onnx"),
-        new("gec-t5-small", "gec-t5-small-encoder-int8.onnx",
-            "Writing",
-            "Find grammar errors so Writing marking stays strict",
-            "Apache-2.0",
-            "Unbabel/gec-t5_small, exported by tools/writing-gec",
-            ExtraFile: "gec-t5-small-decoder-int8.onnx"),
-        new("tts-piper-lessac", "tts-piper-lessac-medium.onnx",
-            "Speaking, Listening",
-            "Read prompts and transcripts aloud with a neural voice",
-            "MIT",
-            "rhasspy/piper-voices en_US-lessac-medium, fetched by tools/speaking-tts",
-            ExtraFile: "tts-piper-lessac-medium.onnx.json"),
     };
 
     public static string ModelsDir =>

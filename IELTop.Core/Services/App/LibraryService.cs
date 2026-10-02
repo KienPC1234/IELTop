@@ -74,6 +74,7 @@ public sealed class LibraryService
     private string _draftJson = string.Empty;
     private string _pasteText = string.Empty;
     private bool _busy;
+    private string _exportFolder = string.Empty;
 
     /// <summary>Raised when AI drafting produced a paper and the editor should open it.</summary>
     public event Action<ExamPaper>? DraftReady;
@@ -491,11 +492,17 @@ public sealed class LibraryService
             Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
             "IELTop-Export", DateTime.Now.ToString("yyyyMMdd-HHmmss"));
         var result = _repository.ExportPapers(titles, folder);
+        if (result.Success) _exportFolder = result.Folder;
         _status = result.Success
             ? $"Exported {result.PaperCount} paper(s) and {result.AudioCount} clip(s) to {result.Folder}."
             : result.Error;
         return Snapshot();
     }
+
+    /// <summary>The last export folder, opened by the shell. Empty until an export runs.</summary>
+    public string ExportFolder => string.IsNullOrEmpty(_exportFolder)
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "IELTop-Export")
+        : _exportFolder;
 
     /// <summary>
     /// Writes a base64 document to a temp file, then runs the shared text

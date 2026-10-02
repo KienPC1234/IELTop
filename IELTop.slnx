@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="IELTop.Core/IELTop.Core.csproj" />
   <Project Path="IELTop.Desktop/IELTop.Desktop.csproj" />
+  <Project Path="IELTop.Tests/IELTop.Tests.csproj" />
   <Project Path="IELTop_Content_Server/IELTop_Content_Server.csproj" Id="942a150b-2799-47d4-b9a3-8d4d09086415" />
 </Solution>

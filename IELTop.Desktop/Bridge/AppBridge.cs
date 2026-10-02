@@ -84,8 +84,9 @@ public sealed class AppBridge
         router.Register("library.exportShown", Act(_ => _library.ExportShown()));
         router.Register("library.openExportFolder", Act(_ =>
         {
-            OpenFolder(Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "IELTop-Export"));
+            // Open the same folder the last export wrote to; falls back to the
+            // export root before any export has run.
+            OpenFolder(_library.ExportFolder);
             return _library.Snapshot();
         }));
 
@@ -192,6 +193,7 @@ public sealed class AppBridge
         router.Register("settings.setModelAutoLoad", Act(a => _settings.SetModelAutoLoad(Bool(a, "value"))));
         router.Register("settings.setUpdateCheckOnStartup", Act(a => _settings.SetUpdateCheckOnStartup(Bool(a, "value"))));
         router.Register("settings.setTextSize", Act(a => _settings.SetTextSize(Str(a, "value"))));
+        router.Register("settings.setTheme", Act(a => _settings.SetTheme(Str(a, "value"))));
         router.Register("settings.setFullscreenOnStart", Act(a => _settings.SetFullscreenOnStart(Bool(a, "value"))));
         router.Register("settings.setAudioOutput", Act(a => _settings.SetAudioOutput(Str(a, "value"))));
         router.Register("settings.setAudioInput", Act(a => _settings.SetAudioInput(Str(a, "value"))));

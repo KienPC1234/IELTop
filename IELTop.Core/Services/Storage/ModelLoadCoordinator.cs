@@ -55,7 +55,7 @@ public sealed class ModelLoadCoordinator : IModelLoadCoordinator
         _settings = settings;
     }
 
-    public IReadOnlyList<string> WritingSlots { get; } = new[] { "gec-t5-small" };
+    public IReadOnlyList<string> WritingSlots { get; } = Array.Empty<string>();
 
     public IReadOnlyList<string> SpeakingSlots { get; } = new[]
         { "stt-whisper-tiny-en", "mdd-wav2vec2-base" };

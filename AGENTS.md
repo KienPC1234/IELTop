@@ -1,89 +1,78 @@
 # AGENTS.md - Luật bắt buộc cho IELTop
 
-App `.NET 10` học IELTS offline, opensource, đa nền tảng.
-Stack: Photino.NET (cửa sổ native) + React/Vite (web UI) + ONNX Runtime + SQLite EF Core. Một core dùng chung `IELTop.Core` cho cả logic lẫn model.
+App `.NET 10` học IELTS offline, opensource.
+Stack: .NET MAUI / WinUI 3 (cửa sổ native) + React/Vite (web UI) + ONNX Runtime + SQLite EF Core. Một core dùng chung `IELTop.Core` cho cả logic lẫn model.
 Mọi agent và mọi commit đều phải tuân thủ file này.
 
 ## 1. Luật thiết kế UI/UX
 
-1.1. Giao diện toàn bộ bằng tiếng Anh.
-- Mọi text hiển thị cho người dùng (menu, nút, nhãn, tiêu đề, placeholder, thông báo, lỗi) viết bằng tiếng Anh.
-- Comment code và tài liệu nội bộ vẫn có thể tiếng Việt, nhưng chuỗi trên UI thì tiếng Anh.
-- Ví dụ đúng: `Record and score`, `Target sounds`, `Missing file`.
-- Ví dụ sai: `Ghi âm và chấm`, `Phiên âm chuẩn`.
+Mục này là các nguyên tắc chung. Khi thêm màn hình hay component mới, theo nguyên tắc, không cần thêm luật mới cho từng trường hợp.
 
-1.2. Cấm em dash trong giao diện.
-- Không dùng ký tự em dash (U+2014) hay en dash (U+2013) trong text UI.
-- Thay bằng dấu phẩy, dấu hai chấm, hoặc tách thành hai câu.
+1.1. Ngôn ngữ và ký tự.
+- UI toàn bộ tiếng Anh; comment code và tài liệu nội bộ có thể tiếng Việt.
+- Cấm em dash (U+2014), en dash (U+2013), và emoji trang trí trong UI.
+- Icon lấy từ `lucide-react` qua component; cấm glyph chữ ("x", "◀", "▶") làm nhãn và cấm tự vẽ path tay.
 
-1.3. Cấm emoji trang trí trong UI.
-- Không dùng emoji làm icon chính cho nút, menu, tiêu đề.
-- Chỉ cho phép tối đa 1 emoji trong nội dung bài học ví dụ, không dùng trong navigation, button, status, lỗi.
-- Thay emoji bằng text rõ nghĩa hoặc icon vector từ thư viện.
-- Icon trong web UI phải lấy từ gói `lucide-react`, cấm tự vẽ path/geometry tay cho icon.
-- Icon trang trí thuần (streak, biểu đồ, tiêu đề mục) không tính là emoji, nhưng phải là icon từ gói, không phải ký tự emoji.
+1.2. Component phải thật.
+- Mọi control render ra phải chạy thật hoặc bị `disabled` kèm lý do rõ ràng.
+- Cấm nút chết, nút "Coming soon", nút demo. Luồng chính phải đi hết: bấm, phản hồi, kết quả hoặc lỗi dễ hiểu.
+- Nút mà bấm vào chắc chắn lỗi đã biết trước thì disable kèm lý do, không để bấm rồi mới báo.
 
-1.4. Cấm nút thừa, cấm chức năng giả.
-- Mọi `Button` render ra màn hình đều phải có `Command` hoặc `Click` hoạt động thật.
-- Cấm nút "Coming soon", nút bấm không phản hồi, nút demo cho đẹp.
-- Chưa làm xong thì không render. Muốn giữ chỗ thì disable + ghi rõ lý do, ví dụ: "Requires whisper-tiny-encoder.onnx".
-- Mỗi luồng chính phải đi hết: bấm -> phản hồi -> kết quả hoặc lỗi dễ hiểu.
-- Nhãn nút phải là chữ rõ nghĩa. Cấm nhãn glyph như "x", "◀", "▶". Viết "Remove", "Previous", "Next".
-- Nút mà bấm vào chỉ báo lỗi đã biết trước thì phải bị disable kèm lý do, không để bấm rồi mới báo, ví dụ Listening đứng một mình thì không cho Start.
+1.3. Ngôn ngữ hiển thị.
+- UI nói tiếng người dùng. Cấm từ kỹ thuật thô: "InferenceSession", "Tensor", "Encoder/Decoder", "DbContext", "NullReference", "StackTrace".
+- Lỗi ghi log đầy đủ; UI chỉ hiện câu ngắn: nguyên nhân, cách sửa.
+- Đúng: "The model could not be opened. Check the file in Content/Assets/Models."
+- Sai: "InferenceSession failed: tensor dim mismatch".
 
-1.5. Cấm từ ngữ thừa, thuật ngữ khoe kỹ thuật.
-- UI nói tiếng người dùng, không nói tiếng dev.
-- Cấm hiển thị thô các từ: "InferenceSession", "Tensor", "Encoder/Decoder", "Dependency Injection", "DbContext", "NullReference", "StackTrace".
-- Lỗi kỹ thuật ghi log, UI chỉ hiện câu ngắn gọn: nguyên nhân + cách sửa.
-- Ví dụ sai: "InferenceSession failed: tensor dim mismatch".
-- Ví dụ đúng: "The model could not be opened. Check the file in Content/Assets/Models."
+1.4. UX dùng được ngay.
+- Một màn một việc; mỗi mục sidebar mở ra một màn hình thật; sidebar tối đa 7 mục.
+- Thao tác quá 1 giây có trạng thái chờ (disable nút, "Working...").
+- Ô nhập luôn có placeholder; nhiều dòng dùng `<textarea>` căn từ trên.
+- Cỡ chữ tối thiểu 12px ở mọi text UI; tương phản đủ đọc.
+- Hỗ trợ bàn phím cơ bản: Tab đúng thứ tự, Enter để xác nhận.
 
-1.6. UX phải đơn giản, dùng được ngay.
-- Một màn hình chỉ làm một việc chính.
-- Sidebar tối đa 7 mục. Bản hiện tại: Overview, Mock Test, Library, Editor, Results, Servers, Settings. Mỗi mục mở ra một panel thật.
-- Mọi thao tác tốn quá 1 giây phải có trạng thái chờ: disable nút, hiện "Working...".
-- Không bắt người dùng đoán: ô nhập luôn có placeholder và ví dụ.
-- Font tối thiểu 13px nội dung, 12px ghi chú. Cấm cỡ chữ nhỏ hơn 12px ở mọi text UI. Tương phản text/nền đủ đọc.
-- Ô nhập nhiều dòng (React `<textarea>`) căn chữ từ trên xuống, không căn giữa dọc.
-- Hỗ trợ bàn phím cơ bản: Tab theo thứ tự hợp lý, Enter để xác nhận.
-- Mỗi mục sidebar phải mở ra một màn hình thật, không trỏ về panel chung.
+1.5. Style dùng chung, một hệ duy nhất.
+- Style bằng Tailwind CSS utility cho bố cục và khoảng cách. Token màu, chữ nằm trong `src/styles.css` theo quy ước shadcn/ui (`--background`, `--foreground`, `--card`, `--primary`, `--border`, `--ring`), có cả bảng màu sáng và tối. Sửa token là đổi toàn cục.
+- Component lấy từ shadcn/ui, đặt ở `UserInterface/src/components/ui/`; cài thêm bằng `npx shadcn@latest add <name>`, không tự viết lại. Component ghép riêng của app nằm ở `UserInterface/src/components/` (ví dụ `shared.jsx`, `Field.jsx`, `ThemeToggle.jsx`).
+- Theme sáng, tối, hệ thống: mặc định `System`, lưu ở `AppSettings.UiTheme`, áp bằng class `.dark` trên `<html>` qua `src/lib/theme.js`. Cấm đọc `prefers-color-scheme` trực tiếp trong component.
+- Cấm trộn thêm framework UI khác (Mantine, Chakra, MUI...). Icon vẫn chỉ `lucide-react`.
+- Biểu đồ vẽ bằng SVG hoặc CSS đơn giản, không thêm thư viện chart.
+- Muốn đổi hay thêm hệ style phải sửa mục này trước, kèm lý do.
 
-1.7. Offline-first và ít phụ thuộc, LLM là tùy chọn.
+1.6. Offline-first, LLM là tùy chọn.
 - App phải chạy đầy đủ khi không có model ONNX, không có mạng, không có API key.
-- Thiếu file model thì hiện hướng dẫn trong `Content/Assets/Models/README.md`, không crash, không cửa sổ lỗi trắng.
-- Web UI chỉ dùng React + Vite + `lucide-react` cho icon. Không thêm framework hay lib UI nặng khác. Biểu đồ vẽ bằng SVG đơn giản, không cần thư viện. Muốn thêm thì ghi rõ lý do và cập nhật mục này.
-- Trợ lý AI là phần thêm, không bắt buộc. Không có model ngôn ngữ thì nút AI phải disable kèm câu giải thích, không được crash.
-- Không thêm thư viện nặng làm chậm máy yếu. File import/export dùng text, cấm auto-thêm OCR, GPU, hay runtime cồng kềnh.
+- Thiếu file model thì hiện hướng dẫn trong `Content/Assets/Models/README.md`, không crash, không cửa sổ trắng.
+- Tính năng AI disable kèm câu giải thích khi chưa cấu hình; không có LLM thì app vẫn dùng được.
+- Không thêm thư viện nặng làm chậm máy yếu; import/export dùng text, cấm auto-thêm OCR hay GPU.
 
-1.8. Luật gọi AI qua API chuẩn OpenAI.
-- Chỉ dùng `ILlmService` cho mọi lời gọi mô hình ngôn ngữ, UI cấm tự dựng `HttpClient`.
-- Hỗ trợ mọi server theo chuẩn OpenAI chat completions: OpenAI, Azure-compatible gateway, Ollama, LM Studio, llama.cpp server, vLLM.
-- Base URL, tên model, API key, temperature, max tokens để trong Settings, lưu ở `%LocalAppData%/IELTop/settings.json`.
-- API key phải mã hóa khi lưu (AES-GCM với key riêng trên máy), cấm ghi key dạng plain text ra file hay log.
-- Mọi lời gọi AI phải async, có `CancellationToken`, có xử lý lỗi mạng và timeout ra câu tiếng Anh ngắn gọn.
-- Không có key thì app vẫn chạy, chỉ ẩn hoặc disable phần AI.
-- Khi Settings đổi, mọi nút AI phải tự bật/tắt ngay qua `RefreshAiState`, cấm để nút AI bật mà gọi thất bại.
-- Nếu LLM đã cấu hình nhưng server không chạy, tính năng phải tự rơi về đường offline, không được chặn người dùng.
-- Trước khi gọi AI phải qua `LlmConfigValidator` để báo lỗi định dạng (thiếu http, thiếu /v1, thiếu key) ngay trên UI.
-- Vision là tùy chọn riêng, mặc định tắt. Chỉ gửi ảnh khi user bật `LlmVisionEnabled`; model không có vision thì không gửi ảnh, cấm gửi payload ảnh rồi báo lỗi.
-- Ghi rõ điểm band AI trả về chỉ là ước lượng luyện tập, không phải điểm IELTS chính thức.
+1.7. Gọi AI qua API chuẩn OpenAI.
+- Mọi lời gọi mô hình ngôn ngữ đi qua `ILlmService`; UI cấm tự dựng `HttpClient`.
+- Hỗ trợ mọi server chuẩn OpenAI chat completions: OpenAI, gateway tương thích Azure, Ollama, LM Studio, llama.cpp server, vLLM.
+- Base URL, tên model, API key, temperature, max tokens để trong Settings, lưu ở `%LocalAppData%/IELTop/settings.json`; API key mã hóa (AES-GCM, key riêng trên máy), cấm ghi plain text ra file hay log.
+- Mọi lời gọi AI async, có `CancellationToken`, có xử lý lỗi mạng và timeout ra câu tiếng Anh ngắn.
+- Settings đổi thì nút AI tự bật/tắt ngay; cấm để nút AI bật mà gọi thất bại. LLM đã cấu hình nhưng server không chạy thì tự rơi về đường offline.
+- Trước khi gọi AI phải qua `LlmConfigValidator` để báo lỗi định dạng ngay trên UI.
+- Vision là tùy chọn riêng, mặc định tắt. Chỉ gửi ảnh khi user bật `LlmVisionEnabled`; model không có vision thì không gửi ảnh.
+- Điểm band AI trả về chỉ là ước lượng luyện tập, không phải điểm IELTS chính thức.
 
-1.9. Nguồn dữ liệu chuẩn, không bịa.
-- Nội dung học (đề, đáp án, phiên âm, ví dụ) phải lấy từ nguồn mở có giấy phép dùng lại, ghi rõ nguồn.
+1.8. Nguồn dữ liệu chuẩn, không bịa.
+- Nội dung học (đề, đáp án, phiên âm, ví dụ) lấy từ nguồn mở có giấy phép dùng lại, ghi rõ nguồn.
 - Không bịa số liệu, điểm ước lượng, hay kết quả AI khi chưa chạy model.
-- Điểm band trong Mock Test chỉ là ước lượng cho luyện nhiều lựa chọn, phải ghi rõ không phải điểm IELTS chính thức.
+- Điểm band trong Mock Test chỉ là ước lượng, phải ghi rõ không phải điểm IELTS chính thức.
 
 ## 2. Luật code
 
 2.1. Cấu trúc thư mục, đặt đâu làm đó.
-- Repo có 3 phần: `IELTop.Core` (dùng chung, đa nền tảng), `IELTop.Desktop` (client Photino + React, đa nền tảng), `Content` (nội dung đọc dùng chung).
+- Repo có 3 phần: `IELTop.Core` (dùng chung, đa nền tảng), `IELTop.Desktop` (client Photino + React, đa nền tảng), `Content` (nội dung đọc dùng chung), cộng thêm `IELTop.Tests` (xUnit cho logic Core).
+- Logic có thể test không cần cửa sổ (policy, tracker, engine với fake port) phải có test trong `IELTop.Tests`.
 - `IELTop.Core/Models/` — entity thuần, không gọi DB, không gọi ONNX, không phụ thuộc nền tảng.
 - `IELTop.Core/Data/` — chỉ `AppDbContext` và migration/seed.
 - `IELTop.Core/Services/Ai/` — mọi code ONNX và code gọi LLM nằm đây, UI cấm `new InferenceSession` và cấm `HttpClient` trực tiếp.
 - `IELTop.Core/Services/Exam/` — engine thi (setup, chấm điểm, review), không phụ thuộc UI.
+- `IELTop.Core/Services/Exam/` — mọi hành vi ngoài app (fullscreen, focus, always on top) phải đi qua một port trong Core (`IExamSessionController`), không gọi API nền tảng. Host cài đặt port (`IELTop.Desktop/Web/MauiExamSession.cs`). Mặc định là `NullExamSessionController`. Luật strict mode gom vào `StrictModePolicy`, debounce focus vào `StrictFocusTracker`, đều là lớp thuần, test được.
 - `IELTop.Core/Services/App/` — service cho từng màn hình (Library, Editor, Results, Servers, Settings), trả snapshot thuần dữ liệu.
 - `IELTop.Core/Services/Audio/`, `IELTop.Core/Services/Storage/` — theo tính năng. Core tối đa `net10.0`, cấm `net10.0-windows`, cấm `System.Windows`, `NAudio`, `System.Speech`, DPAPI trong Core.
-- `IELTop.Desktop/Program.cs` — host Photino. `IELTop.Desktop/Bridge/` — router JSON giữa web UI và C#. `IELTop.Desktop/UserInterface/` — React + Vite. `IELTop.Desktop/wwwroot/` — UI đã build, không commit.
+- `IELTop.Desktop/MauiProgram.cs` — host .NET MAUI. `IELTop.Desktop/Bridge/` — router JSON giữa web UI và C#. `IELTop.Desktop/UserInterface/` — React + Vite. `IELTop.Desktop/wwwroot/` — UI đã build, không commit.
 - Logic dùng chung phải nằm ở `IELTop.Core`, web UI chỉ gọi qua bridge, không tự tính điểm hay đọc DB.
 - `tools/` — công cụ Python (conda `.venv` trong từng thư mục), tách khỏi app C#.
 - `Content/Assets/Models/` — model ONNX. `Content/Assets/Exams/` — nội dung JSON. `Content/Assets/Audio/` — file nghe. `Content/Assets/Images/` — ảnh. `Content/servers.txt` — danh sách server cộng đồng.
@@ -199,8 +188,7 @@ Mọi agent và mọi commit đều phải tuân thủ file này.
 
 - [ ] `dotnet build` 0 error.
 - [ ] Toàn bộ text UI là tiếng Anh.
-- [ ] Không có em dash hoặc en dash trong text UI.
-- [ ] Không có emoji mới trong UI.
+- [ ] Không có em dash, en dash, hay emoji mới trong UI.
 - [ ] Không có cỡ chữ nhỏ hơn 12px trong CSS.
 - [ ] Ô nhập nhiều dòng dùng `<textarea>` căn chữ từ trên.
 - [ ] Không có nút bấm chết; mỗi mục sidebar mở ra màn hình thật.
@@ -208,7 +196,8 @@ Mọi agent và mọi commit đều phải tuân thủ file này.
 - [ ] Mọi route bridge khớp với lời gọi `call('...')` trong `UserInterface/src`, không thừa không thiếu.
 - [ ] Mỗi `OnnxModelSlot` hiện `Source` và `License` trên màn Settings.
 - [ ] Icon dùng `lucide-react`, không vẽ path tay.
-- [ ] Không thêm lib UI ngoài React, Vite, lucide-react.
+- [ ] Chỉ một hệ style: Tailwind + token shadcn trong `styles.css`; component ở `components/ui/`, ghép riêng ở `components/`; không còn Mantine hay class ad-hoc thiếu định nghĩa.
+- [ ] Theme sáng, tối, hệ thống hoạt động; mặc định `System`; lưu ở `AppSettings.UiTheme`.
 - [ ] Không có thuật ngữ kỹ thuật thô hiện ra UI.
 - [ ] App chạy được khi thiếu file `.onnx`, mất mạng, và không có API key.
 - [ ] Mọi lời gọi AI đi qua `ILlmService`, không tự dựng `HttpClient` trong UI.

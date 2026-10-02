@@ -44,7 +44,15 @@ public sealed class ExamSetup
     public bool MixAllPapers { get; init; }
     public bool ShuffleParts { get; init; }
     public bool StrictMode { get; init; }
+    /// <summary>The strict level chips: Off, Warn, Enforce.</summary>
+    public IReadOnlyList<string> StrictLevelOptions { get; init; } = new[] { "Off", "Warn", "Enforce" };
+    public string StrictLevel { get; init; } = "Off";
+    /// <summary>True when this host can force full screen for strict mode.</summary>
+    public bool HostSupportsStrict { get; init; }
+    public string StrictHint { get; init; } = string.Empty;
     public bool CanUseAi { get; init; }
+    /// <summary>Explains where to enable AI when it is not set up yet.</summary>
+    public string AiHint { get; init; } = "AI marking needs a language model. Add one in Settings.";
     public bool CanStart { get; init; }
     public string SelectedSkillsLabel { get; init; } = string.Empty;
     public string SelectedTaskTypesLabel { get; init; } = string.Empty;
@@ -108,7 +116,8 @@ public sealed class ExamEngine : IDisposable
         ISttService stt,
         IGecService gec,
         IModelLoadCoordinator models,
-        IPronunciationService pronunciation)
+        IPronunciationService pronunciation,
+        IExamSessionController? session = null)
     {
         _repository = repository;
         _ai = ai;
@@ -116,18 +125,27 @@ public sealed class ExamEngine : IDisposable
         _gec = gec;
         _models = models;
         _pronunciation = pronunciation;
+        _session = session ?? NullExamSessionController.Instance;
+        _session.FocusChanged += OnFocusChanged;
         Load();
     }
 
     private string _selectedPaperTitle = string.Empty;
     private string _strictness = "Standard";
     private string _buildMode = "Paper order";
+    private readonly IExamSessionController _session;
+    private StrictLevel _strictLevel = StrictLevel.Off;
+    private StrictFocusTracker _focus = new(StrictModePolicy.For(StrictLevel.Off));
+
+    /// <summary>Clock seam so a test can drive the focus grace window without waiting.</summary>
+    internal Func<DateTime> NowProvider = () => DateTime.UtcNow;
 
     public ExamSetup Setup { get; private set; } = new();
 
     public bool MixAllPapers { get; private set; }
     public bool ShuffleParts { get; private set; }
-    public bool StrictMode { get; private set; }
+    /// <summary>True while any strict level is active. Kept for the run snapshot.</summary>
+    public bool StrictMode => _strictLevel != StrictLevel.Off;
     public double Volume { get; private set; } = 80;
     /// <summary>Reading text scale for the exam, held on the run so the UI sees it.</summary>
     public double FontScale
@@ -232,7 +250,13 @@ public sealed class ExamEngine : IDisposable
             MixAllPapers = MixAllPapers,
             ShuffleParts = ShuffleParts,
             StrictMode = StrictMode,
+            StrictLevel = StrictModePolicy.Label(_strictLevel),
+            HostSupportsStrict = _session.SupportsFullscreen,
+            StrictHint = StrictModePolicy.For(_strictLevel).Describe(_session.SupportsFullscreen),
             CanUseAi = _ai.IsAvailable,
+            AiHint = _ai.IsAvailable
+                ? "AI writes band estimates and feedback for Writing and Speaking."
+                : "Add a language model in Settings to get AI bands and feedback.",
             CanStart = CanStartSetup(papers),
             SelectedSkillsLabel = SelectedSkillsLabel(),
             SelectedTaskTypesLabel = SelectedTaskTypesLabel(),
@@ -247,7 +271,7 @@ public sealed class ExamEngine : IDisposable
     private bool CanStartSetup(List<ExamPaper> papers)
     {
         var picked = _skills.Where(o => o.IsSelected && o.PartCount > 0).Select(o => o.Name).ToList();
-        return picked.Count > 0 && picked.Any(s => !string.Equals(s, "Listening", StringComparison.OrdinalIgnoreCase));
+        return picked.Count > 0;
     }
 
     private string SelectedSkillsLabel()
@@ -303,20 +327,88 @@ public sealed class ExamEngine : IDisposable
 
     public void SetMixAllPapers(bool value) { MixAllPapers = value; RebuildOptions(SafePapers()); Refresh(); }
     public void SetShuffleParts(bool value) { ShuffleParts = value; Refresh(); }
-    public void SetStrictMode(bool value) { StrictMode = value; Refresh(); }
-    public void SetBuildMode(string value) { _buildMode = value ?? "Paper order"; Refresh(); }
-    public void SetStrictness(string value) { _strictness = value ?? "Standard"; Refresh(); }
+
+    /// <summary>Turns strict mode on or off from the setup screen, before a run.</summary>
+    public void SetStrictMode(bool value)
+    {
+        SetStrictLevel(value ? StrictLevel.Enforce : StrictLevel.Off);
+    }
+
+    /// <summary>Sets the strict level and applies the host side it asks for.</summary>
+    public void SetStrictLevel(StrictLevel level)
+    {
+        _strictLevel = level;
+        Run.StrictMode = StrictMode;
+        Run.StrictLevelLabel = StrictModePolicy.Label(level);
+        Run.HostSupportsStrict = _session.SupportsFullscreen;
+        Run.StrictHint = StrictModePolicy.For(level).Describe(_session.SupportsFullscreen);
+        ApplyStrictToHost(active: StrictMode);
+        if (Run.Phase == ExamPhase.Setup) RebuildOptions(SafePapers());
+        Refresh();
+    }
+
+    /// <summary>The strict level in view, for the setup chips and the snapshot.</summary>
+    public StrictLevel StrictLevel => _strictLevel;
+
+    public void SetBuildMode(string value) { _buildMode = value ?? "Paper order"; RebuildOptions(SafePapers()); Refresh(); }
+    public void SetStrictness(string value) { _strictness = value ?? "Standard"; RebuildOptions(SafePapers()); Refresh(); }
     public void SetVolume(double value) { Volume = Math.Clamp(value, 0, 100); Refresh(); }
     public void SetFontScale(double value) { FontScale = Math.Clamp(value, 0.9, 1.6); Refresh(); }
     public void SetFullscreen(bool value) { IsFullscreen = value; Refresh(); }
 
-    /// <summary>Counts leaving the test window during strict mode.</summary>
-    public void RegisterFocusLost()
+    /// <summary>Asks the host for full screen, always on top, or neither.</summary>
+    private void ApplyStrictToHost(bool active)
     {
-        if (Run.Phase is not (ExamPhase.Running or ExamPhase.PartIntro) || !StrictMode) return;
+        var policy = StrictModePolicy.For(_strictLevel);
+        if (policy.ForceFullscreen)
+        {
+            if (active) { _session.SetAlwaysOnTop(true); _session.EnterFullscreen(); }
+            else { _session.SetAlwaysOnTop(false); _session.ExitFullscreen(); }
+        }
+        else
+        {
+            _session.SetAlwaysOnTop(false);
+        }
+    }
+
+    /// <summary>Raises the test window back to the front, on the student's ask.</summary>
+    public EngineResult FocusWindow()
+    {
+        _session.Focus();
+        return EngineResult.Ok();
+    }
+
+    private void OnFocusChanged(ExamFocusEvent kind)
+    {
+        if (kind == ExamFocusEvent.Minimized && CountableNow())
+        {
+            CountViolation("The test was minimized during strict mode.");
+            _focus.Reset();
+            return;
+        }
+        if (_focus.Observe(kind, NowProvider())) CountViolation(Run.ViolationLabel);
+    }
+
+    private bool CountableNow() =>
+        Run.Phase is ExamPhase.Running or ExamPhase.PartIntro &&
+        StrictModePolicy.For(_strictLevel).CountFocusLoss;
+
+    private void CountViolation(string message)
+    {
+        if (Run.Phase is not (ExamPhase.Running or ExamPhase.PartIntro)) return;
+        if (!StrictModePolicy.For(_strictLevel).CountFocusLoss) return;
         Run.StrictViolations++;
-        Run.StatusMessage = Run.ViolationLabel;
+        Run.StatusMessage = message;
         Refresh();
+    }
+
+    /// <summary>
+    /// Checks a focus loss that has lasted a while. The ticker calls this, so a
+    /// quick alt-tab that returns inside the grace period is forgiven.
+    /// </summary>
+    private void CheckFocusGrace()
+    {
+        if (_focus.Tick(NowProvider())) CountViolation(Run.ViolationLabel);
     }
 
     private MarkingStrictness StrictnessValue => _strictness switch
@@ -364,13 +456,6 @@ public sealed class ExamEngine : IDisposable
         if (chosen.Count == 0)
         {
             Run.ResultText = "No parts match this setup. Tick a skill that has parts, or loosen the task types.";
-            Refresh();
-            return EngineResult.Fail(Run.ResultText);
-        }
-        if (chosen.All(c => string.Equals(c.Part.Skill, "Listening", StringComparison.OrdinalIgnoreCase)))
-        {
-            Run.ResultText = "Listening cannot run alone. Tick Reading, Writing, or Speaking too, then start again.";
-            Run.StatusMessage = Run.ResultText;
             Refresh();
             return EngineResult.Fail(Run.ResultText);
         }
@@ -429,6 +514,30 @@ public sealed class ExamEngine : IDisposable
         var parts = new List<ExamRunPart>();
         foreach (var (paper, part) in chosen)
             parts.Add(BuildPart(part, MixAllPapers || multiPaper ? paper.Title : string.Empty));
+
+        var skillGroups = parts.GroupBy(p => p.Skill, StringComparer.OrdinalIgnoreCase);
+        foreach (var group in skillGroups)
+        {
+            var list = group.ToList();
+            int total = list.Count;
+            var allQuestions = list.SelectMany(p => p.Questions).ToList();
+            string range = string.Empty;
+            if (allQuestions.Count > 0)
+            {
+                int minQ = allQuestions.Min(q => q.Number);
+                int maxQ = allQuestions.Max(q => q.Number);
+                range = minQ == maxQ ? $"{minQ}" : $"{minQ}-{maxQ}";
+            }
+
+            for (int i = 0; i < total; i++)
+            {
+                list[i].SkillPartNumber = i + 1;
+                list[i].SkillTotalParts = total;
+                list[i].SkillQuestionsRange = range;
+            }
+        }
+
+        for (int i = 0; i < parts.Count; i++) parts[i].Index = i;
         _parts = parts;
     }
 
@@ -505,6 +614,7 @@ public sealed class ExamEngine : IDisposable
         Run.IsFullscreen = false;
         Run.PendingAudioUrl = string.Empty;
         IsFullscreen = false;
+        _focus.Reset();
         // Top bar shows the paper or test name, like the real machine test.
         Run.Title = _buildMode == "AI pick" ? "AI built test"
             : MixAllPapers ? "Mixed papers"
@@ -514,7 +624,59 @@ public sealed class ExamEngine : IDisposable
             ? "Strict mode is on. Full screen, no other apps, finish the test."
             : "Test ready. Press Start part on each part. The clock runs from that press.";
         Run.StatusMessage = string.IsNullOrWhiteSpace(buildNote) ? intro : $"{intro} {buildNote}";
+        // Apply the strict host behavior now, at the start of the run.
+        Run.StrictMode = StrictMode;
+        Run.StrictLevelLabel = StrictModePolicy.Label(_strictLevel);
+        Run.HostSupportsStrict = _session.SupportsFullscreen;
+        Run.StrictHint = StrictModePolicy.For(_strictLevel).Describe(_session.SupportsFullscreen);
+        ApplyStrictToHost(active: StrictMode);
         ShowPartIntro(0);
+    }
+
+    private void SwitchToPart(int nextIndex)
+    {
+        if (nextIndex < 0 || nextIndex >= _parts.Count) return;
+        var currentSkill = Run.CurrentPart?.Skill;
+        var nextSkill = _parts[nextIndex].Skill;
+
+        bool isNewSkill = currentSkill == null || !string.Equals(currentSkill, nextSkill, StringComparison.OrdinalIgnoreCase);
+        if (isNewSkill)
+        {
+            ShowPartIntro(nextIndex);
+        }
+        else
+        {
+            ActivatePartDirectly(nextIndex);
+        }
+    }
+
+    private void ActivatePartDirectly(int index)
+    {
+        StopTicker();
+        _listenPrepRemaining = 0;
+        Run.ListeningPrepLabel = string.Empty;
+        foreach (var p in _parts) p.IsCurrent = false;
+        for (int i = 0; i < _parts.Count; i++)
+        {
+            _parts[i].Index = i;
+            _parts[i].IsPassed = i < index;
+            _parts[i].IsCurrent = i == index;
+        }
+
+        Run.PartIndex = index;
+        Run.Parts = _parts;
+        var part = _parts[index];
+        Run.Phase = ExamPhase.Running;
+        part.IsTimerRunning = true;
+        StartTicker();
+
+        if (part.IsListening && !part.AudioPlayedOnce)
+        {
+            _listenPrepRemaining = 15;
+            Run.ListeningPrepLabel = "Read the questions. The clip starts in 15 seconds, or press Start now.";
+            part.AudioStatus = string.Empty;
+        }
+        Refresh();
     }
 
     private void ShowPartIntro(int index)
@@ -535,7 +697,7 @@ public sealed class ExamEngine : IDisposable
         var part = _parts[index];
         part.IsTimerRunning = false;
         Run.Phase = ExamPhase.PartIntro;
-        Run.IntroTitle = part.Title;
+        Run.IntroTitle = $"{part.Skill} Section";
         Run.IntroSkill = part.Skill;
         Run.IntroDetail = BuildIntroDetail(part);
         Run.IntroHint = part.IsListening
@@ -565,6 +727,7 @@ public sealed class ExamEngine : IDisposable
 
         Run.Phase = ExamPhase.Running;
         Run.StrictMode = StrictMode;
+        Run.StrictLevelLabel = StrictModePolicy.Label(_strictLevel);
         part.IsTimerRunning = true;
         StartTicker();
 
@@ -634,6 +797,8 @@ public sealed class ExamEngine : IDisposable
             var part = Run.CurrentPart;
             if (part is null) return;
 
+            CheckFocusGrace();
+
             if (_listenPrepRemaining > 0)
             {
                 _listenPrepRemaining--;
@@ -655,7 +820,7 @@ public sealed class ExamEngine : IDisposable
             if (part.RemainingSeconds > 0) { Refresh(); return; }
 
             part.IsTimerRunning = false;
-            if (Run.PartIndex < _parts.Count - 1) ShowPartIntro(Run.PartIndex + 1);
+            if (Run.PartIndex < _parts.Count - 1) SwitchToPart(Run.PartIndex + 1);
             else _ = SubmitAsync(confirm: false);
             Refresh();
         }
@@ -667,17 +832,49 @@ public sealed class ExamEngine : IDisposable
     {
         if (Run.Phase != ExamPhase.Running) return EngineResult.Fail("The part is not running.");
         if (Run.CurrentPart?.IsSpeaking == true) return EngineResult.Fail("Speaking uses Finish part.");
-        if (Run.PartIndex < _parts.Count - 1) ShowPartIntro(Run.PartIndex + 1);
+        if (Run.PartIndex < _parts.Count - 1) SwitchToPart(Run.PartIndex + 1);
+        return EngineResult.Ok();
+    }
+
+    public EngineResult GoNextSection()
+    {
+        if (Run.Phase != ExamPhase.Running && Run.Phase != ExamPhase.PartIntro) return EngineResult.Fail("The test is not running.");
+        if (Run.CurrentPart?.IsSpeaking == true) return EngineResult.Fail("Speaking uses Finish part.");
+
+        var currentSkill = Run.CurrentPart?.Skill;
+        for (int i = Run.PartIndex + 1; i < _parts.Count; i++)
+        {
+            if (!string.Equals(_parts[i].Skill, currentSkill, StringComparison.OrdinalIgnoreCase))
+            {
+                SwitchToPart(i);
+                return EngineResult.Ok();
+            }
+        }
+
+        if (Run.PartIndex < _parts.Count - 1)
+        {
+            SwitchToPart(Run.PartIndex + 1);
+        }
         return EngineResult.Ok();
     }
 
     public EngineResult SelectPart(int index)
     {
-        if (Run.Phase != ExamPhase.Running) return EngineResult.Fail("The test is not running.");
+        if (Run.Phase != ExamPhase.Running && Run.Phase != ExamPhase.PartIntro) return EngineResult.Fail("The test is not running.");
         if (Run.CurrentPart?.IsSpeaking == true) return EngineResult.Fail("Speaking runs to its own end.");
         if (index < 0 || index >= _parts.Count || index == Run.PartIndex) return EngineResult.Ok();
-        if (!_parts[index].IsPassed) return EngineResult.Fail("That part is not finished yet.");
-        ShowPartIntro(index);
+
+        var currentSkill = Run.CurrentPart?.Skill;
+        var targetSkill = _parts[index].Skill;
+        bool sameSkill = currentSkill != null && string.Equals(currentSkill, targetSkill, StringComparison.OrdinalIgnoreCase);
+
+        if (sameSkill)
+        {
+            ActivatePartDirectly(index);
+            return EngineResult.Ok();
+        }
+
+        SwitchToPart(index);
         return EngineResult.Ok();
     }
 
@@ -694,7 +891,47 @@ public sealed class ExamEngine : IDisposable
     {
         var part = Run.CurrentPart;
         if (part is null) return EngineResult.Ok();
-        part.FocusedIndex = Math.Clamp(part.FocusedIndex + delta, 0, Math.Max(0, part.Questions.Count - 1));
+
+        int targetIdx = part.FocusedIndex + delta;
+        if (targetIdx < 0)
+        {
+            if (Run.PartIndex > 0 && string.Equals(_parts[Run.PartIndex - 1].Skill, part.Skill, StringComparison.OrdinalIgnoreCase))
+            {
+                ActivatePartDirectly(Run.PartIndex - 1);
+                var prevPart = Run.CurrentPart;
+                if (prevPart != null && prevPart.Questions.Count > 0)
+                {
+                    prevPart.FocusedIndex = prevPart.Questions.Count - 1;
+                }
+                Refresh();
+                return EngineResult.Ok();
+            }
+        }
+        else if (targetIdx >= part.Questions.Count)
+        {
+            if (Run.PartIndex < _parts.Count - 1)
+            {
+                if (string.Equals(_parts[Run.PartIndex + 1].Skill, part.Skill, StringComparison.OrdinalIgnoreCase))
+                {
+                    ActivatePartDirectly(Run.PartIndex + 1);
+                    var nextPart = Run.CurrentPart;
+                    if (nextPart != null && nextPart.Questions.Count > 0)
+                    {
+                        nextPart.FocusedIndex = 0;
+                    }
+                    Refresh();
+                    return EngineResult.Ok();
+                }
+                else
+                {
+                    // Next part is a new skill! Transition to next skill intro!
+                    SwitchToPart(Run.PartIndex + 1);
+                    return EngineResult.Ok();
+                }
+            }
+        }
+
+        part.FocusedIndex = Math.Clamp(targetIdx, 0, Math.Max(0, part.Questions.Count - 1));
         Refresh();
         return EngineResult.Ok();
     }
@@ -783,9 +1020,8 @@ public sealed class ExamEngine : IDisposable
     /// <summary>Turn strict mode off or on from inside the running test.</summary>
     public EngineResult ToggleStrictMode()
     {
-        StrictMode = !StrictMode;
-        Run.StrictMode = StrictMode;
-        Refresh();
+        var next = StrictMode ? StrictLevel.Off : StrictLevel.Enforce;
+        SetStrictLevel(next);
         return EngineResult.Ok();
     }
 
@@ -861,7 +1097,8 @@ public sealed class ExamEngine : IDisposable
     public EngineResult BeginSpeakingRecording()
     {
         var part = RequireCurrentPart();
-        if (part is null || !part.IsSpeaking || part.IsRecording) return EngineResult.Fail("Recording is not ready.");
+        if (part is null) return EngineResult.Fail("There is no part to record. Start the test again.");
+        if (!part.IsSpeaking || part.IsRecording) return EngineResult.Fail("Recording is not ready.");
         part.IsRecording = true;
         part.AudioStatus = $"Recording for {part.SpeakingSeconds} seconds. Speak now, no pause.";
         Refresh();
@@ -949,7 +1186,7 @@ public sealed class ExamEngine : IDisposable
     {
         var part = RequireCurrentPart();
         if (part is null || !part.IsSpeaking) return EngineResult.Fail("No speaking part is open.");
-        if (Run.PartIndex < _parts.Count - 1) ShowPartIntro(Run.PartIndex + 1);
+        if (Run.PartIndex < _parts.Count - 1) SwitchToPart(Run.PartIndex + 1);
         else _ = SubmitAsync(confirm: false);
         return EngineResult.Ok();
     }
@@ -1008,6 +1245,10 @@ public sealed class ExamEngine : IDisposable
         StopTicker();
         _speakingCts?.Cancel();
         _gradingCts?.Cancel();
+        // Leaving the run lifts the strict host behavior, like the real test
+        // releasing the screen when the paper is handed in.
+        _session.SetAlwaysOnTop(false);
+        _focus.Reset();
         Run.Phase = ExamPhase.Finished;
         Run.ShowReview = false;
         Run.ReviewItems = Array.Empty<ReviewItem>();
@@ -1076,6 +1317,8 @@ public sealed class ExamEngine : IDisposable
     /// <summary>Clears the result screen so a new test can be set up.</summary>
     public EngineResult BackToSetup()
     {
+        _session.SetAlwaysOnTop(false);
+        _session.ExitFullscreen();
         Run = new ExamRun { StatusMessage = "Pick a paper and a marking level, tick the skills, then start." };
         _parts = new List<ExamRunPart>();
         Load();
@@ -1088,6 +1331,9 @@ public sealed class ExamEngine : IDisposable
         StopTicker();
         _gradingCts?.Cancel();
         _speakingCts?.Cancel();
+        _session.SetAlwaysOnTop(false);
+        _session.ExitFullscreen();
+        _focus.Reset();
         _parts = new List<ExamRunPart>();
         Run = new ExamRun { StatusMessage = "Test cancelled. Nothing was saved." };
         Load();
@@ -1100,6 +1346,7 @@ public sealed class ExamEngine : IDisposable
     {
         if (Run.IsGrading) return EngineResult.Fail("Marking is already running.");
         if (!_ai.IsAvailable) return EngineResult.Fail("Add a language model in Settings to get AI bands.");
+        if (Run.Phase != ExamPhase.Finished) return EngineResult.Fail("Submit the test first, then grade with AI.");
         if (_parts.Count == 0) return EngineResult.Fail("Start a test first.");
 
         _gradingCts?.Cancel();
@@ -1146,6 +1393,12 @@ public sealed class ExamEngine : IDisposable
                 AddWhy(lines, "  Grammar", f.GrammarWhy);
                 foreach (var s in f.Strengths.Take(2)) lines.Add($"  Good: {s}");
                 foreach (var s in f.Improvements.Take(3)) lines.Add($"  Fix: {s}");
+                if (f.GrammarErrors.Count > 0)
+                {
+                    lines.Add($"  Grammar issues detected ({f.GrammarErrors.Count}):");
+                    foreach (var err in f.GrammarErrors.Take(5))
+                        lines.Add($"    - [{err.Rule}] \"{err.Original}\" -> \"{err.Correction}\": {err.Explanation}");
+                }
                 if (!string.IsNullOrWhiteSpace(f.CorrectedExcerpt)) lines.Add($"  Rewrite: {f.CorrectedExcerpt}");
                 lines.Add($"  Stats: {WritingStats(part.Essay)}");
             }
@@ -1255,7 +1508,43 @@ public sealed class ExamEngine : IDisposable
     {
         if (!_gec.IsAvailable())
         {
-            lines.Add($"{title}: no grammar model, grammar band is an AI estimate only.");
+            if (f.GrammarErrors.Count > 0)
+            {
+                int words = ExamRunPart.CountWords(essay);
+                double errorsPer100 = words > 0 ? (f.GrammarErrors.Count * 100.0) / words : 0;
+                double cap = errorsPer100 switch { > 10 => 4.5, > 6 => 5.5, > 3 => 6.5, > 1 => 7.5, _ => 9.0 };
+                if (f.Grammar > cap)
+                {
+                    double grammar = cap;
+                    double overall = IeltsBanding.RoundHalf(
+                        (f.TaskResponse + f.Coherence + f.LexicalResource + grammar) / 4.0);
+                    var range = IeltsBanding.ToRange(overall, StrictnessValue);
+                    lines.Add($"{title}: grammar check flagged {f.GrammarErrors.Count} errors " +
+                        $"({errorsPer100:0.0} per 100 words), grammar capped at {grammar:0.0}.");
+
+                    return new WritingFeedback
+                    {
+                        EstimatedBand = overall,
+                        BandLow = range.Low,
+                        BandHigh = range.High,
+                        TaskResponse = f.TaskResponse,
+                        TaskAchievement = f.TaskAchievement,
+                        Coherence = f.Coherence,
+                        LexicalResource = f.LexicalResource,
+                        Grammar = grammar,
+                        TaskResponseWhy = f.TaskResponseWhy,
+                        TaskAchievementWhy = f.TaskAchievementWhy,
+                        CoherenceWhy = f.CoherenceWhy,
+                        LexicalWhy = f.LexicalWhy,
+                        GrammarWhy = f.GrammarWhy,
+                        Summary = f.Summary,
+                        Strengths = f.Strengths,
+                        Improvements = f.Improvements,
+                        CorrectedExcerpt = f.CorrectedExcerpt,
+                        GrammarErrors = f.GrammarErrors
+                    };
+                }
+            }
             return f;
         }
         Run.StatusMessage = $"Checking grammar in {title}.";
@@ -1269,26 +1558,26 @@ public sealed class ExamEngine : IDisposable
         catch (Exception) { lines.Add($"{title}: grammar check skipped."); return f; }
         if (!g.Success) { lines.Add($"{title}: grammar check skipped."); return f; }
 
-        double cap = g.ErrorsPer100Words switch { > 10 => 4.5, > 6 => 5.5, > 3 => 6.5, > 1 => 7.5, _ => 9.0 };
-        double grammar = Math.Min(f.Grammar, cap);
-        double overall = IeltsBanding.RoundHalf(
-            (f.TaskResponse + f.Coherence + f.LexicalResource + grammar) / 4.0);
-        var range = IeltsBanding.ToRange(overall, StrictnessValue);
+        double capGec = g.ErrorsPer100Words switch { > 10 => 4.5, > 6 => 5.5, > 3 => 6.5, > 1 => 7.5, _ => 9.0 };
+        double grammarGec = Math.Min(f.Grammar, capGec);
+        double overallGec = IeltsBanding.RoundHalf(
+            (f.TaskResponse + f.Coherence + f.LexicalResource + grammarGec) / 4.0);
+        var rangeGec = IeltsBanding.ToRange(overallGec, StrictnessValue);
         lines.Add($"{title}: grammar check found {g.ErrorCount} errors " +
-            $"({g.ErrorsPer100Words:0.0} per 100 words), grammar capped at {grammar:0.0}.");
+            $"({g.ErrorsPer100Words:0.0} per 100 words), grammar capped at {grammarGec:0.0}.");
         if (g.Edits.Count > 0)
             lines.Add($"  Example: '{OneLine(g.Edits[0].Original)}' becomes '{OneLine(g.Edits[0].Corrected)}'.");
 
         return new WritingFeedback
         {
-            EstimatedBand = overall,
-            BandLow = range.Low,
-            BandHigh = range.High,
+            EstimatedBand = overallGec,
+            BandLow = rangeGec.Low,
+            BandHigh = rangeGec.High,
             TaskResponse = f.TaskResponse,
             TaskAchievement = f.TaskAchievement,
             Coherence = f.Coherence,
             LexicalResource = f.LexicalResource,
-            Grammar = grammar,
+            Grammar = grammarGec,
             TaskResponseWhy = f.TaskResponseWhy,
             TaskAchievementWhy = f.TaskAchievementWhy,
             CoherenceWhy = f.CoherenceWhy,
@@ -1298,6 +1587,7 @@ public sealed class ExamEngine : IDisposable
             Strengths = f.Strengths,
             Improvements = f.Improvements,
             CorrectedExcerpt = f.CorrectedExcerpt,
+            GrammarErrors = f.GrammarErrors,
         };
     }
 
@@ -1466,12 +1756,25 @@ public sealed class ExamEngine : IDisposable
         return Path.Combine(AppContext.BaseDirectory, "Assets", "Audio", file);
     }
 
-    private void Refresh() => StateChanged?.Invoke();
+    private void Refresh()
+    {
+        Run.CanUseAi = _ai.IsAvailable;
+        // The host may attach the exam window after the run starts, so the
+        // strict support flag is read live, not frozen at BeginRun.
+        Run.HostSupportsStrict = _session.SupportsFullscreen;
+        Run.StrictHint = StrictModePolicy.For(_strictLevel).Describe(_session.SupportsFullscreen);
+        StateChanged?.Invoke();
+    }
+
+    /// <summary>Called by the host once the exam window exists, so strict support updates.</summary>
+    public void OnHostAttached() => Refresh();
 
     public void Dispose()
     {
+        _session.FocusChanged -= OnFocusChanged;
         _ticker?.Dispose();
         _speakingCts?.Dispose();
         _gradingCts?.Dispose();
     }
 }
+

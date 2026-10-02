@@ -66,7 +66,7 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
     public OpenAiCompatibleLlmService(ISettingsStore settings)
     {
         _settings = settings;
-        _http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+        _http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
     }
 
     public bool IsConfigured =>
@@ -214,7 +214,7 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
     {
         int seconds = settings.Current.LlmTimeoutSeconds;
         if (seconds < 15) seconds = 15;
-        if (seconds > 300) seconds = 300;
+        if (seconds > 600) seconds = 600;
         return TimeSpan.FromSeconds(seconds);
     }
 

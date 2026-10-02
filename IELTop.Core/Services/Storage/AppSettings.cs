@@ -14,7 +14,7 @@ public sealed class AppSettings
     public string LlmBaseUrl { get; set; } = string.Empty;
     public string LlmModel { get; set; } = string.Empty;
     public double LlmTemperature { get; set; } = 0.3;
-    public int LlmMaxTokens { get; set; } = 800;
+    public int LlmMaxTokens { get; set; } = 16384;
     public bool LlmUseStreaming { get; set; } = true;
 
     /// <summary>When true, images can be sent to models that accept them.</summary>
@@ -23,8 +23,8 @@ public sealed class AppSettings
     /// <summary>Extra sampling control, 0 to 1. Sent as top_p. 1 means off.</summary>
     public double LlmTopP { get; set; } = 1.0;
 
-    /// <summary>Per request timeout in seconds. 30 to 300.</summary>
-    public int LlmTimeoutSeconds { get; set; } = 120;
+    /// <summary>Per request timeout in seconds. 15 to 600.</summary>
+    public int LlmTimeoutSeconds { get; set; } = 180;
 
     /// <summary>Custom examiner prompt. Empty means the built in prompt.</summary>
     public string LlmSystemPrompt { get; set; } = string.Empty;
@@ -49,6 +49,9 @@ public sealed class AppSettings
 
     /// <summary>Exam text size: Normal or Large. Plain preference, not secret.</summary>
     public string UiTextSize { get; set; } = "Normal";
+
+    /// <summary>Colour theme: System, Light, or Dark. System follows the OS.</summary>
+    public string UiTheme { get; set; } = "System";
 
     /// <summary>Chosen speaker device id. Empty means the system default.</summary>
     public string AudioOutputDeviceId { get; set; } = string.Empty;

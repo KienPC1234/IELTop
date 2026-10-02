@@ -122,6 +122,9 @@ public sealed class ExamRunQuestion
 public sealed class ExamRunPart
 {
     public int Index { get; internal set; }
+    public int SkillPartNumber { get; internal set; } = 1;
+    public int SkillTotalParts { get; internal set; } = 1;
+    public string SkillQuestionsRange { get; internal set; } = string.Empty;
     public string PaperName { get; internal set; } = string.Empty;
     public string Title { get; init; } = string.Empty;
     public string Skill { get; init; } = string.Empty;
@@ -209,7 +212,23 @@ public sealed class ExamRunPart
         }
     }
 
-    public string InstructionHeading => $"Part {Index + 1}";
+    public string InstructionHeading => $"Part {SkillPartNumber}";
+
+    public string BannerInstruction
+    {
+        get
+        {
+            if (IsReading) return string.IsNullOrWhiteSpace(SkillQuestionsRange)
+                ? "Read the text and answer questions."
+                : $"Read the text and answer questions {SkillQuestionsRange}.";
+            if (IsListening) return string.IsNullOrWhiteSpace(SkillQuestionsRange)
+                ? "Listen and answer questions."
+                : $"Listen and answer questions {SkillQuestionsRange}.";
+            if (IsWriting) return !string.IsNullOrWhiteSpace(Instructions) ? Instructions : "Write your response for this task.";
+            if (IsSpeaking) return !string.IsNullOrWhiteSpace(Instructions) ? Instructions : "Answer the questions clearly and fluently.";
+            return Instructions;
+        }
+    }
 
     public string QuestionGroupHeading
     {
@@ -272,7 +291,7 @@ public sealed class ExamRunPart
     public int FlaggedCount => Questions.Count(q => q.IsFlagged);
 
     public string AnsweredProgressLabel => HasQuestions ? $"{AnsweredCount}/{ScoredCount}" : string.Empty;
-    public string PartTabLabel => $"Part {Index + 1}";
+    public string PartTabLabel => $"Part {SkillPartNumber}";
 
     /// <summary>Full progress line, for example "Answered 3 of 13, marked for review 2."</summary>
     public string ProgressLabel => HasQuestions
@@ -302,9 +321,6 @@ public sealed class ExamRunPart
 
     public bool IsLowTime => RemainingSeconds <= 600;
     public bool IsCriticalTime => RemainingSeconds <= 300;
-
-    /// <summary>Progress segment color for the strip.</summary>
-    public string ProgressFill => IsCurrent ? "#111827" : IsPassed ? "#9CA3AF" : "#E5E7EB";
 
     public int FocusedIndex { get; internal set; }
 
@@ -345,11 +361,19 @@ public sealed class ExamRun
     public IReadOnlyList<ReviewItem> ReviewItems { get; internal set; } = Array.Empty<ReviewItem>();
     public IReadOnlyList<string> AiFeedbackLines { get; internal set; } = Array.Empty<string>();
     public bool IsGrading { get; internal set; }
+    /// <summary>True when a language model is configured, so AI marking can run.</summary>
+    public bool CanUseAi { get; internal set; }
     public string LoadingLabel { get; internal set; } = string.Empty;
     public string StatusMessage { get; internal set; } = string.Empty;
     public string ListeningPrepLabel { get; internal set; } = string.Empty;
     public int StrictViolations { get; internal set; }
     public bool StrictMode { get; internal set; }
+    /// <summary>The strict level name in view: Off, Warn, or Enforce.</summary>
+    public string StrictLevelLabel { get; internal set; } = "Off";
+    /// <summary>True when the host can force full screen and always on top.</summary>
+    public bool HostSupportsStrict { get; internal set; }
+    /// <summary>A short line explaining what the strict level does here.</summary>
+    public string StrictHint { get; internal set; } = string.Empty;
     public bool IsFullscreen { get; internal set; }
     public double FontScale { get; internal set; } = 1.0;
     public double Volume { get; internal set; } = 80;
@@ -369,6 +393,8 @@ public sealed class ExamRun
     public bool IsFinished => Phase == ExamPhase.Finished;
     public bool IsLastPart => Parts.Count > 0 && PartIndex == Parts.Count - 1;
     public bool HasNextPart => PartIndex < Parts.Count - 1;
+    public bool HasNextSkill => Parts.Any(p => p.Index > PartIndex && !string.Equals(p.Skill, CurrentPart?.Skill, StringComparison.OrdinalIgnoreCase));
+    public string NextSkillName => Parts.FirstOrDefault(p => p.Index > PartIndex && !string.Equals(p.Skill, CurrentPart?.Skill, StringComparison.OrdinalIgnoreCase))?.Skill ?? string.Empty;
     public bool HasBand => !string.IsNullOrWhiteSpace(BandLabel);
     public bool HasAiFeedback => AiFeedbackLines.Count > 0;
     public bool HasViolations => StrictViolations > 0;

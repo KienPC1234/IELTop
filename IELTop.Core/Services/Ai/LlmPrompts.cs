@@ -11,10 +11,10 @@ namespace IELTop.Services.Ai;
 public static class LlmPrompts
 {
     public const string DefaultSystemPrompt =
-        "You are a strict but fair IELTS examiner and tutor. " +
-        "You give practical feedback a learner can act on. " +
+        "You are a strict, highly proficient IELTS examiner and certified English language tutor. " +
+        "You analyze writing and speech with linguistic precision, identifying exact grammatical, lexical, and structural errors. " +
         "You never invent official scores. Estimated bands are guidance for practice only. " +
-        "Reply using the requested format exactly.";
+        "Reply using the requested JSON format exactly with zero conversational filler.";
 
     public const string TestConnectionPrompt = "Reply with the single word: ok";
 
@@ -64,11 +64,14 @@ public static class LlmPrompts
                 + "5: partly addresses, position unclear, ideas limited and undeveloped. "
                 + "4 or below: barely responds, no position, ideas irrelevant or repeated.";
 
+        int essayWords = essay.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).Length;
+
         return new StringBuilder()
             .AppendLine("Task prompt:")
             .AppendLine(taskPrompt)
             .AppendLine()
             .AppendLine($"Minimum words: {minimumWords}")
+            .AppendLine($"Student essay word count: {essayWords} words")
             .AppendLine($"Marking level: {strictnessLabel}. {stance}")
             .AppendLine()
             .AppendLine("Student essay:")
@@ -106,6 +109,24 @@ public static class LlmPrompts
             .AppendLine("The corrected_excerpt must rewrite one weak sentence from the essay, not invent a new topic.")
             .AppendLine("Also give band_low and band_high around the estimate to show examiner variation (usually 0.5 each way).")
             .AppendLine()
+            .AppendLine("CRITICAL GRAMMAR ERROR DETECTION REQUIREMENT:")
+            .AppendLine("Scrutinize every sentence in the essay for all grammatical issues, including:")
+            .AppendLine("- Subject-verb agreement (singular/plural mismatches)")
+            .AppendLine("- Verb tense, aspect, voice, and conditional errors")
+            .AppendLine("- Article usage (missing, unnecessary, or incorrect a/an/the)")
+            .AppendLine("- Preposition choice and collocations")
+            .AppendLine("- Sentence structure (fragments, run-ons, comma splices, faulty parallelism)")
+            .AppendLine("- Word class / part of speech (confusing adjectives with adverbs or nouns)")
+            .AppendLine("- Plural vs singular inflections and countability errors")
+            .AppendLine("- Punctuation errors")
+            .AppendLine("In grammar_errors, list each distinct error found. For each error provide:")
+            .AppendLine("  - original: the exact erroneous substring quoted directly from the essay")
+            .AppendLine("  - correction: the grammatically correct replacement")
+            .AppendLine("  - rule: the specific grammar category (e.g. 'Subject-Verb Agreement', 'Article Usage', 'Verb Tense', 'Preposition', 'Sentence Structure', 'Word Form')")
+            .AppendLine("  - explanation: a concise 1-sentence explanation of why it is incorrect and how the rule applies")
+            .AppendLine("If the essay has zero grammatical errors, return an empty array [].")
+            .AppendLine("Keep internal reasoning concise and focused on the band criteria, then output the JSON directly.")
+            .AppendLine()
             .AppendLine("Return only JSON with this shape, band table first, feedback after:")
             .AppendLine("{")
             .AppendLine("  \"estimated_band\": 6.5,")
@@ -122,7 +143,15 @@ public static class LlmPrompts
             .AppendLine("  \"summary\": \"two short sentences\",")
             .AppendLine("  \"strengths\": [\"point with a short quote\"],")
             .AppendLine("  \"improvements\": [\"point with a fix and a short quote\"],")
-            .AppendLine("  \"corrected_excerpt\": \"rewrite one weak sentence\"")
+            .AppendLine("  \"corrected_excerpt\": \"rewrite one weak sentence\",")
+            .AppendLine("  \"grammar_errors\": [")
+            .AppendLine("    {")
+            .AppendLine("      \"original\": \"exact quote from essay\",")
+            .AppendLine("      \"correction\": \"corrected version\",")
+            .AppendLine("      \"rule\": \"grammar category name\",")
+            .AppendLine("      \"explanation\": \"one clear sentence explaining the rule and fix\"")
+            .AppendLine("    }")
+            .AppendLine("  ]")
             .AppendLine("}")
             .AppendLine($"Note: the first criterion key is task_response for Task 2 and task_achievement for Task 1 with why key {firstWhyKey}. Use the matching pair above.")
             .ToString();

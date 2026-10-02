@@ -28,6 +28,11 @@ public sealed class SettingsSnapshot
     public string SelectedTextSize { get; init; } = "Normal";
     public bool FullscreenOnStart { get; init; }
 
+    /// <summary>Colour theme in view: System, Light, or Dark.</summary>
+    public string Theme { get; init; } = "System";
+    public IReadOnlyList<string> ThemeOptions { get; init; } = new[] { "System", "Light", "Dark" };
+    public string ThemeSummary { get; init; } = string.Empty;
+
     public IReadOnlyList<string> TextSizeOptions { get; init; } = new[] { "Normal", "Large" };
     /// <summary>Exam font scale the web UI applies: 1.0 normal, 1.15 large.</summary>
     public double FontScale { get; init; } = 1.0;
@@ -95,6 +100,7 @@ public sealed class SettingsService
     private bool _fullscreenOnStart;
     private string _audioOutput = string.Empty;
     private string _audioInput = string.Empty;
+    private string _theme = "System";
     private bool _loading;
 
     private string _status = "Not checked yet.";
@@ -122,7 +128,7 @@ public sealed class SettingsService
         _temperature = s.LlmTemperature;
         _maxTokens = s.LlmMaxTokens;
         _topP = s.LlmTopP <= 0 || s.LlmTopP > 1 ? 1.0 : s.LlmTopP;
-        _timeoutSeconds = s.LlmTimeoutSeconds < 15 || s.LlmTimeoutSeconds > 300 ? 120 : s.LlmTimeoutSeconds;
+        _timeoutSeconds = s.LlmTimeoutSeconds < 15 || s.LlmTimeoutSeconds > 600 ? 180 : s.LlmTimeoutSeconds;
         _systemPrompt = s.LlmSystemPrompt;
         _useStreaming = s.LlmUseStreaming;
         _visionEnabled = s.LlmVisionEnabled;
@@ -132,6 +138,7 @@ public sealed class SettingsService
         _fullscreenOnStart = s.FullscreenOnStart;
         _audioOutput = s.AudioOutputDeviceId ?? string.Empty;
         _audioInput = s.AudioInputDeviceId ?? string.Empty;
+        _theme = s.UiTheme is "Light" or "Dark" ? s.UiTheme : "System";
         _loading = false;
     }
 
@@ -155,6 +162,14 @@ public sealed class SettingsService
     {
         _textSize = v == "Large" ? "Large" : "Normal";
         PersistPreference(s => s.UiTextSize = _textSize);
+        return Snapshot();
+    }
+
+    /// <summary>Colour theme applies right away, so the UI can switch live.</summary>
+    public SettingsSnapshot SetTheme(string v)
+    {
+        _theme = v is "Light" or "Dark" ? v : "System";
+        PersistPreference(s => s.UiTheme = _theme);
         return Snapshot();
     }
 
@@ -327,8 +342,10 @@ public sealed class SettingsService
         }
         if (_topP <= 0 || _topP > 1)
             issues.Add(new ConfigIssue("Sampling", "Top P must stay between 0 and 1.", true));
-        if (_timeoutSeconds < 15 || _timeoutSeconds > 300)
-            issues.Add(new ConfigIssue("Timeout", "Use 15 to 300 seconds.", true));
+        if (_timeoutSeconds < 15 || _timeoutSeconds > 600)
+            issues.Add(new ConfigIssue("Timeout", "Use 15 to 600 seconds.", true));
+        if (_maxTokens < 64 || _maxTokens > 65536)
+            issues.Add(new ConfigIssue("Max tokens", "Use 64 to 65536 tokens.", true));
 
         bool valid = !issues.Any(i => i.IsError);
         return new LlmConfigCheck(valid, issues);
@@ -398,6 +415,13 @@ public sealed class SettingsService
             UpdateCheckOnStartup = _updateCheckOnStartup,
             SelectedTextSize = _textSize,
             FontScale = _textSize == "Large" ? 1.15 : 1.0,
+            Theme = _theme,
+            ThemeSummary = _theme switch
+            {
+                "Light" => "Always use the light theme.",
+                "Dark" => "Always use the dark theme.",
+                _ => "Follow the system theme, light or dark.",
+            },
             AudioOutputDeviceId = _audioOutput,
             AudioInputDeviceId = _audioInput,
             FullscreenOnStart = _fullscreenOnStart,

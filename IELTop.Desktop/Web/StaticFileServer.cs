@@ -104,9 +104,20 @@ public sealed class StaticFileServer : IDisposable
 
     private void Respond(HttpListenerContext context)
     {
-        var response = context.Response;
+            var response = context.Response;
         try
         {
+            response.Headers["Access-Control-Allow-Origin"] = "*";
+            response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
+            response.Headers["Access-Control-Allow-Headers"] = "*";
+
+            if (context.Request.HttpMethod.Equals("OPTIONS", StringComparison.OrdinalIgnoreCase))
+            {
+                response.StatusCode = (int)HttpStatusCode.NoContent;
+                response.Close();
+                return;
+            }
+
             var relative = Uri.UnescapeDataString(context.Request.Url?.AbsolutePath ?? "/")
                 .TrimStart('/');
 
@@ -123,8 +134,9 @@ public sealed class StaticFileServer : IDisposable
                 string? mediaPath = null;
                 foreach (var dir in dirs)
                 {
+                    var root = dir.EndsWith(Path.DirectorySeparatorChar) ? dir : dir + Path.DirectorySeparatorChar;
                     var candidatePath = Path.GetFullPath(Path.Combine(dir, name));
-                    if (candidatePath.StartsWith(dir, StringComparison.OrdinalIgnoreCase) && File.Exists(candidatePath))
+                    if (candidatePath.StartsWith(root, StringComparison.OrdinalIgnoreCase) && File.Exists(candidatePath))
                     {
                         mediaPath = candidatePath;
                         break;
@@ -144,9 +156,19 @@ public sealed class StaticFileServer : IDisposable
 
             var candidate = Path.GetFullPath(Path.Combine(_root, relative));
 
+            // In development, if the file is missing in the output directory, check the project wwwroot
+            if (!File.Exists(candidate))
+            {
+                var devCandidate = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot", relative));
+                if (File.Exists(devCandidate))
+                {
+                    candidate = devCandidate;
+                }
+            }
+
             // A single page app routes on the client, so an unknown path with
             // no file extension falls back to index.html rather than a 404.
-            if (!candidate.StartsWith(_root, StringComparison.OrdinalIgnoreCase) || !File.Exists(candidate))
+            if (!File.Exists(candidate))
             {
                 if (Path.HasExtension(relative))
                 {
@@ -155,6 +177,14 @@ public sealed class StaticFileServer : IDisposable
                     return;
                 }
                 candidate = Path.Combine(_root, "index.html");
+                if (!File.Exists(candidate))
+                {
+                    var devIndex = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "wwwroot", "index.html"));
+                    if (File.Exists(devIndex))
+                    {
+                        candidate = devIndex;
+                    }
+                }
             }
 
             if (!File.Exists(candidate))
@@ -183,6 +213,7 @@ public sealed class StaticFileServer : IDisposable
             ? mime
             : "application/octet-stream";
         response.Headers["Cache-Control"] = "no-store";
+        response.Headers["Access-Control-Allow-Origin"] = "*";
 
         var bytes = File.ReadAllBytes(path);
         response.ContentLength64 = bytes.Length;
