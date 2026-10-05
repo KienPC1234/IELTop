@@ -1,125 +1,54 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using IELTop.Desktop.Bridge;
 using IELTop.Desktop.Web;
-using IELTop.Services.Exam;
 
 namespace IELTop.Desktop;
 
 public partial class ExamPage : ContentPage
 {
-    private readonly StaticFileServer _server;
     private readonly BridgeRouter _router;
-    private readonly ExamEngine _engine;
     private readonly MauiExamSession _examSession;
-    private bool _initialized;
+    private readonly DesktopBrowser _browser;
+    private readonly BrowserFailurePresenter _failure;
 
-    public ExamPage(StaticFileServer server, BridgeRouter router, ExamEngine engine, MauiExamSession examSession)
+    public ExamPage(
+        StaticFileServer server,
+        BridgeRouter router,
+        MauiExamSession examSession)
     {
         InitializeComponent();
-        _server = server;
+
         _router = router;
-        _engine = engine;
         _examSession = examSession;
 
-        ExamWebView.Source = new UrlWebViewSource { Url = $"{_server.BaseUrl}/exam.html" };
-        ExamWebView.HandlerChanged += (_, _) => TryInitPlatformView();
-        Loaded += (_, _) =>
-        {
-            TryInitPlatformView();
-            if (Window is not null)
-            {
-                _examSession.Attach(Window);
-            }
-        };
+        // Developer tools stay off even under a debugger: this is the window a
+        // test runs in, and the page must not be inspectable while it runs.
+        _browser = new DesktopBrowser(new BrowserOptions { AllowDeveloperTools = false });
+
+        _browser.MessageReceived += OnMessageFromPage;
+        _browser.Attach(ExamWebView);
+        _browser.Load($"{server.BaseUrl}/exam.html?k={server.AccessKey}");
+
+        // A broken test window must not trap the student above their other
+        // windows while it sits there showing an error.
+        _failure = new BrowserFailurePresenter(
+            _browser, ExamWebView, FallbackOverlay, FallbackHost,
+            () => _examSession.SetAlwaysOnTop(false));
     }
 
-    protected override void OnAppearing()
+    private async Task<string?> OnMessageFromPage(string raw, CancellationToken cancellationToken)
+        => await _router.HandleAsync(raw, cancellationToken);
+
+    protected override void OnHandlerChanging(HandlerChangingEventArgs args)
     {
-        base.OnAppearing();
-        TryInitPlatformView();
+        base.OnHandlerChanging(args);
+
+        if (args.NewHandler is not null) return;
+
+        _browser.MessageReceived -= OnMessageFromPage;
+        _failure.Dispose();
+        _browser.Dispose();
     }
-
-    private void TryInitPlatformView()
-    {
-#if WINDOWS
-        if (!_initialized && ExamWebView.Handler?.PlatformView is Microsoft.UI.Xaml.Controls.WebView2 native)
-        {
-            _initialized = true;
-            _ = InitWebView2Async(native);
-        }
-#endif
-    }
-
-#if WINDOWS
-    private async Task InitWebView2Async(Microsoft.UI.Xaml.Controls.WebView2 native)
-    {
-        try
-        {
-            await native.EnsureCoreWebView2Async();
-            native.CoreWebView2.Settings.IsWebMessageEnabled = true;
-            native.CoreWebView2.Settings.AreDevToolsEnabled = true;
-            native.CoreWebView2.PermissionRequested += (s, args) =>
-            {
-                if (args.PermissionKind == Microsoft.Web.WebView2.Core.CoreWebView2PermissionKind.Microphone)
-                {
-                    args.State = Microsoft.Web.WebView2.Core.CoreWebView2PermissionState.Allow;
-                }
-            };
-
-            native.CoreWebView2.WebMessageReceived += async (s, args) =>
-            {
-                string raw;
-                try
-                {
-                    raw = args.TryGetWebMessageAsString();
-                }
-                catch
-                {
-                    return;
-                }
-
-                if (string.IsNullOrEmpty(raw)) return;
-
-                var reply = await _router.HandleAsync(raw, CancellationToken.None).ConfigureAwait(false);
-                if (!string.IsNullOrEmpty(reply))
-                {
-                    native.DispatcherQueue.TryEnqueue(() =>
-                    {
-                        try
-                        {
-                            native.CoreWebView2?.PostWebMessageAsString(reply);
-                        }
-                        catch
-                        {
-                            // WebView navigated or disposed
-                        }
-                    });
-                }
-            };
-
-            _examSession.RegisterPushSink((message) =>
-            {
-                native.DispatcherQueue.TryEnqueue(() =>
-                {
-                    try
-                    {
-                        native.CoreWebView2?.PostWebMessageAsString(message);
-                    }
-                    catch
-                    {
-                        // WebView navigated or disposed
-                    }
-                });
-            });
-
-            native.DispatcherQueue.TryEnqueue(() =>
-            {
-                native.CoreWebView2.Navigate($"{_server.BaseUrl}/exam.html");
-            });
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine($"[ExamPage] WebView2 initialization failed: {ex}");
-        }
-    }
-#endif
 }

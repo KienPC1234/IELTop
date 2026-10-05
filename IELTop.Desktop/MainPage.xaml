@@ -3,8 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="IELTop.Desktop.MainPage">
     <Grid>
-        <WebView x:Name="AppWebView"
-                 HorizontalOptions="Fill"
-                 VerticalOptions="Fill" />
+        <!--
+          HostPage is the path npm writes the web UI to. It has to include the
+          wwwroot folder: the handler takes GetDirectoryName of this value as the
+          content root, and a bare file name leaves that root empty.
+        -->
+        <BlazorWebView x:Name="AppBlazorView" HostPage="wwwroot/index.html" />
     </Grid>
 </ContentPage>

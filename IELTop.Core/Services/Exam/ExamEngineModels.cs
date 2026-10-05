@@ -148,6 +148,20 @@ public sealed class ExamRunPart
     public bool AudioPlayedOnce { get; internal set; }
     public bool NoAudioFallback { get; internal set; }
     public int SpokenSeconds { get; internal set; }
+
+    /// <summary>Measured speech seconds from voice activity detection, 0 until measured.</summary>
+    public double MeasuredSpeechSeconds { get; internal set; }
+
+    /// <summary>Pauses of 250 ms or more found in the recording.</summary>
+    public int PauseCount { get; internal set; }
+
+    /// <summary>Mean pause length in seconds.</summary>
+    public double MeanPauseSeconds { get; internal set; }
+
+    /// <summary>One line for the UI, empty until the recording is analyzed.</summary>
+    public string SpeechTimingLabel => PauseCount <= 0 && MeasuredSpeechSeconds <= 0
+        ? string.Empty
+        : $"{MeasuredSpeechSeconds:0.#}s of speech, {PauseCount} pause(s), average pause {MeanPauseSeconds:0.0}s.";
     public bool IsCurrent { get; internal set; }
     public bool IsPassed { get; internal set; }
     public string AiResult { get; internal set; } = string.Empty;
@@ -173,6 +187,13 @@ public sealed class ExamRunPart
 
     /// <summary>Short pronunciation verdict, empty until the check runs.</summary>
     public string PronunciationSummary { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The offline pronunciation score (0 to 100), set when the check runs. AI
+    /// marking uses it to set the pronunciation band from the real sounds instead
+    /// of guessing from the transcript text.
+    /// </summary>
+    public double PronunciationAccuracy { get; set; }
 
     /// <summary>Words the pronunciation model flagged, for the UI list.</summary>
     public IReadOnlyList<PronunciationWord> PronunciationWords { get; set; } = Array.Empty<PronunciationWord>();
@@ -381,9 +402,14 @@ public sealed class ExamRun
     /// <summary>Set while the WebView should play a Listening clip once. This is
     /// an absolute file path; the host turns it into a served URL in AudioUrl.</summary>
     public string PendingAudioUrl { get; set; } = string.Empty;
-
     /// <summary>Served URL for the clip to play, filled by the host.</summary>
     public string AudioUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// When true, a Speaking part records once and is submitted and scored on its
+    /// own, with no transcript editing.
+    /// </summary>
+    public bool SpeakingAutoSubmit { get; internal set; } = true;
 
     /// <summary>What the bottom strip and header read from.</summary>
     public string PartStepLabel => Parts.Count == 0 ? string.Empty : $"Part {PartIndex + 1} of {Parts.Count}";

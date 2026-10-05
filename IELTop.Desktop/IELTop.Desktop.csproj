@@ -1,8 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net10.0-windows10.0.19041.0</TargetFrameworks>
-    <TargetFrameworks Condition="!$([MSBuild]::IsOSPlatform('windows'))">net10.0-maccatalyst</TargetFrameworks>
+    <!-- Windows only. There is no Platforms/MacCatalyst folder, so a
+         maccatalyst target framework would fail to build rather than work. -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <OutputType>WinExe</OutputType>
     <UseMaui>true</UseMaui>
     <SingleProject>true</SingleProject>
@@ -23,35 +24,87 @@
     <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
     <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
 
-    <SelfContained>false</SelfContained>
+    <!-- Framework dependent by default, so a build needs only the .NET
+         SDK. Passing -p:SelfContained=true to publish ships the runtime
+         with the app for people who install without it. -->
+    <SelfContained Condition="'$(SelfContained)' == ''">false</SelfContained>
     <WindowsAppSDKSelfContained>false</WindowsAppSDKSelfContained>
     <MauiXamlInflator>SourceGen</MauiXamlInflator>
     <PublishTrimmed>false</PublishTrimmed>
-    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <!-- Portable PDBs in Release too: the log is the only crash report a
+         user can send, and a stack without symbols is not worth reading. -->
+    <DebugType Condition="'$(Configuration)' == 'Release'">portable</DebugType>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <!-- Build the web UI before the C# build, so dotnet build alone brings
-       everything up to date. Skipped when npm is missing, so a machine without
-       Node still builds the app from the committed output if present. -->
+       everything up to date. Every target below no-ops when npm is missing,
+       so a machine without Node still builds from the output already in
+       wwwroot, and the input and output lists keep a rebuild from re-running
+       npm when nothing changed. -->
   <PropertyGroup>
     <UiDir>$(MSBuildProjectDirectory)\UserInterface</UiDir>
     <UiStamp>$(UiDir)\node_modules\.install-stamp</UiStamp>
+    <UiBundle>$(MSBuildProjectDirectory)\wwwroot\index.html</UiBundle>
   </PropertyGroup>
 
-  <Target Name="WebUiInstall" Condition="!Exists('$(UiStamp)')">
-    <Exec Command="npm install --no-fund --no-audit" WorkingDirectory="$(UiDir)" ContinueOnError="true" />
+  <ItemGroup>
+    <WebUiSource Include="$(UiDir)\src\**\*" />
+    <WebUiSource Include="$(UiDir)\index.html" />
+    <WebUiSource Include="$(UiDir)\exam.html" />
+    <WebUiSource Include="$(UiDir)\vite.config.ts" />
+    <WebUiSource Include="$(UiDir)\tsconfig*.json" />
+    <WebUiSource Include="$(UiDir)\package.json" />
+  </ItemGroup>
+
+  <!-- Resolved once. Without npm the later targets are skipped on purpose
+       instead of failing after twenty npm retries. -->
+  <Target Name="WebUiFindNpm">
+    <Exec Command="where npm"
+          WorkingDirectory="$(UiDir)"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="low"
+          ContinueOnError="true">
+      <Output TaskParameter="ExitCode" PropertyName="NpmProbeExitCode" />
+    </Exec>
+    <PropertyGroup>
+      <NpmCommand Condition="'$(NpmProbeExitCode)' == '0'">npm</NpmCommand>
+    </PropertyGroup>
+  </Target>
+
+  <!-- node_modules/.install-stamp is rewritten on every run, so it is newer
+       than package.json or package-lock.json exactly when the installed
+       dependencies are stale. -->
+  <Target Name="WebUiInstall"
+          DependsOnTargets="WebUiFindNpm"
+          Inputs="$(UiDir)\package.json;$(UiDir)\package-lock.json"
+          Outputs="$(UiStamp)">
+    <Exec Command="$(NpmCommand) install --no-fund --no-audit"
+          WorkingDirectory="$(UiDir)"
+          Condition="'$(NpmCommand)' != ''" />
     <Touch Files="$(UiStamp)" AlwaysCreate="true" Condition="Exists('$(UiDir)\node_modules')" />
   </Target>
 
-  <Target Name="WebUiBuild" DependsOnTargets="WebUiInstall" BeforeTargets="PrepareForBuild">
-    <Exec Command="npm run build" WorkingDirectory="$(UiDir)" ContinueOnError="true" />
-    <Warning Text="The web UI build was skipped. Run 'npm run build' in IELTop.Desktop/UserInterface if the app shows a blank page."
-             Condition="!Exists('$(MSBuildProjectDirectory)\wwwroot\index.html')" />
+  <!-- Condition on the task, not the target. A target condition is evaluated
+       before its dependencies run, so NpmCommand would still be empty and the
+       whole target, npm build included, would be skipped on a fresh clone. -->
+  <Target Name="WebUiBuild"
+          DependsOnTargets="WebUiInstall"
+          BeforeTargets="PrepareForBuild"
+          Inputs="@(WebUiSource)"
+          Outputs="$(UiBundle)">
+    <Exec Command="$(NpmCommand) run build"
+          WorkingDirectory="$(UiDir)"
+          Condition="'$(NpmCommand)' != ''" />
+  </Target>
+
+  <Target Name="WebUiMissingNpm" DependsOnTargets="WebUiFindNpm" BeforeTargets="PrepareForBuild">
+    <Warning Condition="'$(NpmCommand)' == ''" Text="npm was not found, so the web UI was not rebuilt. Run 'npm install' then 'npm run build' in IELTop.Desktop/UserInterface, or the app will start on the bundle left in wwwroot by the last build." />
   </Target>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -59,24 +112,37 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The built web UI. npm build writes here, and it is copied next to
-         the app so the local file server can read it. -->
-    <None Include="wwwroot\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    <!-- GPU inference on Windows: DirectML works with NVIDIA, AMD, and Intel
+         over DirectX 12, so one package covers every GPU. Core stays on the plain
+         CPU package; only the Windows host adds this. If no GPU is usable, the
+         provider falls back to CPU at runtime. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.22.0" />
+    <PackageReference Include="System.Management" Version="10.0.0" />
   </ItemGroup>
 
-  <Target Name="CopyWwwrootToOutput" AfterTargets="Build">
+  <!-- The built web UI. Two consumers need it:
+       - the static web assets pipeline, so BlazorWebView can resolve HostPage
+         and its own blazor.webview.js from the same root;
+       - the output folder, so StaticFileServer can hand the React bundle to the
+         exam window, which runs in a plain WebView2.
+       It is declared in a target rather than statically on purpose: a static
+       glob is evaluated before npm has produced anything, so on the first build
+       after a fresh clone the app would ship with no UI. One declaration only,
+       so nothing is copied twice. -->
+  <Target Name="CollectWwwrootAssets" DependsOnTargets="WebUiBuild" BeforeTargets="AssignTargetPaths">
     <ItemGroup>
-      <_WwwrootFiles Include="$(MSBuildProjectDirectory)\wwwroot\**\*" />
+      <Content Include="$(MSBuildProjectDirectory)\wwwroot\**\*">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </Content>
     </ItemGroup>
-    <Copy SourceFiles="@(_WwwrootFiles)"
-          DestinationFolder="$(TargetDir)wwwroot\%(RecursiveDir)"
-          SkipUnchangedFiles="true" />
   </Target>
 
   <ItemGroup>
     <None Include="..\Content\Assets\Exams\**" Link="Assets\Exams\%(RecursiveDir)%(Filename)%(Extension)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\Content\Assets\Lessons\**" Link="Assets\Lessons\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="..\Content\Assets\Audio\**" Link="Assets\Audio\%(RecursiveDir)%(Filename)%(Extension)">
@@ -85,10 +151,12 @@
     <None Include="..\Content\Assets\Images\**" Link="Assets\Images\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\Content\Assets\Models\README.md" Link="Assets\Models\README.md">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <None Include="..\Content\Assets\Models\phoneme-map.json" Link="Assets\Models\phoneme-map.json">
+    <!-- Everything under Models, not just the two small files: the app reads
+         models from the output folder, so a slot whose .onnx or support file is
+         not copied here can never load. That was the bug where the registry
+         listed models the app could not find. Large files stay out of git; this
+         only copies what is already on disk. -->
+    <None Include="..\Content\Assets\Models\**" Link="Assets\Models\%(RecursiveDir)%(Filename)%(Extension)">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="..\Content\servers.txt" Link="servers.txt">

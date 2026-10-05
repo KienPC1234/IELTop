@@ -13,12 +13,18 @@ public enum PhonemeErrorType
     Insertion
 }
 
-/// <summary>Một điểm khác biệt giữa âm chuẩn (Expected) và âm nghe được (Heard).</summary>
+/// <summary>
+/// One difference between the expected sound and the heard sound. Gop is the
+/// goodness of pronunciation of the expected sound here (1 = the model clearly
+/// heard it, 0 = it did not), computed from the frame posteriors, so even a
+/// "correct" sound can be flagged as shaky.
+/// </summary>
 public sealed record PhonemeEdit(
     PhonemeErrorType Type,
     string? Expected,
     string? Heard,
-    int Position);
+    int Position,
+    double Gop = 1.0);
 
 public sealed record MddResult(
     bool Success,
@@ -31,7 +37,8 @@ public sealed record MddResult(
     int Substitutions,
     int Omissions,
     int Insertions,
-    int Correct)
+    int Correct,
+    double MeanGop = 0)
 {
     public int Total => Substitutions + Omissions + Insertions + Correct;
 
@@ -48,7 +55,8 @@ public sealed record WordPronunciation(
     string Word,
     string Expected,
     string Heard,
-    IReadOnlyList<PhonemeEdit> Edits)
+    IReadOnlyList<PhonemeEdit> Edits,
+    double Gop = 0)
 {
     public bool HasErrors => Edits.Any(e => e.Type != PhonemeErrorType.Correct);
 }
@@ -112,15 +120,93 @@ public sealed class MddPhonemeService : IMddPhonemeService
         return await Task.Run(() =>
         {
             var heard = Recognize(session, labels, wavPath, ct);
-            var display = _g2p.ToDisplay(heard);
-            var edits = Align(expected, heard);
+            var display = _g2p.ToDisplay(heard.Labels);
+            var edits = Align(expected, heard.Labels);
+            AttachGop(edits, expected, heard, labels);
             int sub = edits.Count(x => x.Type == PhonemeErrorType.Substitution);
             int omi = edits.Count(x => x.Type == PhonemeErrorType.Omission);
             int ins = edits.Count(x => x.Type == PhonemeErrorType.Insertion);
             int ok = edits.Count(x => x.Type == PhonemeErrorType.Correct);
             var words = GroupByWord(targetWords, edits);
-            return new MddResult(true, string.Empty, display, expectedDisplay, edits, words, skipped, sub, omi, ins, ok);
+            double meanGop = edits.Count == 0
+                ? 0
+                : Math.Round(edits.Where(e => e.Expected is not null).Select(e => e.Gop).DefaultIfEmpty(0).Average(), 3);
+            return new MddResult(true, string.Empty, display, expectedDisplay, edits, words, skipped, sub, omi, ins, ok, meanGop);
         }, ct);
+    }
+
+    /// <summary>
+    /// Goodness of pronunciation for one expected sound over its frames: the
+    /// mean gap between the log posterior of that sound and the best sound each
+    /// frame, mapped to 0..1. A sound the model clearly heard scores near 1 even
+    /// when the alignment had to guess, and a substituted sound scores whatever
+    /// little probability the expected sound had.
+    /// </summary>
+    public static double SegmentGop(IReadOnlyList<double> gaps)
+    {
+        if (gaps.Count == 0) return 0;
+        double mean = 0;
+        foreach (var gap in gaps) mean += gap;
+        mean /= gaps.Count;
+        if (mean >= 0) return 1;
+        if (mean < -20) return 0;
+        return Math.Round(Math.Exp(mean), 3);
+    }
+
+    private sealed record HeardRun(int LabelIndex, int StartFrame, int EndFrame);
+
+    private sealed record HeardResult(string[] Labels, IReadOnlyList<HeardRun> Runs, float[,] LogPosteriors, float[] MaxLogPosteriors);
+
+    /// <summary>
+    /// Fills the Gop of every edit from the frame posteriors. Heard phones are
+    /// consumed in order, so the run behind each edit is known: a correct or
+    /// substituted sound takes the posterior of the expected sound over that
+    /// run, an omission has no frames and scores 0, an insertion scores the
+    /// posterior of the extra sound that was heard.
+    /// </summary>
+    private static void AttachGop(
+        List<PhonemeEdit> edits, string[] expected, HeardResult heard, string[] labels)
+    {
+        var labelIndex = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < labels.Length; i++)
+        {
+            if (labels[i].Length > 0 && !labelIndex.ContainsKey(labels[i]))
+                labelIndex[labels[i]] = i;
+        }
+
+        int run = 0;
+        for (int i = 0; i < edits.Count; i++)
+        {
+            var edit = edits[i];
+            double gop;
+            if (edit.Type == PhonemeErrorType.Omission)
+            {
+                gop = 0;
+            }
+            else if (run < heard.Runs.Count)
+            {
+                var segment = heard.Runs[run++];
+                var wanted = edit.Expected ?? edit.Heard ?? string.Empty;
+                gop = GopOverRun(segment, wanted, heard, labelIndex);
+            }
+            else
+            {
+                gop = 0;
+            }
+            edits[i] = edit with { Gop = gop };
+        }
+    }
+
+    private static double GopOverRun(
+        HeardRun run, string wanted, HeardResult heard, Dictionary<string, int> labelIndex)
+    {
+        if (!labelIndex.TryGetValue(wanted, out int wantedIndex)) return 0;
+        var gaps = new List<double>();
+        for (int t = run.StartFrame; t <= run.EndFrame; t++)
+        {
+            gaps.Add(heard.LogPosteriors[t, wantedIndex] - heard.MaxLogPosteriors[t]);
+        }
+        return SegmentGop(gaps);
     }
 
     /// <summary>
@@ -155,11 +241,14 @@ public sealed class MddPhonemeService : IMddPhonemeService
             var heard = buckets[i]
                 .Where(e => e.Heard is not null)
                 .Select(e => e.Heard!);
+            var scored = buckets[i].Where(e => e.Expected is not null).ToList();
+            double gop = scored.Count == 0 ? 0 : Math.Round(scored.Average(e => e.Gop), 3);
             result.Add(new WordPronunciation(
                 targetWords[i].Word,
                 string.Join(" ", targetWords[i].Phonemes.Select(p => $"/{p}/")),
                 string.Join(" ", heard.Select(p => $"/{p}/")),
-                buckets[i]));
+                buckets[i],
+                gop));
         }
         return result;
     }
@@ -208,7 +297,7 @@ public sealed class MddPhonemeService : IMddPhonemeService
         return cleaned;
     }
 
-    private static string[] Recognize(InferenceSession session, string[] labels, string wavPath, CancellationToken ct)
+    private static HeardResult Recognize(InferenceSession session, string[] labels, string wavPath, CancellationToken ct)
     {
         var samples = Audio.WavLoader.LoadMono16k(wavPath);
         Normalize(samples);
@@ -223,23 +312,59 @@ public sealed class MddPhonemeService : IMddPhonemeService
         int frames = logits.Dimensions[1];
         int classes = logits.Dimensions[2];
 
-        var heard = new List<string>();
-        int last = -1;
+        // Log posteriors per frame, so every heard sound carries how sure the
+        // model was, not just which label won.
+        var logPosteriors = new float[frames, classes];
+        var maxLogPosteriors = new float[frames];
+        var argmax = new int[frames];
         for (int t = 0; t < frames; t++)
         {
-            int best = 0;
-            float bestVal = float.NegativeInfinity;
+            float max = float.NegativeInfinity;
             for (int c = 0; c < classes; c++)
             {
                 float v = logits[0, t, c];
-                if (v > bestVal) { bestVal = v; best = c; }
+                if (v > max) max = v;
             }
-            if (best == last) continue; // CTC gộp khung lặp liền kề
-            last = best;
-            if (best >= 0 && best < labels.Length && labels[best].Length > 0)
-                heard.Add(labels[best]);
+            double sum = 0;
+            for (int c = 0; c < classes; c++)
+                sum += Math.Exp(logits[0, t, c] - max);
+            double logSum = Math.Log(sum);
+            int best = 0;
+            float bestLog = float.NegativeInfinity;
+            for (int c = 0; c < classes; c++)
+            {
+                float logP = (float)(logits[0, t, c] - max - logSum);
+                logPosteriors[t, c] = logP;
+                if (logP > bestLog) { bestLog = logP; best = c; }
+            }
+            maxLogPosteriors[t] = bestLog;
+            argmax[t] = best;
         }
-        return heard.ToArray();
+
+        // CTC collapse into runs, same rule as before: skip repeats, skip labels
+        // that are not spoken sounds.
+        var heard = new List<string>();
+        var runs = new List<HeardRun>();
+        int last = -1;
+        int runStart = 0;
+        for (int t = 0; t < frames; t++)
+        {
+            int best = argmax[t];
+            if (best == last)
+            {
+                if (runs.Count > 0 && best >= 0 && best < labels.Length && labels[best].Length > 0)
+                    runs[^1] = runs[^1] with { EndFrame = t };
+                continue;
+            }
+            last = best;
+            runStart = t;
+            if (best >= 0 && best < labels.Length && labels[best].Length > 0)
+            {
+                heard.Add(labels[best]);
+                runs.Add(new HeardRun(best, runStart, t));
+            }
+        }
+        return new HeardResult(heard.ToArray(), runs, logPosteriors, maxLogPosteriors);
     }
 
     /// <summary>wav2vec2 expects audio normalized to mean 0 and variance 1.</summary>
@@ -258,7 +383,7 @@ public sealed class MddPhonemeService : IMddPhonemeService
     }
 
     /// <summary>Levenshtein alignment that returns each edit between the two phoneme strings.</summary>
-    public static IReadOnlyList<PhonemeEdit> Align(string[] expected, string[] heard)
+    public static List<PhonemeEdit> Align(string[] expected, string[] heard)
     {
         int n = expected.Length, m = heard.Length;
         var d = new int[n + 1, m + 1];

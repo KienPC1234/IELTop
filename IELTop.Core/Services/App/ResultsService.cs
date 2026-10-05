@@ -107,8 +107,7 @@ public sealed class ResultsService
         try
         {
             using var db = new AppDbContext();
-            db.ExamAttempts.RemoveRange(db.ExamAttempts);
-            db.SaveChanges();
+            db.DeleteAll<ExamAttempt>();
         }
         catch (Exception)
         {

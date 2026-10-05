@@ -60,6 +60,12 @@ public sealed class ExamSetup
     public bool HasPapers { get; init; }
     public string MaterialWarning { get; init; } = string.Empty;
     public double Volume { get; init; } = 80;
+    /// <summary>
+    /// When true (the default), finishing a Speaking part records once, then the
+    /// answer is submitted and scored on its own, with no transcript editing in
+    /// between. Turning it off keeps the transcript box for practice.
+    /// </summary>
+    public bool SpeakingAutoSubmit { get; init; } = true;
 }
 
 /// <summary>Everything the UI needs: the setup plus the run in progress.</summary>
@@ -117,6 +123,7 @@ public sealed class ExamEngine : IDisposable
         IGecService gec,
         IModelLoadCoordinator models,
         IPronunciationService pronunciation,
+        ISettingsStore settings,
         IExamSessionController? session = null)
     {
         _repository = repository;
@@ -125,10 +132,13 @@ public sealed class ExamEngine : IDisposable
         _gec = gec;
         _models = models;
         _pronunciation = pronunciation;
+        _settings = settings;
         _session = session ?? NullExamSessionController.Instance;
         _session.FocusChanged += OnFocusChanged;
         Load();
     }
+
+    private readonly ISettingsStore _settings;
 
     private string _selectedPaperTitle = string.Empty;
     private string _strictness = "Standard";
@@ -264,6 +274,7 @@ public sealed class ExamEngine : IDisposable
             HasPapers = papers.Count > 0,
             MaterialWarning = $"No test papers found. Add a .json paper under {_repository.ExamsDir}.",
             Volume = Volume,
+            SpeakingAutoSubmit = _settings.Current.SpeakingAutoSubmit,
         };
         _ = selectedPaper;
     }
@@ -703,7 +714,9 @@ public sealed class ExamEngine : IDisposable
         Run.IntroHint = part.IsListening
             ? "The clip plays once, after a short reading time, and does not replay."
             : part.IsSpeaking
-                ? "Speaking runs without pause. Record once, then finish the part."
+                ? (_settings.Current.SpeakingAutoSubmit
+                    ? "Record once. When you stop, your answer is submitted and scored straight away."
+                    : "Speaking runs without pause. Record once, then finish the part.")
                 : "Read the instructions, then start when you are ready.";
         Refresh();
     }
@@ -827,14 +840,6 @@ public sealed class ExamEngine : IDisposable
     }
 
     // ----- Navigation -----
-
-    public EngineResult GoNextPart()
-    {
-        if (Run.Phase != ExamPhase.Running) return EngineResult.Fail("The part is not running.");
-        if (Run.CurrentPart?.IsSpeaking == true) return EngineResult.Fail("Speaking uses Finish part.");
-        if (Run.PartIndex < _parts.Count - 1) SwitchToPart(Run.PartIndex + 1);
-        return EngineResult.Ok();
-    }
 
     public EngineResult GoNextSection()
     {
@@ -1079,6 +1084,10 @@ public sealed class ExamEngine : IDisposable
     {
         var part = RequireCurrentPart();
         if (part is null) return EngineResult.Fail("No part is open.");
+        // With auto submit the transcript is what the speech model heard. Editing
+        // it would change the evidence the answer is scored on, so it is refused.
+        if (_settings.Current.SpeakingAutoSubmit)
+            return EngineResult.Fail("The transcript is set from your recording and cannot be edited.");
         part.Transcript = text ?? string.Empty;
         Refresh();
         return EngineResult.Ok();
@@ -1124,6 +1133,7 @@ public sealed class ExamEngine : IDisposable
 
         part.SpokenSeconds = part.SpeakingSeconds;
         part.LastRecordingPath = wavPath;
+        MeasureSpeechTiming(part, wavPath);
         if (!_stt.IsAvailable())
         {
             part.AudioStatus = "Saved recording. No transcription model, type what you said below so AI marking can work. File kept locally.";
@@ -1139,15 +1149,20 @@ public sealed class ExamEngine : IDisposable
             {
                 part.AudioStatus = "Getting the transcription model ready.";
                 Refresh();
-                await _models.PrepareAsync(new[] { "stt-whisper-tiny-en" }, _speakingCts.Token);
+                await _models.PrepareAsync(new[] { OnnxModelRegistry.ResolveSttSlot() }, _speakingCts.Token);
             }
             part.AudioStatus = "Transcribing your speech.";
             Refresh();
             var transcript = await _stt.TranscribeAsync(wavPath, _speakingCts.Token);
             if (transcript.Success && !string.IsNullOrWhiteSpace(transcript.Text))
-                part.AudioStatus = "Transcript ready. Fix any wrong words below, then continue.";
+            {
+                part.Transcript = transcript.Text.Trim();
+                part.AudioStatus = "Transcript ready.";
+            }
             else
-                part.AudioStatus = "Saved recording. Type what you said below so AI marking can work. File kept locally.";
+            {
+                part.AudioStatus = "Saved recording. The transcript could not be read; it will be scored from the sounds alone.";
+            }
         }
         catch (OperationCanceledException)
         {
@@ -1158,7 +1173,82 @@ public sealed class ExamEngine : IDisposable
             part.AudioStatus = "Recording failed. Check your microphone and try again.";
         }
         Refresh();
+
+        // One recording, then the answer is submitted and scored on its own, so
+        // no transcript edits can change what was actually said.
+        if (_settings.Current.SpeakingAutoSubmit)
+        {
+            var finish = await FinishSpeakingAutoAsync(ct).ConfigureAwait(false);
+            return finish;
+        }
         return EngineResult.Ok();
+    }
+
+    /// <summary>
+    /// Scores the recording offline and with the language model, then submits and
+    /// marks. Used after a Speaking recording, so the part is graded from the
+    /// speech and the test is not left half done.
+    /// </summary>
+    private async Task<EngineResult> FinishSpeakingAutoAsync(CancellationToken ct)
+    {
+        var part = RequireCurrentPart();
+        if (part is not null && part.IsSpeaking)
+        {
+            // Measure pronunciation before advancing, so the sound band uses it.
+            if (part.PronunciationAccuracy <= 0
+                && !string.IsNullOrWhiteSpace(part.LastRecordingPath)
+                && _pronunciation.IsAvailable)
+            {
+                try
+                {
+                    var pr = await _pronunciation.AssessAsync(part.LastRecordingPath, part.Transcript, ct).ConfigureAwait(false);
+                    if (pr.Success)
+                    {
+                        part.PronunciationAccuracy = pr.Accuracy;
+                        part.PronunciationSummary = pr.Summary;
+                        part.PronunciationWords = pr.Words;
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception) { /* scoring continues without the sound score */ }
+            }
+
+            if (Run.PartIndex < _parts.Count - 1) SwitchToPart(Run.PartIndex + 1);
+            else await SubmitAsync(confirm: false).ConfigureAwait(false);
+        }
+
+        // The test is submitted; grade it now when a model is set up.
+        if (Run.Phase == ExamPhase.Finished && _ai.IsAvailable)
+        {
+            try
+            {
+                await BeginAiMarkingAsync(ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception) { /* the feedback screen shows the failure */ }
+        }
+        return EngineResult.Ok();
+    }
+
+    /// <summary>
+    /// Runs voice activity detection on the recording and stores the rhythm on
+    /// the part. Reading the file can fail (a short or broken clip); then the
+    /// fields stay 0 and fluency falls back to the word count pace.
+    /// </summary>
+    private static void MeasureSpeechTiming(ExamRunPart part, string wavPath)
+    {
+        try
+        {
+            var samples = IELTop.Services.Audio.WavLoader.LoadMono16k(wavPath);
+            var timing = IELTop.Services.Audio.SpeechTimingAnalyzer.Analyze(samples);
+            part.MeasuredSpeechSeconds = timing.SpeechSeconds;
+            part.PauseCount = timing.PauseCount;
+            part.MeanPauseSeconds = timing.MeanPauseSeconds;
+        }
+        catch (Exception)
+        {
+            // The transcript and the pace cap still work without timing.
+        }
     }
 
     public async Task<EngineResult> CheckPronunciationAsync(CancellationToken ct)
@@ -1170,6 +1260,7 @@ public sealed class ExamEngine : IDisposable
         if (!r.Success)
         {
             part.PronunciationSummary = string.Empty;
+            part.PronunciationAccuracy = 0;
             part.PronunciationWords = Array.Empty<PronunciationWord>();
             part.AudioStatus = r.Error;
             Refresh();
@@ -1177,6 +1268,7 @@ public sealed class ExamEngine : IDisposable
         }
 
         part.PronunciationSummary = r.Summary;
+        part.PronunciationAccuracy = r.Accuracy;
         part.PronunciationWords = r.Words;
         Refresh();
         return EngineResult.Ok();
@@ -1292,7 +1384,7 @@ public sealed class ExamEngine : IDisposable
             string scope = skills.Count == 0 ? "Unknown"
                 : skills.Count >= 4 ? "Full test"
                 : string.Join(" + ", skills);
-            db.ExamAttempts.Add(new ExamAttempt
+            db.Insert(new ExamAttempt
             {
                 PaperTitle = _buildMode == "AI pick" ? "AI built test"
                     : MixAllPapers ? "Mixed papers" : _selectedPaperTitle is { Length: > 0 } t ? t : "Unknown",
@@ -1304,9 +1396,8 @@ public sealed class ExamEngine : IDisposable
                 Total = total,
                 Summary = summary,
                 Violations = Run.StrictViolations,
-                CreatedAt = DateTime.Now,
+                CreatedAt = DateTime.UtcNow,
             });
-            db.SaveChanges();
         }
         catch (Exception)
         {
@@ -1319,7 +1410,7 @@ public sealed class ExamEngine : IDisposable
     {
         _session.SetAlwaysOnTop(false);
         _session.ExitFullscreen();
-        Run = new ExamRun { StatusMessage = "Pick a paper and a marking level, tick the skills, then start." };
+        Run = new ExamRun { StatusMessage = "Pick a paper and a marking level, tick the skills, then start.", SpeakingAutoSubmit = _settings.Current.SpeakingAutoSubmit };
         _parts = new List<ExamRunPart>();
         Load();
         return EngineResult.Ok();
@@ -1411,11 +1502,35 @@ public sealed class ExamEngine : IDisposable
                     lines.Add($"{part.Title}: no transcript, skipped. Type what you said to get a band.");
                     continue;
                 }
+
+                // Score the recording offline first, when there is audio and the
+                // model is installed, so the pronunciation band comes from the
+                // sounds and not from a text guess.
+                if (part.PronunciationAccuracy <= 0
+                    && !string.IsNullOrWhiteSpace(part.LastRecordingPath)
+                    && _pronunciation.IsAvailable)
+                {
+                    try
+                    {
+                        var pr = await _pronunciation.AssessAsync(part.LastRecordingPath, part.Transcript, token);
+                        if (pr.Success)
+                        {
+                            part.PronunciationAccuracy = pr.Accuracy;
+                            part.PronunciationSummary = pr.Summary;
+                            part.PronunciationWords = pr.Words;
+                            lines.Add($"{part.Title}: pronunciation check {pr.Accuracy:0}% match.");
+                        }
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception) { /* marking continues without the sound score */ }
+                }
+
                 var r = await _ai.AssessSpeakingAsync(
                     part.Material + "\n" + part.Title, part.Transcript,
-                    $"{part.Skill} {part.TaskType}", part.SpokenSeconds, StrictnessValue, token);
+                    $"{part.Skill} {part.TaskType} {SpeechTimingInfo(part)}", part.SpokenSeconds, StrictnessValue, token);
                 if (!r.Success || r.Feedback is null) { lines.Add($"{part.Title}: {r.Error}"); continue; }
                 var f = ApplyPaceCap(part, r.Feedback, lines);
+                f = ApplyPronunciationBand(part, f, lines);
                 part.AiResult = $"Band {f.BandLabel}. {f.Summary}";
                 lines.Add($"{part.Title}: band {f.BandLabel}. {f.Summary}");
                 lines.Add($"  Band table: Fluency {f.Fluency:0.0}, Words {f.LexicalResource:0.0}, " +
@@ -1495,7 +1610,7 @@ public sealed class ExamEngine : IDisposable
             if (speaking > 0) last.SpeakingBand = speaking;
             var feedback = string.Join("\n", lines);
             last.AiFeedback = feedback.Length > 8000 ? feedback[..8000] : feedback;
-            db.SaveChanges();
+            db.Update(last);
         }
         catch (Exception)
         {
@@ -1591,6 +1706,60 @@ public sealed class ExamEngine : IDisposable
         };
     }
 
+    /// <summary>
+    /// Replaces the guessed pronunciation band with the one the offline model
+    /// measured. A text model cannot hear sounds, so when the student ran the
+    /// pronunciation check the measured score wins. Without a measurement the
+    /// model's conservative guess is left alone.
+    /// </summary>
+    /// <summary>
+    /// The pronunciation band a measured offline score maps to. Pure and public
+    /// so the mapping is reviewed and tested in one place.
+    /// </summary>
+    public static double PronunciationBandFor(double accuracy) => IeltsBanding.RoundHalf(accuracy switch
+    {
+        >= 95 => 9.0, >= 90 => 8.5, >= 85 => 8.0, >= 80 => 7.5, >= 75 => 7.0,
+        >= 70 => 6.5, >= 60 => 6.0, >= 50 => 5.5, >= 40 => 5.0, >= 25 => 4.5, _ => 4.0,
+    });
+
+    private static SpeakingFeedback ApplyPronunciationBand(ExamRunPart part, SpeakingFeedback f, List<string> lines)
+    {
+        if (part.PronunciationAccuracy <= 0) return f;
+
+        double pron = PronunciationBandFor(part.PronunciationAccuracy);
+        if (Math.Abs(pron - f.Pronunciation) < 0.01) return f;
+
+        double overall = IeltsBanding.RoundHalf((f.Fluency + f.LexicalResource + f.Grammar + pron) / 4.0);
+        lines.Add($"{part.Title}: pronunciation check {part.PronunciationAccuracy:0}% sets the sound band to {pron:0.0}.");
+
+        return new SpeakingFeedback
+        {
+            EstimatedBand = overall,
+            BandLow = f.BandLow,
+            BandHigh = f.BandHigh,
+            Fluency = f.Fluency,
+            LexicalResource = f.LexicalResource,
+            Grammar = f.Grammar,
+            Pronunciation = pron,
+            FluencyWhy = f.FluencyWhy,
+            LexicalWhy = f.LexicalWhy,
+            GrammarWhy = f.GrammarWhy,
+            PronunciationWhy = "Measured by the offline pronunciation model, not guessed from the transcript.",
+            Summary = f.Summary,
+            Strengths = f.Strengths,
+            Improvements = f.Improvements,
+        };
+    }
+
+    /// <summary>
+    /// The measured rhythm for the marking prompt, so the model scores fluency
+    /// from pauses instead of guessing them from the transcript text.
+    /// </summary>
+    private static string SpeechTimingInfo(ExamRunPart part) =>
+        part.PauseCount <= 0 && part.MeasuredSpeechSeconds <= 0
+            ? string.Empty
+            : $"Measured: {part.MeasuredSpeechSeconds:0.#}s of speech, {part.PauseCount} pauses, average pause {part.MeanPauseSeconds:0.0}s.";
+
     private SpeakingFeedback ApplyPaceCap(ExamRunPart part, SpeakingFeedback f, List<string> lines)
     {
         int words = ExamRunPart.CountWords(part.Transcript);
@@ -1598,6 +1767,21 @@ public sealed class ExamEngine : IDisposable
         double wpm = words / minutes;
         lines.Add($"{part.Title}: speech pace about {wpm:0} words per minute.");
         double cap = wpm switch { < 60 => 5.0, < 90 => 6.0, < 110 => 7.0, _ => 9.0 };
+
+        // Pauses measured from the audio cap fluency on their own: many pauses or
+        // long average pauses mean hesitant speech even when the word count pace
+        // looks fine.
+        if (part.PauseCount > 0)
+        {
+            double pauseCap = part.MeanPauseSeconds >= 2.0 || part.PauseCount >= 12 ? 5.0
+                : part.MeanPauseSeconds >= 1.0 || part.PauseCount >= 6 ? 6.0
+                : 9.0;
+            if (pauseCap < cap)
+            {
+                lines.Add($"{part.Title}: {part.PauseCount} pauses (average {part.MeanPauseSeconds:0.0}s) cap fluency at {pauseCap:0.0}.");
+                cap = pauseCap;
+            }
+        }
         if (f.Fluency <= cap) return f;
 
         double overall = IeltsBanding.RoundHalf((cap + f.LexicalResource + f.Grammar + f.Pronunciation) / 4.0);
@@ -1688,7 +1872,7 @@ public sealed class ExamEngine : IDisposable
         try
         {
             using var db = new AppDbContext();
-            var rows = db.ExamAttempts.GroupBy(a => a.Scope)
+            var rows = db.ExamAttempts.ToList().GroupBy(a => a.Scope)
                 .Select(g => new { Scope = g.Key, Avg = g.Average(a => (a.BandLow + a.BandHigh) / 2.0), Count = g.Count() })
                 .ToList();
             if (rows.Count == 0) return "no past tests";

@@ -13,7 +13,11 @@ param(
     [string]$PackId = "IELTop",
     [string]$OutputDir = "releases",
     [switch]$SkipIcon,
-    [switch]$SkipVelo
+    [switch]$SkipVelo,
+
+    # Off by default, so the package stays small. Turn it on when the people
+    # installing the app have no .NET runtime installed.
+    [switch]$SelfContained
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,7 +40,7 @@ dotnet publish "IELTop.Desktop/IELTop.Desktop.csproj" `
     -c Release `
     -f $Framework `
     -r $Runtime `
-    --self-contained false `
+    -p:SelfContained=$($SelfContained.IsPresent.ToString().ToLowerInvariant()) `
     -p:Version=$Version `
     -o $publishDir
 

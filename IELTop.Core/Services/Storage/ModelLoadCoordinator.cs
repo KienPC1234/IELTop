@@ -55,10 +55,12 @@ public sealed class ModelLoadCoordinator : IModelLoadCoordinator
         _settings = settings;
     }
 
-    public IReadOnlyList<string> WritingSlots { get; } = Array.Empty<string>();
+    // The grammar corrector is needed for Writing marking. Its name is the slot
+    // the GecService uses, so keep ready mode can preload and then free it.
+    public IReadOnlyList<string> WritingSlots { get; } = new[] { GecService.SlotName };
 
     public IReadOnlyList<string> SpeakingSlots { get; } = new[]
-        { "stt-whisper-tiny-en", "mdd-wav2vec2-base" };
+        { OnnxModelRegistry.ResolveSttSlot(), "mdd-wav2vec2-base" };
 
     public bool KeepReady => _settings.Current.ModelAutoLoad;
 

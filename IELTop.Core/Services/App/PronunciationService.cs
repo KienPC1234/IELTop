@@ -6,7 +6,7 @@ using IELTop.Services.Ai;
 namespace IELTop.Services.App;
 
 /// <summary>One word the model flagged, with what was expected and what it heard.</summary>
-public sealed record PronunciationWord(string Word, string Expected, string Heard);
+public sealed record PronunciationWord(string Word, string Expected, string Heard, double Gop = 0);
 
 /// <summary>
 /// Pronunciation check for one recording, ready for the UI. Accuracy is the
@@ -22,6 +22,12 @@ public sealed record PronunciationResult
     public int Omissions { get; init; }
     public int Insertions { get; init; }
     public int Correct { get; init; }
+    /// <summary>
+    /// Mean goodness of pronunciation over the expected sounds, 0 to 1. Unlike
+    /// accuracy (how many sounds matched), this says how sure the model was, so
+    /// a matched but shaky sound still shows up.
+    /// </summary>
+    public double MeanGop { get; init; }
     public IReadOnlyList<PronunciationWord> Words { get; init; } = Array.Empty<PronunciationWord>();
     public string HeardPhonemes { get; init; } = string.Empty;
     public string ExpectedPhonemes { get; init; } = string.Empty;
@@ -75,7 +81,7 @@ public sealed class PronunciationService : IPronunciationService
 
             var words = r.Words
                 .Where(w => w.HasErrors)
-                .Select(w => new PronunciationWord(w.Word, w.Expected, w.Heard))
+                .Select(w => new PronunciationWord(w.Word, w.Expected, w.Heard, w.Gop))
                 .ToList();
 
             SaveAttempt(r, targetText, wavPath);
@@ -88,6 +94,7 @@ public sealed class PronunciationService : IPronunciationService
                 Omissions = r.Omissions,
                 Insertions = r.Insertions,
                 Correct = r.Correct,
+                MeanGop = r.MeanGop,
                 Words = words,
                 HeardPhonemes = r.HeardPhonemes,
                 ExpectedPhonemes = r.ExpectedPhonemes,
@@ -108,7 +115,7 @@ public sealed class PronunciationService : IPronunciationService
         try
         {
             using var db = new AppDbContext();
-            db.SpeakingAttempts.Add(new SpeakingAttempt
+            db.Insert(new SpeakingAttempt
             {
                 TargetText = target.Length > 500 ? target[..500] : target,
                 HeardPhonemes = r.HeardPhonemes.Length > 2000 ? r.HeardPhonemes[..2000] : r.HeardPhonemes,
@@ -117,9 +124,8 @@ public sealed class PronunciationService : IPronunciationService
                 Insertions = r.Insertions,
                 Accuracy = r.Accuracy,
                 AudioPath = wavPath,
-                CreatedAt = DateTime.Now,
+                CreatedAt = DateTime.UtcNow,
             });
-            db.SaveChanges();
         }
         catch (Exception)
         {

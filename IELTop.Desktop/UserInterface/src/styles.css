@@ -24,6 +24,8 @@
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.52 0.13 150);
+  --warning: oklch(0.55 0.14 60);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.5 0.19 25);
@@ -31,6 +33,20 @@
   --sidebar-foreground: oklch(0.2 0.01 240);
   --sidebar-accent: oklch(0.935 0.006 240);
   --sidebar-border: oklch(0.91 0.005 240);
+
+  /* Exam chrome, kept apart from the app tokens so the main window is never
+     affected. Computer-delivered IELTS reads as a dark header and a light grey
+     body with white question blocks, not one blank sheet. */
+  --exam-header: oklch(0.33 0.012 260);
+  --exam-header-foreground: oklch(0.99 0 0);
+  --exam-header-muted: oklch(0.74 0.01 260);
+  --exam-bar: oklch(0.955 0.003 260);
+  --exam-bar-foreground: oklch(0.22 0.01 260);
+  --exam-surface: oklch(0.935 0.004 260);
+  --exam-block: oklch(1 0 0);
+  --exam-block-border: oklch(0.87 0.005 260);
+  --exam-instruction: oklch(0.955 0.004 260);
+  --exam-instruction-accent: oklch(0.5 0.19 25);
 }
 
 .dark {
@@ -49,6 +65,8 @@
   --accent: oklch(0.3 0.006 285);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.68 0.13 152);
+  --warning: oklch(0.75 0.13 78);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.62 0.2 25);
@@ -56,6 +74,17 @@
   --sidebar-foreground: oklch(0.92 0 0);
   --sidebar-accent: oklch(0.22 0.006 285);
   --sidebar-border: oklch(1 0 0 / 10%);
+
+  --exam-header: oklch(0.16 0.006 285);
+  --exam-header-foreground: oklch(0.98 0 0);
+  --exam-header-muted: oklch(0.7 0 0);
+  --exam-bar: oklch(0.25 0.006 285);
+  --exam-bar-foreground: oklch(0.95 0 0);
+  --exam-surface: oklch(0.18 0.005 285);
+  --exam-block: oklch(0.245 0.006 285);
+  --exam-block-border: oklch(1 0 0 / 14%);
+  --exam-instruction: oklch(0.28 0.006 285);
+  --exam-instruction-accent: oklch(0.62 0.2 25);
 }
 
 @theme inline {
@@ -74,6 +103,8 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -81,6 +112,16 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-border: var(--sidebar-border);
+  --color-exam-header: var(--exam-header);
+  --color-exam-header-foreground: var(--exam-header-foreground);
+  --color-exam-header-muted: var(--exam-header-muted);
+  --color-exam-bar: var(--exam-bar);
+  --color-exam-bar-foreground: var(--exam-bar-foreground);
+  --color-exam-surface: var(--exam-surface);
+  --color-exam-block: var(--exam-block);
+  --color-exam-block-border: var(--exam-block-border);
+  --color-exam-instruction: var(--exam-instruction);
+  --color-exam-instruction-accent: var(--exam-instruction-accent);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -160,15 +201,27 @@
   color: #fff;
 }
 
-/* The exam copies the real computer test: square corners on every control,
-   while the app shell keeps its rounded shadcn look. Plain reading boxes use
-   rounded-none directly in the exam files. */
-.exam-idp [data-slot="button"],
-.exam-idp [data-slot="badge"],
-.exam-idp [data-slot="input"],
-.exam-idp [data-slot="textarea"],
-.exam-idp [data-slot="card"] {
-  border-radius: 0;
+/* IELTS on Computer UI styling matching official test delivery:
+   Clean high-legibility sans-serif, proportional scaling, and sharp square corners (IDP standard). */
+.exam-idp {
+  font-family: Arial, "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: calc(14.5px * var(--exam-scale, 1));
+  line-height: 1.6;
+}
+
+.exam-idp input,
+.exam-idp textarea,
+.exam-idp button,
+.exam-idp select,
+.exam-idp [role="tab"] {
+  font-family: Arial, "Segoe UI", system-ui, -apple-system, sans-serif;
+  border-radius: 0 !important;
+}
+
+/* Single choice keeps its round control: the square rule above is for the
+   chrome, and a radio that reads as a checkbox would invite two answers. */
+.exam-idp [role="radio"] {
+  border-radius: 9999px !important;
 }
 
 /* Reading split with a draggable divider, like the real test. On narrow

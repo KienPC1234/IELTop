@@ -1,32 +1,39 @@
-"""Export whisper-tiny.en to ONNX for offline transcription.
+"""Export an English whisper model to ONNX (INT8) for offline transcription.
 
-Runs once on a dev machine, not in the app:
-    optimum-cli export onnx --model openai/whisper-tiny.en \
+Runs once on a dev machine, not in the app. Pick the size you want:
+    base (balanced)   small (more accurate, slower)
+
+    optimum-cli export onnx --model openai/whisper-<size>.en \
         --task automatic-speech-recognition --output ./models/fp32
-    python export_onnx.py
+    python export_onnx.py <size>
 
-Copies stt-whisper-tiny-en-encoder-int8.onnx,
-stt-whisper-tiny-en-decoder-int8.onnx, and stt-whisper-tiny-en-vocab.json
-into Content/Assets/Models/.
+tiny is no longer used: it was too weak and has been removed from the app.
+It copies stt-whisper-<size>-en-encoder-int8.onnx,
+stt-whisper-<size>-en-decoder-int8.onnx, and stt-whisper-<size>-en-vocab.json
+into Content/Assets/Models/. The app auto-selects the largest installed encoder
+(see OnnxModelRegistry), so copying a bigger one is all it takes to use it.
 """
 
 import json
-import shutil
+import sys
 import urllib.request
 from pathlib import Path
 
 from onnxruntime.quantization import QuantType, quantize_dynamic
 
-MODEL_ID = "openai/whisper-tiny.en"
+SIZE = (sys.argv[1] if len(sys.argv) > 1 else "base").lower()
+MODEL_ID = f"openai/whisper-{SIZE}.en"
 LICENSE = "MIT"
 HERE = Path(__file__).resolve().parent
-FP32 = HERE / "models" / "fp32"
+import os
+FP32 = HERE / "models" / os.environ.get("FP32_DIR", "fp32")
 OUT = HERE / "models"
 
 NAMES = {
-    "encoder_model.onnx": "stt-whisper-tiny-en-encoder-int8.onnx",
-    "decoder_model.onnx": "stt-whisper-tiny-en-decoder-int8.onnx",
+    "encoder_model.onnx": f"stt-whisper-{SIZE}-en-encoder-int8.onnx",
+    "decoder_model.onnx": f"stt-whisper-{SIZE}-en-decoder-int8.onnx",
 }
+VOCAB = f"stt-whisper-{SIZE}-en-vocab.json"
 
 
 def quantize(src: Path, dst: Path) -> None:
@@ -41,13 +48,11 @@ def quantize(src: Path, dst: Path) -> None:
 
 
 def fetch_vocab() -> None:
-    for name in ("vocab.json",):
-        url = f"https://huggingface.co/{MODEL_ID}/resolve/main/{name}"
-        dst = OUT / "stt-whisper-tiny-en-vocab.json"
-        urllib.request.urlretrieve(url, dst)
-        vocab = json.loads(dst.read_text(encoding="utf-8"))
-        assert len(vocab) == 50257, f"unexpected vocab size {len(vocab)}"
-        print(f"vocab ok: {len(vocab)} tokens, {LICENSE}")
+    url = f"https://huggingface.co/{MODEL_ID}/resolve/main/vocab.json"
+    dst = OUT / VOCAB
+    urllib.request.urlretrieve(url, dst)
+    vocab = json.loads(dst.read_text(encoding="utf-8"))
+    print(f"vocab ok: {len(vocab)} tokens, {LICENSE}")
 
 
 def main() -> None:
@@ -58,7 +63,7 @@ def main() -> None:
         quantize(src, OUT / dst_name)
         print(f"wrote {dst_name}")
     fetch_vocab()
-    print("Copy the *-int8.onnx and *-vocab.json files into Content/Assets/Models/.")
+    print(f"Copy the {SIZE}-int8.onnx and {VOCAB} files into Content/Assets/Models/.")
 
 
 if __name__ == "__main__":

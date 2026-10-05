@@ -24,6 +24,7 @@ public sealed class SettingsSnapshot
     public bool UseStreaming { get; init; }
     public bool VisionEnabled { get; init; }
     public bool ModelAutoLoad { get; init; }
+    public bool SpeakingAutoSubmit { get; init; } = true;
     public bool UpdateCheckOnStartup { get; init; }
     public string SelectedTextSize { get; init; } = "Normal";
     public bool FullscreenOnStart { get; init; }
@@ -95,6 +96,7 @@ public sealed class SettingsService
     private bool _useStreaming = true;
     private bool _visionEnabled;
     private bool _modelAutoLoad;
+    private bool _speakingAutoSubmit = true;
     private bool _updateCheckOnStartup = true;
     private string _textSize = "Normal";
     private bool _fullscreenOnStart;
@@ -133,6 +135,7 @@ public sealed class SettingsService
         _useStreaming = s.LlmUseStreaming;
         _visionEnabled = s.LlmVisionEnabled;
         _modelAutoLoad = s.ModelAutoLoad;
+        _speakingAutoSubmit = s.SpeakingAutoSubmit;
         _updateCheckOnStartup = s.UpdateCheckOnStartup;
         _textSize = s.UiTextSize == "Large" ? "Large" : "Normal";
         _fullscreenOnStart = s.FullscreenOnStart;
@@ -155,6 +158,7 @@ public sealed class SettingsService
     public SettingsSnapshot SetUseStreaming(bool v) { _useStreaming = v; return Snapshot(); }
     public SettingsSnapshot SetVisionEnabled(bool v) { _visionEnabled = v; return Snapshot(); }
     public SettingsSnapshot SetModelAutoLoad(bool v) { _modelAutoLoad = v; return Snapshot(); }
+    public SettingsSnapshot SetSpeakingAutoSubmit(bool v) { _speakingAutoSubmit = v; return Snapshot(); }
     public SettingsSnapshot SetUpdateCheckOnStartup(bool v) { _updateCheckOnStartup = v; return Snapshot(); }
 
     /// <summary>Exam text size applies right away, without waiting for Save.</summary>
@@ -224,6 +228,7 @@ public sealed class SettingsService
         s.LlmUseStreaming = _useStreaming;
         s.LlmVisionEnabled = _visionEnabled;
         s.ModelAutoLoad = _modelAutoLoad;
+        s.SpeakingAutoSubmit = _speakingAutoSubmit;
         s.UiTextSize = _textSize;
         s.FullscreenOnStart = _fullscreenOnStart;
         s.AudioOutputDeviceId = _audioOutput;
@@ -412,6 +417,7 @@ public sealed class SettingsService
             UseStreaming = _useStreaming,
             VisionEnabled = _visionEnabled,
             ModelAutoLoad = _modelAutoLoad,
+            SpeakingAutoSubmit = _speakingAutoSubmit,
             UpdateCheckOnStartup = _updateCheckOnStartup,
             SelectedTextSize = _textSize,
             FontScale = _textSize == "Large" ? 1.15 : 1.0,

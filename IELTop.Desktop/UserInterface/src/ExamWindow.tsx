@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { call, closeExamWindow, onEvent } from '@/bridge'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { applyOutputDevice } from '@/audio'
 import { applyExamDark, readExamDark } from '@/lib/theme'
 import ExamRunner from './pages/exam/ExamRunner'
@@ -22,6 +30,7 @@ export default function ExamWindow() {
   const [error, setError] = useState('')
   const [settings, setSettings] = useState({ fontScale: 1, audioIn: '', audioOut: '' })
   const [examDark, setExamDark] = useState(() => readExamDark())
+  const [closeConfirm, setCloseConfirm] = useState(false)
   const mediaRef = useRef<MediaRefState>({ player: null })
 
   useEffect(() => {
@@ -52,6 +61,9 @@ export default function ExamWindow() {
       if (evt.exam) apply(evt.exam)
       if (evt.event === 'playAudio' && evt.url) playOnce(evt.url)
       if (evt.event === 'record') startRecording(evt.seconds ?? 60)
+      // The host held back a close of the title bar button or Alt+F4 and asks
+      // here instead, because the answers are the thing at risk.
+      if (evt.event === 'exam.closeRequested') setCloseConfirm(true)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -134,6 +146,13 @@ export default function ExamWindow() {
 
   const phase = exam?.run?.phase
 
+  // Closing while the test is on the clock is refused by the host, which
+  // answers with needsConfirm so the question is asked here first.
+  async function requestClose() {
+    const answer = await closeExamWindow()
+    if (answer?.needsConfirm) setCloseConfirm(true)
+  }
+
   // Leaving the run stops any recording without saving it.
   useEffect(() => {
     if (phase !== 'Running' && phase !== 'PartIntro') {
@@ -152,23 +171,20 @@ export default function ExamWindow() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
-  // Enter full screen when the test starts if the user asked for it in Settings.
+  // Enter full screen when the test starts.
   useEffect(() => {
     if (phase === 'PartIntro' || phase === 'Running') {
-      call('settings.snapshot')
-        .then((s) => {
-          if (s?.fullscreenOnStart) call('window.setFullscreen', { value: true }).catch(() => {})
-        })
-        .catch(() => {})
+      call('window.setFullscreen', { value: true }).catch(() => {})
     }
   }, [phase])
 
   if (error) {
     return (
-      <div className="grid h-screen place-items-center bg-background p-10">
-        <div className="w-[480px] max-w-full rounded-none border border-destructive/30 bg-destructive/10 px-6 py-5 text-center">
-          <p className="text-sm leading-relaxed text-destructive">{error}</p>
-          <Button className="mt-4" variant="outline" onClick={() => closeExamWindow()}>
+      <div className="grid h-screen place-items-center bg-exam-surface p-10">
+        <div className="w-[520px] max-w-full border border-destructive/30 bg-exam-block px-6 py-7 text-center">
+          <p className="text-base font-bold text-foreground">The test window hit a problem</p>
+          <p className="mt-1 text-sm leading-relaxed text-destructive">{error}</p>
+          <Button className="mt-5 rounded-none" variant="outline" onClick={requestClose}>
             Close this window
           </Button>
         </div>
@@ -177,8 +193,13 @@ export default function ExamWindow() {
   }
   if (!exam) {
     return (
-      <div className="grid h-screen place-items-center bg-background p-10">
-        <p className="text-sm text-muted-foreground">Loading the test...</p>
+      <div className="grid h-screen place-items-center bg-exam-surface p-10">
+        <div className="w-[420px] max-w-full border border-exam-block-border bg-exam-block px-6 py-7 text-center">
+          <p className="text-base font-bold text-foreground">Loading the test</p>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+            The paper is being prepared.
+          </p>
+        </div>
       </div>
     )
   }
@@ -193,13 +214,13 @@ export default function ExamWindow() {
 
   if (phase === 'Setup') {
     return (
-      <div className="grid h-screen place-items-center bg-background p-10">
-        <div className="w-[480px] max-w-full rounded-none border border-border bg-card px-8 py-7 text-center shadow-sm">
+      <div className="grid h-screen place-items-center bg-exam-surface p-10">
+        <div className="w-[480px] max-w-full border border-exam-block-border bg-exam-block px-8 py-7 text-center">
           <p className="text-xl font-bold tracking-tight">No test is running</p>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
             Start a test from the Mock Test screen in the main window.
           </p>
-          <Button className="mt-5" variant="outline" onClick={() => closeExamWindow()}>
+          <Button className="mt-5 rounded-none" variant="outline" onClick={requestClose}>
             Close this window
           </Button>
         </div>
@@ -207,7 +228,29 @@ export default function ExamWindow() {
     )
   }
 
-  return <ExamRunner exam={exam} onApply={apply} fontScale={exam.run?.fontScale ?? settings.fontScale} examDark={examDark} onToggleExamDark={() => setExamDark((v) => !v)} />
+  return (
+    <>
+      <ExamRunner exam={exam} onApply={apply} fontScale={exam.run?.fontScale ?? settings.fontScale} examDark={examDark} onToggleExamDark={() => setExamDark((v) => !v)} />
+      <Dialog open={closeConfirm} onOpenChange={setCloseConfirm}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Leave the test</DialogTitle>
+            <DialogDescription>
+              This test has not been submitted. Closing the window discards the answers.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCloseConfirm(false)}>
+              Back to the test
+            </Button>
+            <Button variant="destructive" onClick={() => call('exam.confirmCloseWindow')}>
+              Close and discard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
 }
 
 /// Decodes a recorded blob to 16 kHz mono WAV, base64, the model input format.

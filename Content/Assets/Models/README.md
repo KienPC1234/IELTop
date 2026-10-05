@@ -9,9 +9,10 @@ Every entry is a real, downloadable model. All run on CPU.
 | Slot | Files | Skill | Source | License |
 |------|-------|-------|--------|---------|
 | mdd-wav2vec2-base | `mdd-wav2vec2-base-int8.onnx` + `mdd-labels.json` | Speaking | bobboyms/wav2vec2-base-en-phoneme-ctc-41h, exported by `tools/speaking-mdd` | Apache-2.0 |
-| stt-whisper-tiny-en | `stt-whisper-tiny-en-encoder-int8.onnx` + `stt-whisper-tiny-en-decoder-int8.onnx` + `stt-whisper-tiny-en-vocab.json` | Speaking | openai/whisper-tiny.en, exported by `tools/speech-stt` | MIT |
+| stt-whisper-base-en | `stt-whisper-base-en-encoder-int8.onnx` + `stt-whisper-base-en-decoder-int8.onnx` + `stt-whisper-base-en-vocab.json` | Speaking | openai/whisper-base.en, exported by `tools/speech-stt base` | MIT |
+| stt-whisper-small-en | `stt-whisper-small-en-encoder-int8.onnx` + `stt-whisper-small-en-decoder-int8.onnx` + `stt-whisper-small-en-vocab.json` | Speaking | openai/whisper-small.en, exported by `tools/speech-stt small` | MIT |
 | gec-t5-small | `gec-t5-small-encoder-int8.onnx` + `gec-t5-small-decoder-int8.onnx` + `gec-t5-spiece.model` | Writing | Unbabel/gec-t5_small, exported by `tools/writing-gec` | Apache-2.0 |
-| tts-piper-lessac | `tts-piper-lessac-medium.onnx` + `tts-piper-lessac-medium.onnx.json` + folder `espeak-ng/` | Speaking, Listening | rhasspy/piper-voices en_US-lessac-medium, fetched by `tools/speaking-tts` | MIT |
+| tts-piper-lessac | `tts-piper-lessac-medium.onnx` + `tts-piper-lessac-medium.onnx.json` + folder `espeak-ng/` (with `espeak-ng.exe` and `libespeak-ng.dll`) | Speaking, Listening | rhasspy/piper-voices en_US-lessac-medium, fetched by `tools/speaking-tts` | MIT |
 
 ## Notes
 
@@ -20,14 +21,19 @@ Every entry is a real, downloadable model. All run on CPU.
   scores a recording against `phoneme-map.json` and shows the words to fix.
 - The transcription model turns Speaking recordings into text for AI
   marking. Build it with `tools/speech-stt/README.md`. Without it,
-  speaking answers fall back to a typed transcript.
+  speaking answers fall back to a typed transcript. tiny.en was dropped for
+  accuracy: the app now uses small.en when installed, else base.en. Measured on
+  one synthetic clip ("the weather is nice today"): tiny gave "[Music]" or wrong
+  words, base gave "The Where's Nice Today", small gave "But where's Nastudy?".
+  All three miss the start on fast synthetic speech, so measure again on real
+  human recordings before trusting a transcript blindly.
 - The grammar model corrects Writing sentence by sentence and caps the
   grammar band from measured errors. Build it with
   `tools/writing-gec/README.md`. Without it, Writing falls back to AI
   marking alone.
-- The examiner voice, `tools/speaking-tts` (Piper), is not used by the current
-  client yet. The offline Piper voice model and its espeak-ng folder are
-  optional and only needed if a later build adds read-aloud.
+- The examiner voice, `tools/speaking-tts` (Piper), is used by the model server
+  (`IELTop.Desktop.exe --model-server`) and by read-aloud. The offline Piper voice
+  model and its espeak-ng folder are needed for that neural voice.
 - `phoneme-map.json` (committed) is a full word to IPA table (about 125,000
   words) used to build the target pronunciation without a G2P library. It is
   generated from CMUdict (BSD-2-Clause) by

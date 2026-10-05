@@ -127,7 +127,8 @@ public sealed class ExamEngineStrictTests
         var session = new FakeSession();
         var engine = new ExamEngine(
             new FakeRepository(Paper()), new NoopAi(), new NoopStt(), new NoopGec(),
-            new NoopModels(), new NoopPronunciation(), session);
+            new NoopModels(), new NoopPronunciation(),
+            new MemorySettingsStore(new IELTop.Services.Storage.AppSettings()), session);
         return (engine, session);
     }
 
@@ -216,7 +217,8 @@ public sealed class ExamEngineStrictTests
     {
         var engine = new ExamEngine(
             new FakeRepository(Paper()), new NoopAi(), new NoopStt(), new NoopGec(),
-            new NoopModels(), new NoopPronunciation());
+            new NoopModels(), new NoopPronunciation(),
+            new MemorySettingsStore(new IELTop.Services.Storage.AppSettings()));
         engine.Load();
         Assert.False(engine.Setup.HostSupportsStrict);
         engine.SetStrictMode(true);

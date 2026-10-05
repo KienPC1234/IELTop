@@ -3,11 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="./assets/logo-256.png" />
+    <link rel="icon" type="image/svg+xml" href="./assets/IELTop-red-symbol.svg" />
     <title>IELTop</title>
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Mount point for Blazor. The component renders nothing. -->
+    <div id="blazor-app"></div>
+
+    <script src="./_framework/blazor.webview.js" autostart="false"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

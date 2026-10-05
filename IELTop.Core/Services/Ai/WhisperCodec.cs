@@ -5,13 +5,18 @@ using System.Text.Json;
 namespace IELTop.Services.Ai;
 
 /// <summary>
-/// GPT-2 style byte decoding for whisper-tiny.en. The prompt uses hardcoded
+/// <summary>
+/// GPT-2 style byte decoding for the English whisper models. The prompt uses
+/// hardcoded special token ids, which are identical across whisper-tiny/base/
+/// small .en because they share one vocabulary.
+/// </summary>
 /// special token ids (measured from the real tokenizer), so BPE encoding is
 /// never needed. Only decoding text tokens back to words is implemented.
 /// </summary>
 public static class WhisperCodec
 {
-    // Measured from openai/whisper-tiny.en (English-only layout).
+    // Measured from the English-only layout; identical for tiny, base, and
+    // small .en because they share one vocabulary.
     public const int Eot = 50256;
     public const int Sot = 50257;
     public const int English = 50258;

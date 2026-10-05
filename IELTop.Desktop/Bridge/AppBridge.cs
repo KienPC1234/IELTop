@@ -191,6 +191,7 @@ public sealed class AppBridge
         router.Register("settings.setUseStreaming", Act(a => _settings.SetUseStreaming(Bool(a, "value"))));
         router.Register("settings.setVision", Act(a => _settings.SetVisionEnabled(Bool(a, "value"))));
         router.Register("settings.setModelAutoLoad", Act(a => _settings.SetModelAutoLoad(Bool(a, "value"))));
+        router.Register("settings.setSpeakingAutoSubmit", Act(a => _settings.SetSpeakingAutoSubmit(Bool(a, "value"))));
         router.Register("settings.setUpdateCheckOnStartup", Act(a => _settings.SetUpdateCheckOnStartup(Bool(a, "value"))));
         router.Register("settings.setTextSize", Act(a => _settings.SetTextSize(Str(a, "value"))));
         router.Register("settings.setTheme", Act(a => _settings.SetTheme(Str(a, "value"))));

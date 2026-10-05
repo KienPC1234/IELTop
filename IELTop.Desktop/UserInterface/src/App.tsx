@@ -7,13 +7,12 @@ import {
   Clock,
   FileText,
   Flame,
+  GraduationCap,
   LayoutDashboard,
-  PencilLine,
   Play,
   Server,
   Settings as SettingsIcon,
   Sparkles,
-  Zap,
 } from 'lucide-react'
 import { call } from '@/bridge'
 import { Button } from '@/components/ui/button'
@@ -24,7 +23,7 @@ import { cn } from '@/lib/utils'
 import Overview from '@/pages/Overview'
 import MockTest from '@/pages/MockTest'
 import Library from '@/pages/Library'
-import Editor from '@/pages/Editor'
+import Study from '@/pages/Study'
 import Results from '@/pages/Results'
 import Servers from '@/pages/Servers'
 import Settings from '@/pages/Settings'
@@ -52,9 +51,14 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
-    title: 'AUTHORING & SYSTEM',
+    title: 'LEARNING',
     items: [
-      { key: 'editor', label: 'Exam Editor', Icon: PencilLine, desc: 'Build and modify exam papers' },
+      { key: 'study', label: 'Study', Icon: GraduationCap, desc: 'Tutor chat, practice sets, vocabulary' },
+    ],
+  },
+  {
+    title: 'SYSTEM',
+    items: [
       { key: 'results', label: 'Score History', Icon: BarChart3, desc: 'Attempt records and band progression' },
       { key: 'servers', label: 'Community Hub', Icon: Server, desc: 'Download community test papers' },
       { key: 'settings', label: 'Settings', Icon: SettingsIcon, desc: 'Audio devices, AI models, and preferences' },
@@ -96,13 +100,15 @@ export default function App() {
       <aside className="flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-xs">
         {/* Brand Header */}
         <div className="flex items-center gap-3 border-b border-sidebar-border/80 px-4 py-4.5">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-            <Zap className="h-5 w-5 fill-current" />
-          </div>
+          <img
+            src="./assets/IELTop-red-symbol.svg"
+            alt="IELTop logo"
+            className="h-10 w-10 shrink-0 rounded-xl shadow-sm"
+          />
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="text-base font-black tracking-tight text-sidebar-foreground">IELTop</span>
-              <Badge variant="secondary" className="h-4 rounded px-1.5 text-[9px] font-bold uppercase tracking-wider text-primary">
+              <span className="text-base font-bold tracking-tight text-sidebar-foreground">IELTop</span>
+              <Badge variant="secondary" className="h-4 rounded px-1.5 text-xs font-bold uppercase tracking-wider text-primary">
                 Offline
               </Badge>
             </div>
@@ -115,7 +121,7 @@ export default function App() {
           <nav className="flex flex-col gap-6" aria-label="Main Navigation">
             {NAV_GROUPS.map((group) => (
               <div key={group.title} className="flex flex-col gap-1.5">
-                <span className="px-3 text-[11px] font-bold tracking-wider text-sidebar-foreground/50">
+                <span className="px-3 text-xs font-bold tracking-wider text-sidebar-foreground/50">
                   {group.title}
                 </span>
                 {group.items.map((item) => {
@@ -143,7 +149,7 @@ export default function App() {
                       </div>
                       {item.tag && (
                         <span className={cn(
-                          'rounded-md px-1.5 py-0.5 text-[10px] font-bold tracking-tight',
+                          'rounded-md px-1.5 py-0.5 text-xs font-bold tracking-tight',
                           active
                             ? 'bg-primary text-primary-foreground'
                             : 'bg-sidebar-accent text-sidebar-foreground/70'
@@ -166,7 +172,7 @@ export default function App() {
               <Clock className="h-3.5 w-3.5 text-primary" />
               <span>Timed Mock Exam</span>
             </div>
-            <p className="mt-1 text-[11px] leading-relaxed text-sidebar-foreground/65">
+            <p className="mt-1 text-xs leading-relaxed text-sidebar-foreground/65">
               Simulate test day conditions with strict timing and native audio.
             </p>
             <Button
@@ -184,13 +190,10 @@ export default function App() {
         <div className="flex flex-col gap-2.5 border-t border-sidebar-border/80 p-3">
           <div className="flex items-center justify-between px-1 text-xs text-sidebar-foreground/60">
             <div className="flex items-center gap-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
+              <span className="inline-flex h-2 w-2 rounded-full bg-success" />
               <span className="font-medium">Core Engine Ready</span>
             </div>
-            <span className="font-mono text-[11px] text-sidebar-foreground/50">v{dashboard?.version ?? '1.0.0'}</span>
+            <span className="font-mono text-xs text-sidebar-foreground/50">v{dashboard?.version ?? '1.0.0'}</span>
           </div>
 
           <ThemeToggle
@@ -218,7 +221,7 @@ export default function App() {
 
           <div className="flex items-center gap-3">
             {dashboard?.streakDays > 0 && (
-              <Badge variant="outline" className="gap-1 border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
+              <Badge variant="outline" className="gap-1 border-warning/30 bg-warning/10 px-2.5 py-1 text-xs font-semibold text-warning">
                 <Flame className="h-3.5 w-3.5 fill-current" />
                 <span>{dashboard.streakDays} day streak</span>
               </Badge>
@@ -248,7 +251,7 @@ export default function App() {
               )}
               {page === 'mock' && <MockTest />}
               {page === 'library' && <Library onNavigate={navigate} />}
-              {page === 'editor' && <Editor onNavigate={navigate} />}
+              {page === 'study' && <Study onNavigate={navigate} />}
               {page === 'results' && <Results />}
               {page === 'servers' && <Servers onNavigate={navigate} />}
               {page === 'settings' && <Settings />}

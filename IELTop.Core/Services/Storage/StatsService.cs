@@ -1,6 +1,5 @@
 using System.Globalization;
 using IELTop.Data;
-using Microsoft.EntityFrameworkCore;
 
 namespace IELTop.Services.Storage;
 
@@ -56,9 +55,7 @@ public sealed class StatsService : IStatsService
         {
             using var db = new AppDbContext();
 
-            var attempts = db.ExamAttempts
-                .Select(a => new { a.Id, a.BandLow, a.BandHigh, a.CreatedAt })
-                .ToList();
+            var attempts = db.ExamAttempts.ToList();
             exams = attempts.Count;
 
             var last = attempts.OrderByDescending(a => a.Id).FirstOrDefault();
@@ -70,9 +67,8 @@ public sealed class StatsService : IStatsService
                 .GroupBy(a => a.CreatedAt.Date)
                 .ToDictionary(g => g.Key, g => g.Count());
             var speakingDays = db.SpeakingAttempts
-                .Select(s => s.CreatedAt)
                 .ToList()
-                .GroupBy(d => d.Date)
+                .GroupBy(d => d.CreatedAt.Date)
                 .ToDictionary(g => g.Key, g => g.Count());
 
             int CountOn(DateTime day) =>

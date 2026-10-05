@@ -1,0 +1,16 @@
+# Moi truong conda cho tool ingest bai giang, dat trong thu muc nay (.venv).
+# Chay tu thu muc tools/lesson-ingest:
+#   conda env create -p .venv -f environment.yml
+#   conda activate .\.venv
+#   python ingest.py --src "<thu muc Lesson Content>" --out ../../Content/Assets/Lessons
+name: ieltop-lesson-ingest
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+    - python-docx>=1.1
+    - python-pptx>=1.0
+    - openpyxl>=3.1
+    - pypdf>=4.2

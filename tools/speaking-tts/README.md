@@ -16,13 +16,16 @@ Copy into `Content/Assets/Models/`:
 
 - `tts-piper-lessac-medium.onnx`
 - `tts-piper-lessac-medium.onnx.json`
-- folder `espeak-ng/` with `espeak-ng.exe` and `espeak-ng-data/`
+- folder `espeak-ng/` with `espeak-ng.exe`, `libespeak-ng.dll`, and `espeak-ng-data/`
 
 The script also runs a test synthesis and refuses to finish when the
 voice produces almost no audio.
 
 ## Notes
 
+- Keep `libespeak-ng.dll` beside `espeak-ng.exe`. The exe alone exits with a
+  DLL-not-found code and the voice writes an empty wav. The script copies every
+  DLL from the install folder for this reason.
 - Voice and phonemizer files are ignored by git. Only this script and
   README are committed.
 - The app prefers the neural voice and falls back to the built-in

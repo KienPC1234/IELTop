@@ -1,7 +1,9 @@
 # AGENTS.md - Luật bắt buộc cho IELTop
 
 App `.NET 10` học IELTS offline, opensource.
-Stack: .NET MAUI / WinUI 3 (cửa sổ native) + React/Vite (web UI) + ONNX Runtime + SQLite EF Core. Một core dùng chung `IELTop.Core` cho cả logic lẫn model.
+Stack: .NET MAUI / WinUI 3 (cửa sổ native) + React/Vite (web UI) + ONNX Runtime + SQLite (sqlite-net-pcl). Một core dùng chung `IELTop.Core` cho cả logic lẫn model.
+Desktop client chỉ hỗ trợ Windows. Cửa sổ chính chạy trong `BlazorWebView`: nó tải app React đã build qua static web assets, và cầu đi qua JS interop (`JsBridge` + `[JSInvokable]`). Cửa sổ thi chạy trong WebView2 thường, cầu đi qua `StaticFileServer` trên loopback (`/api/*` + SSE) vì trang đó không có Blazor runtime. Hai kênh dùng chung một `BridgeRouter`.
+Kênh postMessage của WebView2 chỉ thuộc cửa sổ thi. Trên cửa sổ chính, `window.chrome.webview` vẫn tồn tại nhưng là kênh nội bộ của Blazor, nên `bridge.ts` chỉ coi postMessage là kênh hợp lệ khi trang chạy trên `http:` (loopback), không phải `https://0.0.0.1` (virtual host của Blazor).
 Mọi agent và mọi commit đều phải tuân thủ file này.
 
 ## 1. Luật thiết kế UI/UX
@@ -25,7 +27,7 @@ Mục này là các nguyên tắc chung. Khi thêm màn hình hay component mớ
 - Sai: "InferenceSession failed: tensor dim mismatch".
 
 1.4. UX dùng được ngay.
-- Một màn một việc; mỗi mục sidebar mở ra một màn hình thật; sidebar tối đa 7 mục.
+- Một màn một việc; mỗi mục sidebar mở ra một màn hình thật; sidebar tối đa 7 mục. Exam Editor là một tab trong Paper Library, không phải mục riêng.
 - Thao tác quá 1 giây có trạng thái chờ (disable nút, "Working...").
 - Ô nhập luôn có placeholder; nhiều dòng dùng `<textarea>` căn từ trên.
 - Cỡ chữ tối thiểu 12px ở mọi text UI; tương phản đủ đọc.
@@ -33,6 +35,7 @@ Mục này là các nguyên tắc chung. Khi thêm màn hình hay component mớ
 
 1.5. Style dùng chung, một hệ duy nhất.
 - Style bằng Tailwind CSS utility cho bố cục và khoảng cách. Token màu, chữ nằm trong `src/styles.css` theo quy ước shadcn/ui (`--background`, `--foreground`, `--card`, `--primary`, `--border`, `--ring`), có cả bảng màu sáng và tối. Sửa token là đổi toàn cục.
+- Khung thi có bộ token riêng `--exam-header`, `--exam-bar`, `--exam-surface`, `--exam-block`, `--exam-instruction` (kèm biến `@theme` `bg-exam-*`), tách khỏi token app để không đổi màn chính. Cửa sổ thi đọc theo chuẩn IDP: header tối, thân xám, khối hướng dẫn viền màu, khối câu hỏi trắng, dải đáy liệt kê part và số câu. Cấm dùng lại `--card`/`--muted` cho khung thi.
 - Component lấy từ shadcn/ui, đặt ở `UserInterface/src/components/ui/`; cài thêm bằng `npx shadcn@latest add <name>`, không tự viết lại. Component ghép riêng của app nằm ở `UserInterface/src/components/` (ví dụ `shared.jsx`, `Field.jsx`, `ThemeToggle.jsx`).
 - Theme sáng, tối, hệ thống: mặc định `System`, lưu ở `AppSettings.UiTheme`, áp bằng class `.dark` trên `<html>` qua `src/lib/theme.js`. Cấm đọc `prefers-color-scheme` trực tiếp trong component.
 - Cấm trộn thêm framework UI khác (Mantine, Chakra, MUI...). Icon vẫn chỉ `lucide-react`.
@@ -63,19 +66,21 @@ Mục này là các nguyên tắc chung. Khi thêm màn hình hay component mớ
 ## 2. Luật code
 
 2.1. Cấu trúc thư mục, đặt đâu làm đó.
-- Repo có 3 phần: `IELTop.Core` (dùng chung, đa nền tảng), `IELTop.Desktop` (client Photino + React, đa nền tảng), `Content` (nội dung đọc dùng chung), cộng thêm `IELTop.Tests` (xUnit cho logic Core).
+- Repo có 3 phần: `IELTop.Core` (dùng chung, đa nền tảng), `IELTop.Desktop` (client .NET MAUI/WebView2 + React, Windows), `Content` (nội dung đọc dùng chung), cộng thêm `IELTop.Tests` (xUnit cho logic Core).
 - Logic có thể test không cần cửa sổ (policy, tracker, engine với fake port) phải có test trong `IELTop.Tests`.
 - `IELTop.Core/Models/` — entity thuần, không gọi DB, không gọi ONNX, không phụ thuộc nền tảng.
 - `IELTop.Core/Data/` — chỉ `AppDbContext` và migration/seed.
 - `IELTop.Core/Services/Ai/` — mọi code ONNX và code gọi LLM nằm đây, UI cấm `new InferenceSession` và cấm `HttpClient` trực tiếp.
 - `IELTop.Core/Services/Exam/` — engine thi (setup, chấm điểm, review), không phụ thuộc UI.
-- `IELTop.Core/Services/Exam/` — mọi hành vi ngoài app (fullscreen, focus, always on top) phải đi qua một port trong Core (`IExamSessionController`), không gọi API nền tảng. Host cài đặt port (`IELTop.Desktop/Web/MauiExamSession.cs`). Mặc định là `NullExamSessionController`. Luật strict mode gom vào `StrictModePolicy`, debounce focus vào `StrictFocusTracker`, đều là lớp thuần, test được.
+- `IELTop.Core/Services/Exam/` - mọi hành vi ngoài app (fullscreen, focus, always on top) phải đi qua một port trong Core (`IExamSessionController`), không gọi API nền tảng. Host cài đặt port (`IELTop.Desktop/Web/MauiExamSession.cs`). Mặc định là `NullExamSessionController`. Luật strict mode gom vào `StrictModePolicy`, debounce focus vào `StrictFocusTracker`, đều là lớp thuần, test được. Cửa sổ thi chỉ giữ lại việc đóng khi một bài đang chạy (`CloseGuard` trả về phase thật); nộp hoặc hủy xong thì đóng thẳng. `FullscreenOnStart` của cửa sổ chính áp dụng ở `IELTop.Desktop/Web/MainWindowPreferences.cs`, gọi từ `App.CreateWindow`.
 - `IELTop.Core/Services/App/` — service cho từng màn hình (Library, Editor, Results, Servers, Settings), trả snapshot thuần dữ liệu.
+- `IELTop.Core/Services/Learn/` — màn Study: `LessonService` đọc JSON bài giảng trong `Content/Assets/Lessons/` và tìm kiếm để trích nguồn; `StudyService` giữ phiên học (chat, luyện tập) trong SQLite, sinh đề và chấm qua `ILlmService`. Chat và luyện tập cần model; đọc bài giảng và từ vựng chạy offline. Prompt nằm ở `IELTop.Core/Services/Ai/StudyPrompts.cs`. Bài giảng chuẩn hóa bằng `tools/lesson-ingest/`, mỗi file một unit, giữ nguyên chữ gốc, có `source`. Dạng câu hỏi luyện tập: `gap`, `completion`, `single`, `multiple`, `short`, `match` (match lưu ở `MatchRowsJson` dạng `{label,answer}`, trả lời `label=value;label=value`); parser đọc từng câu độc lập và **thử lại 1 lần** khi model trả JSON hỏng. Chat có công cụ (`study.chat.runTool`): lookup, translate, summarize, flashcards, fix, paraphrase.
 - `IELTop.Core/Services/Audio/`, `IELTop.Core/Services/Storage/` — theo tính năng. Core tối đa `net10.0`, cấm `net10.0-windows`, cấm `System.Windows`, `NAudio`, `System.Speech`, DPAPI trong Core.
 - `IELTop.Desktop/MauiProgram.cs` — host .NET MAUI. `IELTop.Desktop/Bridge/` — router JSON giữa web UI và C#. `IELTop.Desktop/UserInterface/` — React + Vite. `IELTop.Desktop/wwwroot/` — UI đã build, không commit.
+- Cửa sổ chính dùng `BlazorWebView` (HostPage `wwwroot/index.html`), cầu Blazor nằm ở `IELTop.Desktop/Bridge/JsBridge.cs` và `IELTop.Desktop/Web/BlazorHost.razor`. Cửa sổ thi dùng WebView2 thường + cầu HTTP. Trang React gọi `call()` trong `bridge.ts`, tự chọn kênh: Blazor trước, HTTP sau.
 - Logic dùng chung phải nằm ở `IELTop.Core`, web UI chỉ gọi qua bridge, không tự tính điểm hay đọc DB.
 - `tools/` — công cụ Python (conda `.venv` trong từng thư mục), tách khỏi app C#.
-- `Content/Assets/Models/` — model ONNX. `Content/Assets/Exams/` — nội dung JSON. `Content/Assets/Audio/` — file nghe. `Content/Assets/Images/` — ảnh. `Content/servers.txt` — danh sách server cộng đồng.
+- `Content/Assets/Models/` — model ONNX. `Content/Assets/Exams/` — nội dung JSON. `Content/Assets/Lessons/` — bài giảng đã chuẩn hóa, mỗi unit một JSON. `Content/Assets/Audio/` — file nghe. `Content/Assets/Images/` — ảnh. `Content/servers.txt` — danh sách server cộng đồng.
 - Muốn thêm model ONNX mới: chỉ thêm 1 dòng `OnnxModelSlot` trong `OnnxModelRegistry.cs`.
 - Muốn thêm nội dung học mới: thêm file JSON, không sửa code.
 - Muốn thêm màn hình web mới: thêm 1 file trong `UserInterface/src/pages/`, đăng ký method trong `Bridge/`.
@@ -91,7 +96,7 @@ Mục này là các nguyên tắc chung. Khi thêm màn hình hay component mớ
 2.3. Async, DB, file.
 - I/O luôn async: `async Task`, truyền `CancellationToken` khi infer hoặc gọi LLM.
 - Infer và gọi LLM không được chạy trên UI thread; bridge handler async, host chạy `Task.Run`.
-- EF Core: gọi `AppDbContext.EnsureCreated()`, query ngắn gọn, `DbContext` dùng xong dispose.
+- SQLite (sqlite-net-pcl): gọi `AppDbContext.EnsureCreated()`, query ngắn gọn, context dùng xong dispose.
 - Đường dẫn file dùng `Path.Combine`, không nối chuỗi tay. DB lưu ở `%LocalAppData%/IELTop`, model ở `Content/Assets/Models`, nội dung người dùng ở `%LocalAppData%/IELTop/content`.
 - File `.onnx`, `.db`, `.sqlite`, `settings.json` không commit. Chỉ giữ `README.md`, `.gitkeep`, `phoneme-map.json`.
 - Thêm thư mục content mới thì phải thêm `CopyToOutputDirectory` trong `IELTop.Desktop.csproj`.
@@ -135,6 +140,47 @@ Mục này là các nguyên tắc chung. Khi thêm màn hình hay component mớ
   phải ghi rõ trong License và trong `Content/Assets/Models/README.md`.
 - UI phải show `Source` và `License` của từng slot (mục Offline models trong Settings),
   không cất trong code. Model non-commercial phải hiện rõ trên UI.
+- Mỗi service dùng model phải có `const string SlotName` trỏ tới một slot có thật trong
+  `OnnxModelRegistry`. `OnnxModelRegistry.IsComplete` phải kiểm **đủ mọi file** slot cần
+  (model + file phụ + vocab/spiece/config), không chỉ 1 file. Thêm model thì thêm cả dòng
+  copy trong `IELTop.Desktop.csproj`; build ra phải thấy file trong `bin/.../Assets/Models`.
+  `--selftest` in "N slot(s), M installed" và fail nếu thiếu slot mà service cần.
+- Server ONNX cho chương trình ngoài: `IELTop.Desktop.exe --model-server` mở
+  `OnnxHttpServer` (`IELTop.Core/Services/Protocol/`) trên loopback, chỉ HTTP, có bearer
+  token ghi ở `%LocalAppData%\IELTop\model-server.json`. Route: `/health`, `/v1/stt`,
+  `/v1/tts`, `/v1/pronunciation/check`, `/v1/grammar/check`. Audio truyền base64, không
+  truyền đường dẫn. Tài liệu ở `tools/onnx-server/README.md`.
+- TTS (Piper) cần `espeak-ng.exe` **và `libespeak-ng.dll`** trong `espeak-ng/`; thiếu DLL thì
+  espeak thoát mã `0xC0000135` và voice ghi wav rỗng. Output VITS có thể 4 chiều
+  `[1,1,1,N]`: đọc độ dài ở **chiều cuối**, không phải chiều thứ 3.
+- Model **không tự load khi mở app**. Chế độ thường: load khi bước cần (on demand).
+  Bật "Keep ready" (`AppSettings.ModelAutoLoad`): `ModelLoadCoordinator.PrepareAsync` preload
+  đúng slot của kỳ thi lúc bắt đầu chấm/ghi âm rồi `ReleaseAfterUse` giải phóng sau. `WritingSlots`
+  = `gec-t5-small`, `SpeakingSlots` = whisper + wav2vec2. `/health` của model-server cho biết
+  slot nào đang `loaded`.
+- Kiểm model thật (không chỉ file tồn tại): `$env:IELTOP_ONNX_LIVE=1; dotnet test --filter
+  FullyQualifiedName~OnnxModelsLiveTests`. Test dùng TTS đọc câu, rồi STT nghe lại, wav2vec2
+  chấm (đúng phải cao hơn sai), GEC sửa câu sai. Model đọc từ `Content/Assets/Models`, không
+  copy vào output test.
+- Chấm phát âm dùng **GOP** (goodness of pronunciation): mỗi âm nghe được mang khoảng cách
+  log-posterior trung bình của âm đích trên các frame của nó, về 0..1 (`PhonemeEdit.Gop`,
+  trung bình từ là `WordPronunciation.Gop`, cả bài là `MddResult.MeanGop`). Âm khớp nhưng yếu
+  vẫn bị gắn cờ. Đừng đoán GOP bằng mắt: kiểm bằng `--model-server` + `/v1/pronunciation/check`.
+- **Fluency đo từ audio** (`Services/Audio/SpeechTiming.cs`): VAD năng lượng 20ms, hangover
+  100ms, pause từ 250ms. Lưu vào part (`MeasuredSpeechSeconds`, `PauseCount`, `MeanPauseSeconds`),
+  hiện qua `SpeechTimingLabel`, đưa vào prompt chấm và trừ điểm fluency khi ngắt nhiều/dài
+  (`ApplyPaceCap`). Ngưỡng là heuristic luyện tập, không phải chuẩn IELTS.
+- GPU tự dò: Core giữ provider CPU (`IOnnxExecutionProvider`, `CpuOnnxExecutionProvider`).
+  Host Windows cài `Microsoft.ML.OnnxRuntime.DirectML` và cài port bằng
+  `DirectMlExecutionProvider` (dò `Win32_VideoController`, bỏ adapter ảo/Basic Render). Có GPU
+  thì chạy DirectML (NVIDIA/AMD/Intel qua DX12), không có thì fallback CPU. `/health` của
+  model-server in `provider`. Không hardcode vendor; Core cấm phụ thuộc Windows.
+- STT có 2 slot `stt-whisper-{small,base}-en` (tiny đã bỏ vì quá yếu).
+  `OnnxModelRegistry.ResolveSttSlot()` chọn bản **lớn nhất có sẵn**; thêm file vào
+  `Content/Assets/Models` là app tự dùng, không sửa code.
+- Speaking mặc định **test mode**: test mic trước, ghi **một lần**, dừng là nộp và chấm luôn;
+  transcript lấy từ STT và **không sửa được** (SetTranscript bị từ chối). `AppSettings.SpeakingAutoSubmit`
+  (mặc định true) tắt để giữ ô transcript cho luyện tập. `run.SpeakingAutoSubmit` báo cho UI.
 
 ## 3b. Luật dữ liệu lịch sử bài thi
 
@@ -149,6 +195,8 @@ Mục này là các nguyên tắc chung. Khi thêm màn hình hay component mớ
 - Đề nằm trong `Content/Assets/Exams/*.json`, không hardcode nội dung trong code.
 - Một đề gồm nhiều part, mỗi part có `skill`, `minutes`, `material`, `questions`.
 - Giao diện thi phải giống thi máy thật: một màn hình, có đồng hồ đếm ngược, điều hướng part, một câu hỏi một khối.
+- Thiết kế giao diện thi bo vuông chuẩn IDP/computer-delivered IELTS: toàn bộ khung hướng dẫn, hộp câu hỏi, ô nhập liệu và nút bấm để bo vuông (rounded-none hoặc rounded-xs), không dùng bo tròn mềm (rounded-lg/xl).
+- Tận dụng bề ngang màn hình cân đối, không thu hẹp nội dung tạo khoảng trống lớn bất thường ở 2 bên mép màn hình khi thi.
 - Đáp án lưu theo từng part, chấm toàn bộ đề khi submit, không chỉ part đang xem.
 - Part Writing thu bài luận qua ô nhập, không auto chấm điểm; ghi rõ cần giáo viên hoặc AI chấm.
 - Hết giờ tự chuyển part kế tiếp, hết part cuối thì tự submit.
@@ -180,13 +228,18 @@ Mục này là các nguyên tắc chung. Khi thêm màn hình hay component mớ
 2. Sửa ít nhất có thể. Ưu tiên sửa file có sẵn hơn tạo file mới.
 3. Không tạo file `.md` mới trừ khi được yêu cầu.
 4. Sau khi sửa code C# hoặc web UI: chạy `dotnet build IELTop.slnx --nologo -v minimal` ở gốc repo, fix tới khi 0 error. `dotnet build` tự dựng web UI trước.
-5. Chạy app thử một lần để chắc không crash khi mở cửa sổ. Có thể mở app ẩn và lái qua CDP để kiểm chứng luồng thật.
-6. Không commit, không push, không đổi config git khi chưa được yêu cầu.
-7. Trả lời ngắn gọn, tiếng Việt, liệt kê file đã đổi dạng `đường_dẫn:dòng`.
+5. Chạy app thử một lần để chắc không crash khi mở cửa sổ. Chạy `IELTop.Desktop.exe --selftest` trước: nó chạy toàn bộ kiểm tra (database, bài giảng, papers, vài route bridge) mà **không mở cửa sổ**, in một dòng mỗi mục, exit 0 khi pass, 2 khi fail. Chỉ mở cửa sổ khi cần kiểm chứng UI.
+6. Muốn lái UI thật để kiểm chứng luồng, dùng `tools/debug-desktop/launch.cmd` (mở sẵn cổng debug, tự chạy de-elevated) và `tools/debug-desktop/cdp.ps1` để chạy JS / bấm nút / chụp ảnh qua CDP. Nền tảng: shell elevated bị WebView2 **bỏ qua** biến `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`, nên phải chạy qua `explorer.exe`; cờ chỉ ăn khi app không elevated. URL trang có kèm `?k=<access key>`, key đó là bí mật nên không in ra log. Cách khác khi cần kiểm chứng chuyên sâu: `IELTop.Desktop.exe --selftest --live` gọi model thật theo `llm.txt`; hoặc `dotnet test --filter "FullyQualifiedName~StudyLiveLlmTests"` để kiểm LLM bám bài giảng (tự bỏ qua nếu không có `llm.txt`).
+7. Đọc log thay vì đoán: `%LocalAppData%\IELTop\logs\latest.log` là phiên mới nhất, kèm mọi lời gọi bridge (thời gian, args tóm tắt không lộ bí mật), lỗi C# đầy đủ stack, và lỗi JS từ trang. Tab Diagnostics trong Settings xem nhanh: bộ đếm sức khỏe, call chậm nhất, tail log, mức log, marker. Đặt `IELTOP_LOG=trace|debug|info|warn|error` để đổi mức khi chạy (mức `Info` **không** ghi dòng từng call; muốn thấy thì để `Debug`/`Trace`). Mọi lời gọi bridge tự log qua `BridgeRouter`; muốn log thêm thì gọi `AppLog.*`, không `Console.WriteLine` rải rác. Log ghi **cả** file phiên và `latest.log`, đọc được lúc đang mở (dùng `FileShare.ReadWrite`).
+8. Hướng dẫn debug đầy đủ nằm ở `tools/debug-desktop/README.md`: chạy không cửa sổ, đọc log, lái UI qua CDP, test tĩnh, kiểm LLM bằng `llm.txt`. Thêm tính năng mới thì phải thêm một dòng vào `--selftest` (hoặc một test) để lần sau bắt lỗi hồi quy mà không cần mở cửa sổ.
+9. Không commit, không push, không đổi config git khi chưa được yêu cầu.
+10. Trả lời ngắn gọn, tiếng Việt, liệt kê file đã đổi dạng `đường_dẫn:dòng`.
 
 ## 8. Checklist trước khi báo xong
 
 - [ ] `dotnet build` 0 error.
+- [ ] `IELTop.Desktop.exe --selftest` exit 0 (14/14 pass; thêm `--live` thì 16/16).
+- [ ] Log không có dòng `ERROR` lạ; tab Diagnostics báo Healthy.
 - [ ] Toàn bộ text UI là tiếng Anh.
 - [ ] Không có em dash, en dash, hay emoji mới trong UI.
 - [ ] Không có cỡ chữ nhỏ hơn 12px trong CSS.

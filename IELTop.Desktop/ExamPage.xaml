@@ -6,5 +6,18 @@
         <WebView x:Name="ExamWebView"
                  HorizontalOptions="Fill"
                  VerticalOptions="Fill" />
+
+        <!-- Covers the browser instead of replacing it. Replacing would take the
+             WebView out of the visual tree, and a retry would then reload a view
+             nobody can see. -->
+        <Grid x:Name="FallbackOverlay"
+              IsVisible="False"
+              BackgroundColor="White"
+              HorizontalOptions="Fill"
+              VerticalOptions="Fill">
+            <VerticalStackLayout x:Name="FallbackHost"
+                                 HorizontalOptions="Fill"
+                                 VerticalOptions="Fill" />
+        </Grid>
     </Grid>
 </ContentPage>

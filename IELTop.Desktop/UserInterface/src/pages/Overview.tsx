@@ -38,10 +38,10 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
   if (loading && !data) {
     return (
       <div className="flex flex-col gap-6">
-        <Skeleton className="h-44 w-full rounded-2xl" />
+        <Skeleton className="h-44 w-full rounded-xl" />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-32 rounded-xl" />
+            <Skeleton key={i} className="h-32 rounded-lg" />
           ))}
         </div>
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -77,8 +77,6 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
       detail: '40 questions • 30 mins',
       icon: Headphones,
       badge: 'Native Audio',
-      colorBg: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-      borderHover: 'hover:border-blue-500/40',
     },
     {
       id: 'reading',
@@ -87,8 +85,6 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
       detail: '40 questions • 60 mins',
       icon: BookOpen,
       badge: 'Split Screen',
-      colorBg: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-      borderHover: 'hover:border-emerald-500/40',
     },
     {
       id: 'writing',
@@ -97,8 +93,6 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
       detail: '2 tasks • 60 mins',
       icon: PenTool,
       badge: 'AI Rubric',
-      colorBg: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-      borderHover: 'hover:border-amber-500/40',
     },
     {
       id: 'speaking',
@@ -107,30 +101,28 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
       detail: '3 parts • 14 mins',
       icon: Mic,
       badge: 'Phoneme Model',
-      colorBg: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
-      borderHover: 'hover:border-rose-500/40',
     },
   ]
 
   return (
     <div className="flex flex-col gap-8 pb-10">
       {/* Hero Welcome Banner */}
-      <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-card to-card p-7 shadow-xs">
-        <div className="relative z-10 flex flex-col justify-between gap-6 md:flex-row md:items-center">
+      <div className="rounded-xl border border-border bg-card p-7 shadow-xs">
+        <div className="flex flex-col justify-between gap-6 md:flex-row md:items-center">
           <div className="max-w-xl space-y-2.5">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="secondary" className="gap-1.5 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-primary">
+              <Badge variant="secondary" className="gap-1.5 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-primary">
                 <Sparkles className="h-3.5 w-3.5" />
                 <span>Offline IELTS Simulator</span>
               </Badge>
               {data.activeToday && (
-                <Badge variant="outline" className="gap-1.5 border-emerald-500/40 bg-emerald-500/10 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                <Badge variant="outline" className="gap-1.5 border-success/40 bg-success/10 text-xs font-semibold text-success">
                   <CheckCircle2 className="h-3.5 w-3.5" />
                   <span>Session finished today</span>
                 </Badge>
               )}
             </div>
-            <h2 className="text-2xl font-extrabold tracking-tight text-foreground sm:text-3xl">
+            <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
               Master IELTS with precision
             </h2>
             <p className="text-sm leading-relaxed text-muted-foreground">
@@ -169,14 +161,14 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
               Study Streak
             </CardTitle>
             <div className={cn(
-              'flex h-9 w-9 items-center justify-center rounded-xl',
-              data.streakDays > 0 ? 'bg-amber-500/15 text-amber-500' : 'bg-muted text-muted-foreground'
+              'flex h-9 w-9 items-center justify-center rounded-lg',
+              data.streakDays > 0 ? 'bg-warning/15 text-warning' : 'bg-muted text-muted-foreground'
             )}>
               <Flame className="h-5 w-5 fill-current" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black tracking-tight tabular-nums">
+            <div className="text-2xl font-bold tracking-tight tabular-nums">
               {data.streakDays} <span className="text-sm font-normal text-muted-foreground">days</span>
             </div>
             <p className="mt-1.5 text-xs text-muted-foreground">
@@ -191,12 +183,12 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Overall Band
             </CardTitle>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Award className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black tracking-tight text-primary tabular-nums">
+            <div className="text-2xl font-bold tracking-tight text-primary tabular-nums">
               {data.lastBandLabel || 'Band --'}
             </div>
             <p className="mt-1.5 text-xs text-muted-foreground">
@@ -211,16 +203,16 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Completed Tests
             </CardTitle>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-success/10 text-success">
               <TrendingUp className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-black tracking-tight tabular-nums">
+            <div className="text-2xl font-bold tracking-tight tabular-nums">
               {data.examAttempts} <span className="text-sm font-normal text-muted-foreground">sessions</span>
             </div>
             <p className="mt-1.5 text-xs text-muted-foreground">
-              Saved locally in SQLite database
+              Saved on this device
             </p>
           </CardContent>
         </Card>
@@ -231,18 +223,18 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
             <CardTitle className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               AI & Acoustic Models
             </CardTitle>
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/10 text-purple-500">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Brain className="h-5 w-5" />
             </div>
           </CardHeader>
           <CardContent>
             <div className="flex items-center gap-2">
-              <span className="text-2xl font-black tracking-tight">
+              <span className="text-2xl font-bold tracking-tight">
                 {data.llmConfigured ? 'Ready' : 'Offline'}
               </span>
               <span className={cn(
                 'inline-flex h-2.5 w-2.5 rounded-full',
-                data.llmConfigured ? 'bg-emerald-500' : 'bg-muted-foreground/40'
+                data.llmConfigured ? 'bg-success' : 'bg-muted-foreground/40'
               )} />
             </div>
             <p className="mt-1.5 truncate text-xs text-muted-foreground" title={data.llmSummary}>
@@ -276,17 +268,14 @@ export default function Overview({ data, loading, error, onRefresh, onNavigate }
             return (
               <div
                 key={skill.id}
-                className={cn(
-                  'group flex flex-col justify-between rounded-xl border border-border bg-card p-5 transition-all duration-150 hover:shadow-xs',
-                  skill.borderHover
-                )}
+                className="group flex flex-col justify-between rounded-xl border border-border bg-card p-5 transition-all duration-150 hover:border-primary/40 hover:shadow-xs"
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl', skill.colorBg)}>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-foreground/70">
                       <Icon className="h-5 w-5" />
                     </div>
-                    <Badge variant="secondary" className="text-[10px] font-semibold tracking-wide">
+                    <Badge variant="secondary" className="text-xs font-semibold tracking-wide">
                       {skill.badge}
                     </Badge>
                   </div>

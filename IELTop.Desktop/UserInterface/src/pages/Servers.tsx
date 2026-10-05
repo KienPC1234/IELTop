@@ -82,7 +82,7 @@ export default function Servers({ onNavigate }) {
                     <div className="flex flex-wrap items-center gap-2 text-sm font-semibold leading-relaxed">
                       <span className="min-w-0 break-words">{p.title}</span>
                       {p.isDownloaded && <Badge variant="secondary">Downloaded</Badge>}
-                      {p.isUpdateAvailable && <Badge variant="outline" className="border-amber-500/50 text-amber-700 dark:text-amber-300">Update</Badge>}
+                      {p.isUpdateAvailable && <Badge variant="outline" className="border-warning/50 text-warning">Update</Badge>}
                     </div>
                     <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{p.summary}</p>
                   </div>

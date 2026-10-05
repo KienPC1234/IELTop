@@ -251,9 +251,15 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
             return string.Empty;
         if (!choices[0].TryGetProperty("message", out var message))
             return string.Empty;
-        return message.TryGetProperty("content", out var content)
-            ? content.GetString() ?? string.Empty
-            : string.Empty;
+
+        var content = message.TryGetProperty("content", out var c) ? c.GetString() : null;
+        if (!string.IsNullOrWhiteSpace(content)) return content!;
+
+        // Reasoning models may put the whole answer in reasoning_content and leave
+        // content empty when the token budget is spent on thinking. Returning it is
+        // better than reporting an empty reply to the student.
+        var reasoning = message.TryGetProperty("reasoning_content", out var r) ? r.GetString() : null;
+        return reasoning ?? string.Empty;
     }
 
     private static string ExtractDelta(string payload)
@@ -266,8 +272,10 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
                 return string.Empty;
             if (!choices[0].TryGetProperty("delta", out var delta))
                 return string.Empty;
-            return delta.TryGetProperty("content", out var content)
-                ? content.GetString() ?? string.Empty
+            if (delta.TryGetProperty("content", out var content) && !string.IsNullOrEmpty(content.GetString()))
+                return content.GetString() ?? string.Empty;
+            return delta.TryGetProperty("reasoning_content", out var reasoning)
+                ? reasoning.GetString() ?? string.Empty
                 : string.Empty;
         }
         catch (JsonException)

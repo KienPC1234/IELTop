@@ -47,6 +47,7 @@ export default function MockTest() {
     try {
       apply(await call('exam.start'))
       await call('exam.openWindow')
+      await call('window.setFullscreen', { value: true }).catch(() => {})
     } catch (e) {
       setError(e.message)
     }
@@ -55,6 +56,7 @@ export default function MockTest() {
   async function openWindow() {
     try {
       await call('exam.openWindow')
+      await call('window.setFullscreen', { value: true }).catch(() => {})
     } catch (e) {
       setError(e.message)
     }

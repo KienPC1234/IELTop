@@ -50,8 +50,13 @@ def fetch_espeak() -> Path:
     exe = next(target.rglob("espeak-ng.exe"))
     ESPEAK_DIR.mkdir(parents=True, exist_ok=True)
     shutil.copy(exe, ESPEAK_DIR / "espeak-ng.exe")
+    # espeak-ng.exe is a thin launcher: without libespeak-ng.dll next to it the
+    # process exits 0xC0000135 (DLL not found) and the voice goes silent. Copy
+    # every DLL from the install folder, not only the exe.
+    for dll in exe.parent.glob("*.dll"):
+        shutil.copy(dll, ESPEAK_DIR / dll.name)
     shutil.copytree(exe.parent / "espeak-ng-data", ESPEAK_DIR / "espeak-ng-data", dirs_exist_ok=True)
-    print(f"espeak ok: {ESPEAK_DIR / 'espeak-ng.exe'}")
+    print(f"espeak ok: {ESPEAK_DIR / 'espeak-ng.exe'} (+ {len(list(exe.parent.glob('*.dll')))} dll)")
     return ESPEAK_DIR / "espeak-ng.exe"
 
 

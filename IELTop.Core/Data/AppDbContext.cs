@@ -1,117 +1,208 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using IELTop.Models;
-using Microsoft.EntityFrameworkCore;
+using SQLite;
 
 namespace IELTop.Data;
 
-public sealed class AppDbContext : DbContext
+/// <summary>
+/// High-performance SQLite database context powered by sqlite-net-pcl.
+/// Supports both Async-first operations and synchronous fallback, with WAL mode,
+/// memory page caching, and automatic retry resilience against database locks.
+/// </summary>
+public sealed class AppDbContext : IDisposable
 {
-    public DbSet<VocabularyWord> Words => Set<VocabularyWord>();
-    public DbSet<StudyRecord> StudyRecords => Set<StudyRecord>();
-    public DbSet<SpeakingAttempt> SpeakingAttempts => Set<SpeakingAttempt>();
-    public DbSet<ExamAttempt> ExamAttempts => Set<ExamAttempt>();
+    private static readonly object SyncLock = new();
+    private static SQLiteAsyncConnection? _asyncConnection;
+    private static string? _cachedDbPath;
 
+    private readonly SQLiteConnection _db;
     private readonly string _dbPath;
+    private bool _disposed;
+
+    public TableQuery<VocabularyWord> Words => _db.Table<VocabularyWord>();
+    public TableQuery<StudyRecord> StudyRecords => _db.Table<StudyRecord>();
+    public TableQuery<SpeakingAttempt> SpeakingAttempts => _db.Table<SpeakingAttempt>();
+    public TableQuery<ExamAttempt> ExamAttempts => _db.Table<ExamAttempt>();
+    public TableQuery<StudySession> StudySessions => _db.Table<StudySession>();
+    public TableQuery<ChatMessage> ChatMessages => _db.Table<ChatMessage>();
+    public TableQuery<PracticeSet> PracticeSets => _db.Table<PracticeSet>();
+    public TableQuery<PracticeQuestion> PracticeQuestions => _db.Table<PracticeQuestion>();
+
+    public SQLiteConnection Connection => _db;
 
     public AppDbContext(string? dbPath = null)
     {
-        _dbPath = dbPath
-            ?? Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "IELTop", "ieltop.db");
+        _dbPath = dbPath ?? DefaultDatabasePath();
+        EnsureDirectoryExists(_dbPath);
+
+        _db = new SQLiteConnection(_dbPath, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
+        ApplyPragmas(_db);
     }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder options)
-        => options.UseSqlite($"Data Source={_dbPath}");
+    public static string DefaultDatabasePath() =>
+        _cachedDbPath ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "IELTop", "ieltop.db");
 
-    protected override void OnModelCreating(ModelBuilder b)
+    public static void SetCustomPathForTesting(string? path)
     {
-        b.Entity<VocabularyWord>(e =>
+        lock (SyncLock)
         {
-            e.HasIndex(x => x.Word).IsUnique();
-            e.Property(x => x.Word).HasMaxLength(100).IsRequired();
-        });
-        b.Entity<StudyRecord>(e =>
+            _asyncConnection = null;
+            _cachedDbPath = path;
+        }
+    }
+
+    private static void EnsureDirectoryExists(string path)
+    {
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
+    }
+
+    private static void ApplyPragmas(SQLiteConnection conn)
+    {
+        try
         {
-            e.HasOne(x => x.Word)
-             .WithMany()
-             .HasForeignKey(x => x.VocabularyWordId)
-             .OnDelete(DeleteBehavior.Cascade);
-        });
+            conn.ExecuteScalar<string>("PRAGMA journal_mode = WAL;");
+            conn.ExecuteScalar<string>("PRAGMA synchronous = NORMAL;");
+            conn.ExecuteScalar<string>("PRAGMA temp_store = MEMORY;");
+            conn.ExecuteScalar<string>("PRAGMA cache_size = -64000;");
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Thread-safe shared async connection with serialized background execution.
+    /// Eliminates concurrency lock conflicts across threads.
+    /// </summary>
+    public static SQLiteAsyncConnection GetAsyncConnection(string? dbPath = null)
+    {
+        var path = dbPath ?? DefaultDatabasePath();
+        lock (SyncLock)
+        {
+            if (_asyncConnection is null || _cachedDbPath != path)
+            {
+                EnsureDirectoryExists(path);
+                _cachedDbPath = path;
+                _asyncConnection = new SQLiteAsyncConnection(path, SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
+                try
+                {
+                    _asyncConnection.ExecuteScalarAsync<string>("PRAGMA journal_mode = WAL;").Wait();
+                    _asyncConnection.ExecuteScalarAsync<string>("PRAGMA synchronous = NORMAL;").Wait();
+                    _asyncConnection.ExecuteScalarAsync<string>("PRAGMA temp_store = MEMORY;").Wait();
+                    _asyncConnection.ExecuteScalarAsync<string>("PRAGMA cache_size = -64000;").Wait();
+                }
+                catch { }
+            }
+            return _asyncConnection;
+        }
+    }
+
+    public static SQLiteAsyncConnection AsyncDb => GetAsyncConnection();
+
+    // ==========================================
+    // ASYNC DATABASE OPERATIONS
+    // ==========================================
+
+    public static Task<int> InsertAsync(object item) => AsyncDb.InsertAsync(item);
+    public static Task<int> InsertAllAsync(IEnumerable items) => AsyncDb.InsertAllAsync(items);
+    public static Task<int> UpdateAsync(object item) => AsyncDb.UpdateAsync(item);
+    public static Task<int> DeleteAsync(object item) => AsyncDb.DeleteAsync(item);
+    public static Task<int> DeleteAllAsync<T>() => AsyncDb.DeleteAllAsync<T>();
+    public static Task<T> GetAsync<T>(object id) where T : new() => AsyncDb.GetAsync<T>(id);
+
+    /// <summary>
+    /// Like <see cref="GetAsync{T}"/>, but returns default instead of throwing
+    /// when no row has that id. Study screens read rows a user can delete, so a
+    /// stale id must not crash the screen; a real database error still surfaces.
+    /// </summary>
+    public static async Task<T?> FindAsync<T>(object id) where T : new()
+    {
+        try
+        {
+            return await AsyncDb.GetAsync<T>(id).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException)
+        {
+            return default;
+        }
+    }
+
+    public static AsyncTableQuery<T> TableAsync<T>() where T : new() => AsyncDb.Table<T>();
+    public static Task<List<T>> QueryAsync<T>(string sql, params object[] args) where T : new() => AsyncDb.QueryAsync<T>(sql, args);
+    public static Task<int> ExecuteAsync(string sql, params object[] args) => AsyncDb.ExecuteAsync(sql, args);
+    public static Task RunInTransactionAsync(Action<SQLiteConnection> action) => AsyncDb.RunInTransactionAsync(action);
+
+    public static async Task<string> CheckIntegrityAsync()
+    {
+        try
+        {
+            var result = await AsyncDb.ExecuteScalarAsync<string>("PRAGMA integrity_check;").ConfigureAwait(false);
+            return string.IsNullOrEmpty(result) ? "ok" : result;
+        }
+        catch (Exception ex)
+        {
+            return $"Error: {ex.Message}";
+        }
+    }
+
+    public static async Task EnsureCreatedAsync()
+    {
+        var db = AsyncDb;
+        await db.CreateTableAsync<VocabularyWord>().ConfigureAwait(false);
+        await db.CreateTableAsync<StudyRecord>().ConfigureAwait(false);
+        await db.CreateTableAsync<SpeakingAttempt>().ConfigureAwait(false);
+        await db.CreateTableAsync<ExamAttempt>().ConfigureAwait(false);
+        await db.CreateTableAsync<StudySession>().ConfigureAwait(false);
+        await db.CreateTableAsync<ChatMessage>().ConfigureAwait(false);
+        await db.CreateTableAsync<PracticeSet>().ConfigureAwait(false);
+        await db.CreateTableAsync<PracticeQuestion>().ConfigureAwait(false);
     }
 
     public static void EnsureCreated()
     {
-        using var db = new AppDbContext();
-        Directory.CreateDirectory(Path.GetDirectoryName(db._dbPath)!);
-        db.Database.EnsureCreated();
-        db.EnsureNewTables();
-        db.ApplyCompatibilityFixes();
+        EnsureCreatedAsync().GetAwaiter().GetResult();
     }
 
-    /// <summary>
-    /// EnsureCreated never adds tables to an existing database, so create
-    /// tables added by newer builds by hand. Column layout matches what
-    /// EF Core maps for these entities.
-    /// </summary>
-    private void EnsureNewTables()
+    // ==========================================
+    // SYNCHRONOUS CONTEXT METHODS (RETRY RESILIENT)
+    // ==========================================
+
+    public int Insert(object item) => ExecuteWithRetry(() => _db.Insert(item));
+    public int Update(object item) => ExecuteWithRetry(() => _db.Update(item));
+    public int Delete(object item) => ExecuteWithRetry(() => _db.Delete(item));
+    public int DeleteAll<T>() => ExecuteWithRetry(() => _db.DeleteAll<T>());
+    public int Execute(string query, params object[] args) => ExecuteWithRetry(() => _db.Execute(query, args));
+    public List<T> Query<T>(string query, params object[] args) where T : new() => ExecuteWithRetry(() => _db.Query<T>(query, args));
+
+    private static T ExecuteWithRetry<T>(Func<T> action, int maxRetries = 3)
     {
-        Database.ExecuteSqlRaw(
-            "CREATE TABLE IF NOT EXISTS \"ExamAttempts\" (" +
-            "\"Id\" INTEGER NOT NULL CONSTRAINT \"PK_ExamAttempts\" PRIMARY KEY AUTOINCREMENT, " +
-            "\"PaperTitle\" TEXT NOT NULL, \"Scope\" TEXT NOT NULL, \"Strictness\" TEXT NOT NULL, " +
-            "\"BandLow\" REAL NOT NULL, \"BandHigh\" REAL NOT NULL, " +
-            "\"Correct\" INTEGER NOT NULL, \"Total\" INTEGER NOT NULL, " +
-            "\"Summary\" TEXT NOT NULL, \"Violations\" INTEGER NOT NULL DEFAULT 0, " +
-            "\"WritingBand\" REAL NOT NULL DEFAULT 0, \"SpeakingBand\" REAL NOT NULL DEFAULT 0, " +
-            "\"AiFeedback\" TEXT NOT NULL DEFAULT '', " +
-            "\"CreatedAt\" TEXT NOT NULL);");
-        EnsureViolationsColumn();
-        EnsureAttemptColumn("WritingBand", "REAL NOT NULL DEFAULT 0");
-        EnsureAttemptColumn("SpeakingBand", "REAL NOT NULL DEFAULT 0");
-        EnsureAttemptColumn("AiFeedback", "TEXT NOT NULL DEFAULT ''");
-        EnsureIndexes();
-        Database.ExecuteSqlRaw(
-            "CREATE TABLE IF NOT EXISTS \"SpeakingAttempts\" (" +
-            "\"Id\" INTEGER NOT NULL CONSTRAINT \"PK_SpeakingAttempts\" PRIMARY KEY AUTOINCREMENT, " +
-            "\"TargetText\" TEXT NOT NULL, \"HeardPhonemes\" TEXT NOT NULL, " +
-            "\"Substitutions\" INTEGER NOT NULL, \"Omissions\" INTEGER NOT NULL, " +
-            "\"Insertions\" INTEGER NOT NULL, \"Accuracy\" REAL NOT NULL, " +
-            "\"AudioPath\" TEXT NOT NULL, \"CreatedAt\" TEXT NOT NULL);");
+        int attempts = 0;
+        while (true)
+        {
+            try
+            {
+                lock (SyncLock)
+                {
+                    return action();
+                }
+            }
+            catch (SQLiteException ex) when (ex.Result is SQLite3.Result.Busy or SQLite3.Result.Locked && attempts < maxRetries)
+            {
+                attempts++;
+                System.Threading.Thread.Sleep(50 * attempts);
+            }
+        }
     }
-
-    /// <summary>Indexes that keep result and dashboard queries fast.</summary>
-    private void EnsureIndexes()
-    {
-        Database.ExecuteSqlRaw(
-            "CREATE INDEX IF NOT EXISTS \"IX_ExamAttempts_CreatedAt\" " +
-            "ON \"ExamAttempts\" (\"CreatedAt\");");
-        Database.ExecuteSqlRaw(
-            "CREATE INDEX IF NOT EXISTS \"IX_ExamAttempts_Scope\" " +
-            "ON \"ExamAttempts\" (\"Scope\");");
-        Database.ExecuteSqlRaw(
-            "CREATE INDEX IF NOT EXISTS \"IX_SpeakingAttempts_CreatedAt\" " +
-            "ON \"SpeakingAttempts\" (\"CreatedAt\");");
-    }
-
-    /// <summary>Adds one ExamAttempts column to databases from older builds.</summary>
-    private void EnsureAttemptColumn(string column, string definition)
-    {
-        if (GetColumns("ExamAttempts").Contains(column)) return;
-        // Column name and definition are fixed literals from this class, never user input.
-        var sql = $"ALTER TABLE \"ExamAttempts\" ADD COLUMN \"{column}\" {definition};";
-        Database.ExecuteSqlRaw(sql);
-    }
-
-    /// <summary>Adds the Violations column to databases from older builds.</summary>
-    private void EnsureViolationsColumn()
-        => EnsureAttemptColumn("Violations", "INTEGER NOT NULL DEFAULT 0");
 
     /// <summary>
     /// Housekeeping the user can run from Settings: shrink the file after
-    /// deletes and drop very old speaking attempts that no screen reads.
-    /// Returns a short human summary. Never throws.
+    /// deletes and drop very old speaking attempts.
     /// </summary>
     public static string CompactAndClean(int keepSpeakingDays = 180)
     {
@@ -122,14 +213,9 @@ public sealed class AppDbContext : DbContext
             if (keepSpeakingDays > 0)
             {
                 var cutoff = DateTime.UtcNow.AddDays(-keepSpeakingDays);
-                removed = db.SpeakingAttempts.Count(s => s.CreatedAt < cutoff);
-                if (removed > 0)
-                {
-                    db.Database.ExecuteSqlRaw(
-                        "DELETE FROM \"SpeakingAttempts\" WHERE \"CreatedAt\" < {0};", cutoff);
-                }
+                removed = db.Execute("DELETE FROM SpeakingAttempts WHERE CreatedAt < ?", cutoff);
             }
-            db.Database.ExecuteSqlRaw("VACUUM;");
+            db.Execute("VACUUM;");
             var info = new FileInfo(db._dbPath);
             long mb = info.Exists ? info.Length / 1048576 : 0;
             return removed > 0
@@ -141,35 +227,11 @@ public sealed class AppDbContext : DbContext
             return "Could not compact the database. Close other windows and try again.";
         }
     }
-    /// <summary>
-    /// EnsureCreated does not alter existing tables, so rename older columns
-    /// in place to keep databases from earlier builds working.
-    /// </summary>
-    private void ApplyCompatibilityFixes()
-    {
-        var columns = GetColumns("Words");
-        if (columns.Contains("MeaningVi") && !columns.Contains("Meaning"))
-            Database.ExecuteSqlRaw("ALTER TABLE \"Words\" RENAME COLUMN \"MeaningVi\" TO \"Meaning\";");
-    }
 
-    private HashSet<string> GetColumns(string table)
+    public void Dispose()
     {
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        using var command = Database.GetDbConnection().CreateCommand();
-        command.CommandText = $"PRAGMA table_info(\"{table}\");";
-
-        var wasClosed = Database.GetDbConnection().State != System.Data.ConnectionState.Open;
-        if (wasClosed) Database.GetDbConnection().Open();
-        try
-        {
-            using var reader = command.ExecuteReader();
-            while (reader.Read())
-                names.Add(reader.GetString(1));
-        }
-        finally
-        {
-            if (wasClosed) Database.GetDbConnection().Close();
-        }
-        return names;
+        if (_disposed) return;
+        _disposed = true;
+        _db.Close();
     }
 }

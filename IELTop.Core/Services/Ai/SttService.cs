@@ -16,14 +16,13 @@ public interface ISttService
 }
 
 /// <summary>
-/// English speech to text with whisper-tiny.en on CPU. Audio is cut into
-/// 30 second windows, each encoded once and decoded greedily, then the
-/// window texts are joined. Needs the encoder, decoder, and vocab files.
+/// English speech to text with a whisper .en model on CPU or GPU. The slot in
+/// use is the most accurate installed one (small, then base); audio is cut into
+/// 30 second windows, each encoded once and decoded greedily, then the window
+/// texts are joined. Needs the encoder, decoder, and vocab files of that slot.
 /// </summary>
 public sealed class SttService : ISttService
 {
-    public const string SlotName = "stt-whisper-tiny-en";
-
     private readonly IOnnxService _onnx;
     private Dictionary<int, string>? _vocab;
 
@@ -32,13 +31,16 @@ public sealed class SttService : ISttService
         _onnx = onnx;
     }
 
-    public bool IsModelAvailable() => OnnxModelRegistry.IsComplete(SlotName)
+    /// <summary>The most accurate transcription slot that is installed.</summary>
+    private static string Slot => OnnxModelRegistry.ResolveSttSlot();
+
+    public bool IsModelAvailable() => OnnxModelRegistry.IsComplete(Slot)
         && File.Exists(VocabPath);
 
     bool ISttService.IsAvailable() => IsModelAvailable();
 
     private static string VocabPath => Path.Combine(
-        OnnxModelRegistry.ModelsDir, "stt-whisper-tiny-en-vocab.json");
+        OnnxModelRegistry.ModelsDir, $"{Slot}-vocab.json");
 
     public async Task<SttResult> TranscribeAsync(string wavPath, CancellationToken ct = default)
     {
@@ -47,7 +49,7 @@ public sealed class SttService : ISttService
         if (!File.Exists(wavPath))
             return SttResult.Fail("Recording file not found.");
 
-        if (!_onnx.TryLoad(SlotName, out var loadError))
+        if (!_onnx.TryLoad(Slot, out var loadError))
             return SttResult.Fail(loadError);
 
         try
@@ -112,7 +114,7 @@ public sealed class SttService : ISttService
 
     private InferenceSession RequireEncoder()
     {
-        var session = _onnx.Get(SlotName);
+        var session = _onnx.Get(Slot);
         if (session is null)
             throw new InvalidOperationException("The transcription encoder is not loaded.");
         return session;
@@ -120,7 +122,7 @@ public sealed class SttService : ISttService
 
     private InferenceSession RequireDecoder()
     {
-        var session = _onnx.GetExtra(SlotName);
+        var session = _onnx.GetExtra(Slot);
         if (session is null)
             throw new InvalidOperationException("The transcription decoder is not loaded.");
         return session;

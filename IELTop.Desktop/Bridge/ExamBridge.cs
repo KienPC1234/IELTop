@@ -108,7 +108,8 @@ public sealed class ExamBridge
         router.Register("exam.start", EngineActAsync((_, ct) => _engine.StartExamAsync(ct)));
         router.Register("exam.startPart", EngineAct(_ => _engine.StartPart()));
         router.Register("exam.skipPrep", Act(_ => _engine.SkipPrep()));
-        router.Register("exam.nextPart", EngineAct(_ => _engine.GoNextPart()));
+        // nextSection covers moving to the next skill and falling back to the next
+        // part, so there is no separate nextPart action.
         router.Register("exam.nextSection", EngineAct(_ => _engine.GoNextSection()));
         router.Register("exam.selectPart", EngineAct(a => _engine.SelectPart(Int(a, "index"))));
         router.Register("exam.goToQuestion", EngineAct(a => _engine.GoToQuestion(Int(a, "index"))));
@@ -125,12 +126,13 @@ public sealed class ExamBridge
         router.Register("exam.addHighlight", EngineAct(a => _engine.AddHighlight(Str(a, "text"))));
         router.Register("exam.clearHighlights", EngineAct(_ => _engine.ClearHighlights()));
         router.Register("exam.toggleStrict", EngineAct(_ => _engine.ToggleStrictMode()));
+        router.Register("exam.focusWindow", EngineAct(_ => _engine.FocusWindow()));
 
         // Answers
         router.Register("exam.setChoice", EngineAct(a => _engine.SetChoice(Int(a, "questionIndex"), Str(a, "key"))));
-        router.Register("exam.setGap", EngineAct(a => _engine.SetGapAnswer(Int(a, "questionIndex"), Str(a, "text"))));
+        router.Register("exam.setGap", EngineAct(a => _engine.SetGapAnswer(Int(a, "questionIndex"), Str(a, "text", "answer"))));
         router.Register("exam.setMatch", EngineAct(a => _engine.SetMatchRow(
-            Int(a, "questionIndex"), Int(a, "rowIndex"), Str(a, "value"))));
+            Int(a, "questionIndex"), Int(a, "rowIndex"), Str(a, "value", "answer"))));
         router.Register("exam.toggleFlag", EngineAct(a => _engine.ToggleFlag(Int(a, "questionIndex"))));
         router.Register("exam.setEssay", EngineAct(a => _engine.SetEssay(Str(a, "text"))));
         router.Register("exam.setTranscript", EngineAct(a => _engine.SetTranscript(Str(a, "text"))));
@@ -215,9 +217,16 @@ public sealed class ExamBridge
             return Snapshot();
         };
 
-    private static string Str(JsonElement? a, string n)
-        => a is { } e && e.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String
-            ? v.GetString() ?? string.Empty : string.Empty;
+    private static string Str(JsonElement? a, params string[] names)
+    {
+        if (a is not { } e) return string.Empty;
+        foreach (var n in names)
+        {
+            if (e.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.String)
+                return v.GetString() ?? string.Empty;
+        }
+        return string.Empty;
+    }
 
     private static int Int(JsonElement? a, string n)
         => a is { } e && e.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;

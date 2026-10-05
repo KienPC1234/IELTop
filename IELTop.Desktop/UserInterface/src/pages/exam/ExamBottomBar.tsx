@@ -3,7 +3,12 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) {
+export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }: {
+  exam: any
+  busy?: boolean
+  runCall: (method: string, args?: any) => Promise<any>
+  onConfirmSubmit?: () => void
+}) {
   const run = exam?.run
   const part = run?.currentPart
   if (!part) return null
@@ -14,19 +19,19 @@ export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) 
 
   const currentSkill = part.skill
   const skillParts = (run.parts ?? []).filter(
-    (p) => p.skill?.toLowerCase() === currentSkill?.toLowerCase()
+    (p: any) => p.skill?.toLowerCase() === currentSkill?.toLowerCase()
   )
   const displayParts = skillParts.length > 0 ? skillParts : (run.parts ?? [])
 
   const isLastPartInSkill =
     skillParts.length > 0 && skillParts[skillParts.length - 1].index === part.index
   const hasNextSkill = run.hasNextSkill ?? (run.parts ?? []).some(
-    (p) => p.index > part.index && p.skill?.toLowerCase() !== currentSkill?.toLowerCase()
+    (p: any) => p.index > part.index && p.skill?.toLowerCase() !== currentSkill?.toLowerCase()
   )
   const nextSkillName =
     run.nextSkillName ||
     (run.parts ?? []).find(
-      (p) => p.index > part.index && p.skill?.toLowerCase() !== currentSkill?.toLowerCase()
+      (p: any) => p.index > part.index && p.skill?.toLowerCase() !== currentSkill?.toLowerCase()
     )?.skill
 
   function goBack() {
@@ -41,14 +46,16 @@ export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) 
   }
 
   return (
-    <div className="shrink-0 border-t border-border bg-card">
-      <div className="flex h-13 items-center justify-between gap-2 px-3 sm:gap-4 sm:px-6">
+    <footer className="shrink-0 border-t border-exam-block-border bg-exam-bar text-exam-bar-foreground select-none">
+      <div className="flex min-h-14 items-stretch justify-between gap-3 px-4 sm:px-6">
+        {/* Parts and questions strip, the way the official test splits a
+            section into numbered parts with a live question list. */}
         <div
-          className="flex min-w-0 flex-1 items-center gap-3 overflow-x-auto py-1 sm:gap-6"
+          className="flex min-w-0 flex-1 items-stretch gap-6 overflow-x-auto sm:gap-10"
           role="tablist"
           aria-label="Skill parts"
         >
-          {displayParts.map((p) => {
+          {displayParts.map((p: any) => {
             const isCurrent = p.index === part.index
             const partNum = p.skillPartNumber || p.index + 1
             const pQuestions = p.questions ?? []
@@ -59,28 +66,33 @@ export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) 
                   key={p.index}
                   role="tab"
                   aria-selected={true}
-                  className="flex shrink-0 items-center gap-2 border-b-2 border-foreground pb-1 sm:gap-3"
+                  className="relative flex shrink-0 items-center gap-3 border-t-[3px] border-exam-instruction-accent pt-3 pb-2 sm:gap-4"
                 >
-                  <span className="text-sm font-bold text-foreground">
+                  <span className="text-sm font-bold text-foreground shrink-0">
                     Part {partNum}
                   </span>
+
                   {pQuestions.length > 0 && (
-                    <div className="flex shrink-0 items-center gap-1 sm:gap-1.5">
-                      {pQuestions.map((q, i) => {
+                    <div className="flex shrink-0 items-center gap-1">
+                      {pQuestions.map((q: any, i: number) => {
                         const isFocused = i === (part.focusedIndex ?? 0)
+                        const answered = q.isAnswered
+                        const flagged = q.isFlagged
                         return (
                           <button
                             key={q.number}
                             type="button"
                             aria-label={`Question ${q.number}`}
+                            aria-current={isFocused ? 'true' : undefined}
                             disabled={busy}
                             className={cn(
-                              'min-w-[22px] px-1 py-0.5 text-center text-sm tabular-nums transition-colors',
+                              'flex h-6 min-w-6 items-center justify-center border-b-2 px-1.5 text-sm tabular-nums transition-colors cursor-pointer',
                               isFocused
-                                ? 'border-b-2 border-primary font-bold text-foreground'
-                                : 'text-muted-foreground hover:text-foreground',
-                              q.isAnswered && !isFocused && 'border-b border-foreground/70 font-medium text-foreground',
-                              q.isFlagged && 'rounded-sm bg-amber-500/20'
+                                ? 'border-foreground font-bold text-foreground'
+                                : answered
+                                  ? 'border-exam-bar-foreground/50 font-medium text-foreground hover:border-foreground'
+                                  : 'border-transparent text-muted-foreground hover:text-foreground',
+                              flagged && 'bg-warning/25 font-semibold text-warning'
                             )}
                             onClick={() => runCall('exam.goToQuestion', { index: i })}
                           >
@@ -102,10 +114,10 @@ export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) 
                 aria-selected={false}
                 disabled={busy}
                 onClick={() => runCall('exam.selectPart', { index: p.index })}
-                className="flex shrink-0 items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground sm:gap-2"
+                className="flex shrink-0 flex-col items-start justify-center gap-0.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground cursor-pointer py-1"
               >
                 <span>Part {partNum}</span>
-                <span className="text-xs tabular-nums opacity-75">
+                <span className="text-xs tabular-nums text-muted-foreground">
                   {p.answeredCount ?? 0}/{p.scoredCount ?? pQuestions.length}
                 </span>
               </button>
@@ -113,12 +125,13 @@ export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) 
           })}
         </div>
 
-        <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+        {/* Section completion actions and question navigation */}
+        <div className="flex shrink-0 items-center gap-2 py-2">
           {isLastPartInSkill && hasNextSkill && (
             <Button
               variant="default"
               size="sm"
-              className="h-9 rounded-sm px-3 text-xs font-semibold sm:px-4 sm:text-sm"
+              className="h-9 rounded-none px-3 text-xs font-semibold sm:px-4 sm:text-sm"
               disabled={busy}
               onClick={() => runCall('exam.nextSection')}
             >
@@ -130,7 +143,7 @@ export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) 
             <Button
               variant="default"
               size="sm"
-              className="h-9 rounded-sm px-3 text-xs font-semibold sm:px-4 sm:text-sm"
+              className="h-9 rounded-none px-3 text-xs font-semibold sm:px-4 sm:text-sm"
               disabled={busy}
               onClick={() => onConfirmSubmit?.()}
             >
@@ -143,7 +156,7 @@ export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) 
               <Button
                 variant="outline"
                 size="icon"
-                className="h-9 w-9 rounded-sm"
+                className="h-9 w-9 rounded-none"
                 disabled={busy || (atFirst && part.index === 0)}
                 onClick={goBack}
                 aria-label="Previous question"
@@ -159,7 +172,7 @@ export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) 
               <Button
                 variant="outline"
                 size="icon"
-                className="h-9 w-9 rounded-sm"
+                className="h-9 w-9 rounded-none"
                 disabled={busy || (atLast && part.index >= (run.parts ?? []).length - 1 && !hasNextSkill)}
                 onClick={goForward}
                 aria-label="Next question"
@@ -171,6 +184,6 @@ export default function ExamBottomBar({ exam, busy, runCall, onConfirmSubmit }) 
           </Tooltip>
         </div>
       </div>
-    </div>
+    </footer>
   )
 }

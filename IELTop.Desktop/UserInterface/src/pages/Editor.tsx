@@ -108,13 +108,13 @@ export default function Editor({ onNavigate }) {
   const skillIcon = (skill) => {
     switch (skill?.toLowerCase()) {
       case 'listening':
-        return <Headphones className="h-3.5 w-3.5 text-blue-500" />
+        return <Headphones className="h-3.5 w-3.5 text-muted-foreground" />
       case 'reading':
-        return <BookOpen className="h-3.5 w-3.5 text-emerald-500" />
+        return <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
       case 'writing':
-        return <PenTool className="h-3.5 w-3.5 text-amber-500" />
+        return <PenTool className="h-3.5 w-3.5 text-muted-foreground" />
       case 'speaking':
-        return <Mic className="h-3.5 w-3.5 text-purple-500" />
+        return <Mic className="h-3.5 w-3.5 text-muted-foreground" />
       default:
         return <Layers className="h-3.5 w-3.5 text-muted-foreground" />
     }
@@ -135,11 +135,11 @@ export default function Editor({ onNavigate }) {
               {d.category || 'General'}
             </Badge>
             {d.validationIssues.length > 0 ? (
-              <Badge variant="outline" className="border-amber-500/50 text-amber-600 dark:text-amber-400 gap-1 text-xs">
+              <Badge variant="outline" className="border-warning/50 text-warning gap-1 text-xs">
                 <AlertTriangle className="h-3 w-3" /> {d.validationIssues.length} issues
               </Badge>
             ) : (
-              <Badge variant="outline" className="border-emerald-500/50 text-emerald-600 dark:text-emerald-400 gap-1 text-xs">
+              <Badge variant="outline" className="border-success/50 text-success gap-1 text-xs">
                 <CheckCircle2 className="h-3 w-3" /> Valid
               </Badge>
             )}
@@ -274,7 +274,7 @@ export default function Editor({ onNavigate }) {
                     <span className="text-muted-foreground">Included Skills:</span>
                     <div className="flex flex-wrap gap-1 justify-end">
                       {Array.from(new Set<string>((d.parts ?? []).map((p: any) => p.skill))).map((s) => (
-                        <Badge key={s} variant="secondary" className="text-[10px]">
+                        <Badge key={s} variant="secondary" className="text-xs">
                           {s}
                         </Badge>
                       ))}
@@ -284,14 +284,14 @@ export default function Editor({ onNavigate }) {
               </Card>
 
               {d.validationIssues.length > 0 ? (
-                <Card className="border-amber-500/30 bg-amber-500/5">
+                <Card className="border-warning/30 bg-warning/5">
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                    <CardTitle className="text-sm font-semibold text-warning flex items-center gap-1.5">
                       <AlertTriangle className="h-4 w-4" /> Validation Notices
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ul className="list-disc pl-4 space-y-1 text-xs text-amber-700 dark:text-amber-300">
+                    <ul className="list-disc pl-4 space-y-1 text-xs text-warning">
                       {d.validationIssues.map((issue, idx) => (
                         <li key={idx}>{issue}</li>
                       ))}
@@ -299,8 +299,8 @@ export default function Editor({ onNavigate }) {
                   </CardContent>
                 </Card>
               ) : (
-                <Card className="border-emerald-500/30 bg-emerald-500/5">
-                  <CardContent className="py-4 flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-300 font-medium">
+                <Card className="border-success/30 bg-success/5">
+                  <CardContent className="py-4 flex items-center gap-2 text-xs text-success font-medium">
                     <CheckCircle2 className="h-4 w-4" /> All parts and question numbering pass validation.
                   </CardContent>
                 </Card>
@@ -360,7 +360,7 @@ export default function Editor({ onNavigate }) {
                                   {p.id || `Part ${i + 1}`} · {p.title || 'Untitled'}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                 <span className="flex items-center gap-0.5">
                                   <Clock className="h-3 w-3" /> {p.minutes}m
                                 </span>
@@ -637,10 +637,10 @@ export default function Editor({ onNavigate }) {
                             >
                               <div className="min-w-0 flex-1 space-y-1">
                                 <div className="flex items-center gap-1.5">
-                                  <Badge variant="outline" className="text-[10px] font-bold px-1.5 py-0 h-4">
+                                  <Badge variant="outline" className="text-xs font-bold px-1.5 py-0 h-4">
                                     Q{q.number}
                                   </Badge>
-                                  <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
+                                  <Badge variant="secondary" className="text-xs px-1 py-0 h-4">
                                     {q.kind}
                                   </Badge>
                                 </div>
@@ -743,7 +743,7 @@ export default function Editor({ onNavigate }) {
                               value={question.correctKey}
                               onChange={(e) => setQuestion('correctKey', e.target.value)}
                             />
-                            <p className="mt-1 text-[11px] text-muted-foreground">
+                            <p className="mt-1 text-xs text-muted-foreground">
                               For multiple choices, separate keys with comma (e.g. B,D).
                             </p>
                           </Field>

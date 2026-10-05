@@ -2,7 +2,7 @@
 
 Builds the app logo and the Windows icon from the logo art.
 
-The source of truth is `Content/Assets/Images/IELTop-rounded.png`. Replace it to
+The source of truth is `Content/Assets/Images/IELTop-red-symbol.svg`. Replace it to
 change the look, then run this script again.
 
 ## Output
@@ -16,7 +16,8 @@ change the look, then run this script again.
 - `logo-64.png` is the small logo for the README.
 
 Every size keeps the full logo, exactly like the source art, so the app icon
-matches the supplied PNG and SVG.
+matches the supplied SVG. `resvg` renders the SVG; it comes from the same conda
+environment, so no browser or system SVG library is needed.
 
 ## Run
 
@@ -29,5 +30,5 @@ conda run -n ieltop-icon python make_icon.py
 
 - Do not edit `app.ico`, `logo-256.png`, or `logo-64.png` by hand. Run this
   script instead.
-- Keep the logo art as a transparent PNG. The outer corners are transparent,
+- The source SVG keeps the red rounded square and the transparent outer corners,
   which the rounded app tile relies on.

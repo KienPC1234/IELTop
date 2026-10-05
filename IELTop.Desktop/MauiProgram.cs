@@ -1,17 +1,28 @@
 using System.Globalization;
-using System.Text.Json;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using IELTop.Data;
 using IELTop.Desktop.Bridge;
+using IELTop.Desktop.Diagnostics;
 using IELTop.Desktop.Update;
 using IELTop.Desktop.Web;
 using IELTop.Services.Ai;
 using IELTop.Services.App;
+using IELTop.Services.Audio;
+using IELTop.Services.Diagnostics;
 using IELTop.Services.Exam;
+using IELTop.Services.Learn;
+using IELTop.Services.Protocol;
 using IELTop.Services.Storage;
 using IELTop.Services.Update;
-
 namespace IELTop.Desktop;
 
+/// <summary>
+/// The composition root. Every service is built here by the container and
+/// receives its dependencies through the constructor, so nothing reaches for a
+/// shared instance by hand and the container can dispose what owns a resource.
+/// </summary>
 public static class MauiProgram
 {
     public static MauiApp CreateMauiApp()
@@ -19,179 +30,200 @@ public static class MauiProgram
         CultureInfo.DefaultThreadCurrentCulture = CultureInfo.InvariantCulture;
         CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.InvariantCulture;
 
-        var webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
-        var server = new StaticFileServer(webRoot);
-        server.AddMediaFolder("audio", Path.Combine(AppContext.BaseDirectory, "Assets", "Audio"));
-        server.AddMediaFolder("audio", Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "IELTop", "content", "Audio"));
-        server.AddMediaFolder("images", Path.Combine(AppContext.BaseDirectory, "Assets", "Images"));
-        server.AddMediaFolder("images", Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "IELTop", "content", "Images"));
-        server.Start();
-
-        AppDbContext.EnsureCreated();
-
-        var settings = new SettingsStore();
-        var onnx = new OnnxService();
-        var stats = new StatsService(settings);
-        var repository = new ExamRepository();
-        var ai = new IeltsAiService(new OpenAiCompatibleLlmService(settings), settings);
-        var stt = new SttService(onnx);
-        var gec = new GecService(onnx);
-        var models = new ModelLoadCoordinator(onnx, settings);
-        var g2p = new SimpleG2PService();
-        var pronunciation = new PronunciationService(new MddPhonemeService(onnx, g2p));
-
-        var examSession = new MauiExamSession();
-        var engine = new ExamEngine(repository, ai, stt, gec, models, pronunciation, examSession);
-
-        var updates = new GithubReleaseUpdateService();
-        var settingsService = new SettingsService(settings, ai, updates);
-        var resultsService = new ResultsService();
-        var libraryService = new LibraryService(repository, engine, ai);
-        var editorService = new EditorService(repository, engine, ai);
-        libraryService.DraftReady += paper => editorService.LoadDraft(paper);
-
-        var serverStore = new ContentServerStore();
-        var serverClient = new ContentServerClient();
-        var serversService = new ServersService(serverStore, serverClient, repository, engine);
-
-        var router = new BridgeRouter();
-        RegisterDashboard(router, stats);
-
-        var examBridge = new ExamBridge(engine, server, examSession.Push);
-        examBridge.Register(router);
-        new AppBridge(libraryService, editorService, resultsService, serversService, settingsService).Register(router);
-
-        Window? examWindow = null;
-        var isExamFullscreen = false;
-
-        router.Register("window.toggleFullscreen", () =>
+        // The log is opened first, before any service, so a failure while the
+        // services are built is still written down.
+        AppLog.Initialize("IELTop.Desktop", AppVersion());
+        AppLog.Info("app", "Host starting.");
+        AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
-            examSession.ToggleFullscreen(ref isExamFullscreen);
-            return null;
-        });
-
-        router.Register("window.setFullscreen", (JsonElement? args, CancellationToken _) =>
+            HealthMonitor.CountUnhandled();
+            AppLog.Error("app", "Unhandled domain exception.", e.ExceptionObject as Exception);
+            AppLog.Flush();
+        };
+        System.Threading.Tasks.TaskScheduler.UnobservedTaskException += (_, e) =>
         {
-            bool on = args is { } a && a.TryGetProperty("value", out var v) && v.ValueKind is JsonValueKind.True or JsonValueKind.False
-                && v.GetBoolean();
-            isExamFullscreen = on;
-            if (on) examSession.EnterFullscreen();
-            else examSession.ExitFullscreen();
-            return Task.FromResult<object?>(null);
-        });
-
-        router.Register("exam.openWindow", () =>
-        {
-            MainThread.BeginInvokeOnMainThread(() =>
-            {
-                if (examWindow is not null)
-                {
-                    examSession.Focus();
-                    return;
-                }
-
-                var examPage = new ExamPage(server, router, engine, examSession);
-                examWindow = new Window(examPage)
-                {
-                    Title = "IELTop - Test in progress",
-                    Width = 1360,
-                    Height = 900,
-                    MinimumWidth = 1100,
-                    MinimumHeight = 700,
-                };
-
-                examSession.Attach(examWindow);
-
-                examWindow.Destroying += (_, _) =>
-                {
-                    engine.CancelRunningTest();
-                    examSession.Attach(null);
-                    examWindow = null;
-                };
-
-                Application.Current?.OpenWindow(examWindow);
-            });
-            return null;
-        });
-
-        router.Register("exam.closeWindow", () =>
-        {
-            MainThread.BeginInvokeOnMainThread(() =>
-            {
-                if (examWindow is not null)
-                {
-                    Application.Current?.CloseWindow(examWindow);
-                    examWindow = null;
-                }
-            });
-            return null;
-        });
+            HealthMonitor.CountUnhandled();
+            AppLog.Error("app", "Unobserved task exception.", e.Exception);
+            AppLog.Flush();
+        };
 
         var builder = MauiApp.CreateBuilder();
         builder
             .UseMauiApp<App>()
             .ConfigureFonts(_ => { });
 
-        builder.Services.AddSingleton(server);
-        builder.Services.AddSingleton(router);
-        builder.Services.AddSingleton(engine);
-        builder.Services.AddSingleton(examSession);
-        builder.Services.AddSingleton<MainPage>();
+        // BlazorWebView resolves its services from the container. Without this
+        // registration the view throws while it initializes, which surfaces as a
+        // native WinUI crash rather than a managed error.
+        builder.Services.AddMauiBlazorWebView();
 
-        return builder.Build();
+        RegisterDesktopServices(builder.Services);
+        RegisterCoreServices(builder.Services);
+
+        // The database has to exist before any service reads it.
+        AppDbContext.EnsureCreated();
+
+        var app = builder.Build();
+
+        // Routes are wired before the first window opens, so a page never asks
+        // for an action the host has not registered yet.
+        app.Services.GetRequiredService<HostBridgeSetup>().Register();
+
+        // Run the headless self test and exit when asked, so the app can be
+        // checked without opening any window. It runs on a pool thread: the UI
+        // thread has a synchronization context, so waiting on the live model
+        // calls here would deadlock.
+        if (SelfTestRequested())
+        {
+            var runner = app.Services.GetRequiredService<SelfTestRunner>();
+            var ok = Task.Run(runner.Run).GetAwaiter().GetResult();
+            Environment.Exit(ok ? 0 : 2);
+        }
+
+        // Serve the offline ONNX models over loopback HTTP and keep running, so
+        // another program can use them without loading the native runtime itself.
+        if (ModelServerRequested())
+        {
+            var server = app.Services.GetRequiredService<OnnxHttpServer>();
+            server.Start();
+            AppLog.Info("app", "Model server mode: serving ONNX over HTTP. Press Ctrl+C to stop.");
+            var stop = new ManualResetEventSlim(false);
+            Console.CancelKeyPress += (_, e) => { e.Cancel = true; stop.Set(); };
+            stop.Wait();
+            server.Dispose();
+            Environment.Exit(0);
+        }
+
+        AppLog.Info("app", "Host ready.");
+        return app;
     }
+
+    /// <summary>True when the app was started with --selftest.</summary>
+    private static bool SelfTestRequested() =>
+        Environment.GetCommandLineArgs().Any(a =>
+            string.Equals(a, "--selftest", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>True when the app was started with --model-server.</summary>
+    private static bool ModelServerRequested() =>
+        Environment.GetCommandLineArgs().Any(a =>
+            string.Equals(a, "--model-server", StringComparison.OrdinalIgnoreCase));
 
     private static string AppVersion()
     {
-        var version = typeof(MauiProgram).Assembly.GetName().Version;
-        return version is null ? "1.0.0" : version.ToString(3);
+        try
+        {
+            return typeof(MauiProgram).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+        }
+        catch
+        {
+            return "0.0.0";
+        }
     }
 
-    private static void RegisterDashboard(BridgeRouter router, IStatsService stats)
+    private static void RegisterDesktopServices(IServiceCollection services)
     {
-        router.Register("dashboard.get", () =>
+        // The local server that hands the UI to the WebView and carries the
+        // bridge calls. Registered as a singleton, so the container stops the
+        // listener when the app shuts down.
+        services.AddSingleton<StaticFileServer>(_ =>
         {
-            var s = stats.Build();
-            return new
-            {
-                version = AppVersion(),
-                examAttempts = s.ExamAttempts,
-                lastBandLabel = s.LastBandLabel,
-                llmConfigured = s.LlmConfigured,
-                llmModel = s.LlmModel,
-                llmSummary = s.LlmConfigured ? s.LlmModel : "Not set",
-                modelsReady = s.ModelsReady,
-                modelsTotal = s.ModelsTotal,
-                streakDays = s.StreakDays,
-                activeToday = s.ActiveToday,
-                streakLabel = s.StreakDays switch
-                {
-                    0 => "No streak yet",
-                    1 => "1 day streak",
-                    _ => $"{s.StreakDays} day streak",
-                },
-                streakHint = s.StreakDays == 0
-                    ? "Finish a test or a speaking practice to start a streak."
-                    : s.ActiveToday
-                        ? "You studied today. Keep it going."
-                        : "Study today to keep your streak alive.",
-                weeklyActivity = s.WeeklyActivity.Select(d => new
-                {
-                    label = d.Date.ToString("ddd", CultureInfo.InvariantCulture),
-                    count = d.Count,
-                }),
-                bandTrend = s.BandTrend.Select(b => new
-                {
-                    label = b.Label,
-                    low = b.BandLow,
-                    high = b.BandHigh,
-                }),
-                criteriaNote = "Bands are practice estimates only, never official IELTS scores.",
-            };
+            var server = new StaticFileServer(Path.Combine(AppContext.BaseDirectory, "wwwroot"));
+            var shipped = AppContext.BaseDirectory;
+            var userContent = Path.Combine(UserContentRoot);
+
+            server.AddMediaFolder("audio", Path.Combine(shipped, "Assets", "Audio"));
+            server.AddMediaFolder("audio", Path.Combine(userContent, "Audio"));
+            server.AddMediaFolder("images", Path.Combine(shipped, "Assets", "Images"));
+            server.AddMediaFolder("images", Path.Combine(userContent, "Images"));
+            server.Start();
+            return server;
         });
+
+        services.AddSingleton<BridgeRouter>();
+
+        // The Blazor side of the bridge. The page calls into this over JS
+        // interop; the HTTP channel stays as the fallback for the plain WebView2
+        // host, which has no Blazor runtime.
+        services.AddSingleton<JsBridge>();
+
+        // The exam window controller is both the bridge target and the port the
+        // engine talks to, so it must be the same object in both places.
+        services.AddSingleton<MauiExamSession>();
+        services.AddSingleton<IExamSessionController>(sp => sp.GetRequiredService<MauiExamSession>());
+
+        services.AddSingleton<HostBridgeSetup>();
+        services.AddSingleton<AppBridge>();
+        services.AddSingleton<StudyBridge>();
+        services.AddSingleton<DiagnosticsBridge>();
+        services.AddSingleton<Diagnostics.SelfTestRunner>();
+
+        // Engine events reach the pages over the HTTP event stream only. Sending
+        // them down the window message channel as well made every page handle
+        // each event twice, because the page listens on both channels.
+        services.AddSingleton(sp => new ExamBridge(
+            sp.GetRequiredService<ExamEngine>(),
+            sp.GetRequiredService<StaticFileServer>(),
+            message => sp.GetRequiredService<BridgeRouter>().Broadcast("exam.push", message)));
+
+        services.AddSingleton<MainPage>();
     }
+
+    private static void RegisterCoreServices(IServiceCollection services)
+    {
+        services.AddSingleton<SettingsStore>();
+        services.AddSingleton<ISettingsStore>(sp => sp.GetRequiredService<SettingsStore>());
+
+        // The ONNX sessions and the community server client hold native and
+        // network resources, so they are registered as the concrete type and
+        // mapped to the interface: the container then disposes them once.
+        // The execution provider is picked here: a GPU (DirectML) when the PC has
+        // one, CPU otherwise. The detection lives in the host, so Core stays OS
+        // neutral and works on a machine with no GPU.
+        services.AddSingleton<DirectMlExecutionProvider>();
+        services.AddSingleton<IOnnxExecutionProvider>(sp => sp.GetRequiredService<DirectMlExecutionProvider>());
+        services.AddSingleton<OnnxService>(sp =>
+            new OnnxService(sp.GetRequiredService<IOnnxExecutionProvider>()));
+        services.AddSingleton<IOnnxService>(sp => sp.GetRequiredService<OnnxService>());
+
+        services.AddSingleton<ContentServerClient>();
+        services.AddSingleton<IContentServerClient>(sp => sp.GetRequiredService<ContentServerClient>());
+
+        services.AddSingleton<IContentServerStore, ContentServerStore>();
+        services.AddSingleton<IExamRepository, ExamRepository>();
+        services.AddSingleton<IUpdateService, GithubReleaseUpdateService>();
+
+        services.AddSingleton<ILlmService, OpenAiCompatibleLlmService>();
+        services.AddSingleton<IIeltsAiService, IeltsAiService>();
+        services.AddSingleton<ISttService, SttService>();
+        services.AddSingleton<IGecService, GecService>();
+        services.AddSingleton<IModelLoadCoordinator, ModelLoadCoordinator>();
+        services.AddSingleton<IG2PService, SimpleG2PService>();
+        services.AddSingleton<IMddPhonemeService, MddPhonemeService>();
+        // The neural voice, with no OS fallback: the HTTP server must be able to
+        // report whether the real Piper files are installed, not a system voice.
+        services.AddSingleton<ITtsService>(sp => new PiperTtsService(sp.GetRequiredService<IOnnxService>()));
+        services.AddSingleton(sp => new OnnxHttpServer(
+            sp.GetRequiredService<IOnnxService>(),
+            sp.GetRequiredService<ISttService>(),
+            sp.GetRequiredService<ITtsService>(),
+            sp.GetRequiredService<IMddPhonemeService>(),
+            sp.GetRequiredService<IGecService>()));
+        services.AddSingleton<IPronunciationService, PronunciationService>();
+
+        services.AddSingleton<IStatsService, StatsService>();
+        services.AddSingleton<ExamEngine>();
+        services.AddSingleton<SettingsService>();
+        services.AddSingleton<ResultsService>();
+        services.AddSingleton<LibraryService>();
+        services.AddSingleton<EditorService>();
+        services.AddSingleton<ServersService>();
+        services.AddSingleton<LessonService>();
+        services.AddSingleton<StudyService>();
+        services.AddSingleton(sp => new DiagnosticsService(AppVersion()));
+    }
+
+    /// <summary>Where content the student brings lives, never inside the install folder.</summary>
+    private static string UserContentRoot => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "IELTop", "content");
 }

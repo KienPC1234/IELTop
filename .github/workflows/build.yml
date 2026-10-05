@@ -1,0 +1,86 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  desktop:
+    name: desktop (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: IELTop.Desktop/UserInterface/package-lock.json
+
+      # The desktop build drives npm itself, so node_modules only has to exist.
+      - name: Install web UI dependencies
+        working-directory: IELTop.Desktop/UserInterface
+        run: npm ci --no-fund --no-audit
+
+      # Builds Core, Tests and Desktop. The desktop target builds the web UI
+      # before the C# compile, so a broken bundle fails this step.
+      - name: Build
+        run: dotnet build IELTop.slnx --nologo -v minimal
+
+      - name: Test
+        run: dotnet test IELTop.Tests/IELTop.Tests.csproj --nologo -v minimal
+
+      # Catches a publish layout that would ship an app with no UI folder.
+      - name: Publish
+        run: dotnet publish IELTop.Desktop/IELTop.Desktop.csproj -c Release -r win-x64 --self-contained false -o $env:TEMP/ieltop-publish --nologo -v minimal
+
+      - name: Check the published UI is there
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Recurse -File "$env:TEMP/ieltop-publish/wwwroot" -ErrorAction SilentlyContinue
+          if (-not $files) { throw "wwwroot is missing from the publish output" }
+          if (-not (Test-Path "$env:TEMP/ieltop-publish/wwwroot/index.html")) { throw "index.html is missing from the published UI" }
+          if (-not (Test-Path "$env:TEMP/ieltop-publish/wwwroot/exam.html")) { throw "exam.html is missing from the published UI" }
+          Write-Output "published UI files: $($files.Count)"
+
+  server:
+    name: content server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build
+        run: dotnet build IELTop_Content_Server/IELTop_Content_Server.csproj --nologo -v minimal
+
+  audit:
+    name: audit dependencies
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: IELTop.Desktop/UserInterface/package-lock.json
+
+      - name: Vulnerable NuGet packages
+        run: dotnet list IELTop.slnx package --vulnerable --include-transitive
+
+      - name: Vulnerable npm packages
+        working-directory: IELTop.Desktop/UserInterface
+        run: npm audit --audit-level=high

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">IELTop — red symbol</title>
+<desc id="desc">Simplified white rising ribbons and four-point star on a flat dark red #B91C2C rounded square. A compact companion to the IELTop wordmark.</desc>
+<rect width="512" height="512" rx="60" fill="#B91C2C"/><g fill="#FFFFFF" transform="translate(256 254) scale(1.08) translate(-288 -188)">
+<path d="M144 132 C131 166 133 200 146 220 C163 248 193 248 214 244 C249 237 278 210 307 178 C341 138 371 111 405 90 C365 106 335 128 304 154 C274 180 244 210 216 215 C173 223 138 185 144 132Z"/><path d="M119 234 C113 274 132 310 163 327 C198 346 239 337 274 315 C322 284 354 222 382 143 C354 188 333 228 305 257 C277 287 244 314 207 314 C160 314 129 281 119 234Z"/><path d="M425 41.5 L433.2 66.5 L458 74.8 L434 82.6 L425.2 108.1 L416.8 83.5 L392.3 74.8 L416.5 66.6Z"/>
+</g>
+</svg>

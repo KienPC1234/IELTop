@@ -4,6 +4,34 @@ using Microsoft.ML.OnnxRuntime;
 namespace IELTop.Services.Ai;
 
 /// <summary>
+/// Appends an execution provider to a session. The host implements this so it can
+/// use a GPU (DirectML) without Core taking a Windows-only dependency. Core keeps
+/// a CPU provider so the app always runs without a GPU.
+/// </summary>
+public interface IOnnxExecutionProvider
+{
+    /// <summary>A short name for the UI, for example "CPU" or "DirectML GPU".</summary>
+    string Name { get; }
+
+    /// <summary>
+    /// Tries to add the provider to the options. Returns false when the hardware
+    /// or runtime is not there, and the service falls back to CPU.
+    /// </summary>
+    bool TryAppend(SessionOptions options);
+}
+
+/// <summary>The default: CPU only, no GPU dependency.</summary>
+public sealed class CpuOnnxExecutionProvider : IOnnxExecutionProvider
+{
+    public string Name => "CPU";
+    public bool TryAppend(SessionOptions options)
+    {
+        try { options.AppendExecutionProvider_CPU(0); } catch { /* CPU is always there */ }
+        return true;
+    }
+}
+
+/// <summary>
 /// Service nền ONNX: quản lý SessionOptions, load lazy, dispose đúng cách.
 /// UI/ViewModel chỉ gọi qua đây, không new InferenceSession lung tung.
 /// </summary>
@@ -24,6 +52,8 @@ public interface IOnnxService : IDisposable
     void UnloadAll();
     /// <summary>Bytes on disk for models currently in memory.</summary>
     long LoadedBytes();
+    /// <summary>Which execution provider is in use: CPU or a GPU.</summary>
+    string ProviderName { get; }
 }
 
 public sealed class OnnxService : IOnnxService
@@ -31,18 +61,36 @@ public sealed class OnnxService : IOnnxService
     private readonly Dictionary<string, InferenceSession> _sessions = new();
     private readonly object _gate = new();
     private readonly SessionOptions _baseOptions = new();
+    private readonly IOnnxExecutionProvider _provider;
     private volatile bool _disposed;
 
-    public OnnxService()
+    public OnnxService() : this(new CpuOnnxExecutionProvider())
     {
-        // Dùng CPU, arena mở để chạy mượt trên máy yếu.
-        // Sau này bật DirectML/CUDA ở đây nếu có GPU.
+    }
+
+    public OnnxService(IOnnxExecutionProvider provider)
+    {
+        _provider = provider;
+        ProviderName = provider.Name;
+
+        // The graph runs on the provider the host picked (a GPU when present, CPU
+        // otherwise). Memory pattern and full graph optimization stay on.
         _baseOptions.EnableMemoryPattern = true;
         _baseOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-        try { _baseOptions.AppendExecutionProvider_CPU(0); } catch { /* bỏ qua */ }
+        try
+        {
+            if (!_provider.TryAppend(_baseOptions))
+                new CpuOnnxExecutionProvider().TryAppend(_baseOptions);
+        }
+        catch
+        {
+            new CpuOnnxExecutionProvider().TryAppend(_baseOptions);
+        }
 
         Directory.CreateDirectory(OnnxModelRegistry.ModelsDir);
     }
+
+    public string ProviderName { get; }
 
     public IReadOnlyList<(string Name, bool Loaded, string Path)> Status()
         => OnnxModelRegistry.Slots

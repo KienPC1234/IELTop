@@ -5,6 +5,7 @@ import {
   Mic,
   Palette,
   HardDrive,
+  Activity,
   Info,
   CheckCircle2,
   AlertCircle,
@@ -34,6 +35,7 @@ import { call } from '@/bridge'
 import { Confirm, ErrorBar, PageHeader } from '@/components/shared'
 import { Field } from '@/components/Field'
 import { ThemeToggle } from '@/components/ThemeToggle'
+import DiagnosticsPanel from '@/pages/settings/DiagnosticsPanel'
 import { listDevices, playTestTone, recordAndPlayback, mediaSupported } from '@/audio'
 
 export default function Settings() {
@@ -95,7 +97,7 @@ export default function Settings() {
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid h-11 w-full grid-cols-5 p-1 bg-muted/70">
+        <TabsList className="grid h-11 w-full grid-cols-6 p-1 bg-muted/70">
           <TabsTrigger value="ai" className="flex items-center gap-2 text-xs sm:text-sm">
             <Bot className="h-4 w-4" />
             <span>AI & Models</span>
@@ -111,6 +113,10 @@ export default function Settings() {
           <TabsTrigger value="offline" className="flex items-center gap-2 text-xs sm:text-sm">
             <HardDrive className="h-4 w-4" />
             <span>Offline Models</span>
+          </TabsTrigger>
+          <TabsTrigger value="diagnostics" className="flex items-center gap-2 text-xs sm:text-sm">
+            <Activity className="h-4 w-4" />
+            <span>Diagnostics</span>
           </TabsTrigger>
           <TabsTrigger value="about" className="flex items-center gap-2 text-xs sm:text-sm">
             <Info className="h-4 w-4" />
@@ -132,11 +138,11 @@ export default function Settings() {
                 <Badge variant={d.isValid ? 'secondary' : 'outline'} className="gap-1 text-xs">
                   {d.isValid ? (
                     <>
-                      <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Ready
+                      <CheckCircle2 className="h-3 w-3 text-success" /> Ready
                     </>
                   ) : (
                     <>
-                      <AlertCircle className="h-3 w-3 text-amber-500" /> Needs configuration
+                      <AlertCircle className="h-3 w-3 text-warning" /> Needs configuration
                     </>
                   )}
                 </Badge>
@@ -216,7 +222,7 @@ export default function Settings() {
                           key={tok}
                           type="button"
                           onClick={() => set('settings.setMaxTokens', tok)}
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-mono border transition-colors ${
+                          className={`rounded px-1.5 py-0.5 text-xs font-mono border transition-colors ${
                             d.maxTokens === tok
                               ? 'bg-primary text-primary-foreground border-primary font-medium'
                               : 'bg-muted/50 hover:bg-muted text-muted-foreground border-border'
@@ -292,14 +298,27 @@ export default function Settings() {
                   </div>
                   <Switch checked={d.modelAutoLoad} onCheckedChange={(v) => set('settings.setModelAutoLoad', v)} />
                 </div>
+
+                <Separator />
+
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">Speaking: submit and score after recording</div>
+                    <div className="text-xs text-muted-foreground">
+                      On (test mode): record once, the answer is submitted and scored straight away and the
+                      transcript cannot be edited. Off keeps the transcript box for practice.
+                    </div>
+                  </div>
+                  <Switch checked={d.speakingAutoSubmit} onCheckedChange={(v) => set('settings.setSpeakingAutoSubmit', v)} />
+                </div>
               </div>
 
               {d.problems.length > 0 && (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-amber-700 dark:text-amber-300 mb-1">
+                <div className="rounded-md border border-warning/30 bg-warning/10 p-3">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-warning mb-1">
                     <AlertCircle className="h-4 w-4" /> Configuration Notes
                   </div>
-                  <ul className="list-disc pl-5 text-xs space-y-0.5 text-amber-700 dark:text-amber-300">
+                  <ul className="list-disc pl-5 text-xs space-y-0.5 text-warning">
                     {d.problems.map((p, i) => (
                       <li key={i} className={p.isError ? 'text-destructive font-medium' : ''}>
                         {p.text}
@@ -474,7 +493,7 @@ export default function Settings() {
               )}
 
               {!mediaSupported() && (
-                <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-300">
+                <div className="rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
                   Media device recording is not supported in this runtime environment.
                 </div>
               )}
@@ -567,8 +586,8 @@ export default function Settings() {
                             variant={m.ready ? 'secondary' : 'outline'}
                             className={
                               m.ready
-                                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
-                                : 'border-amber-500/50 text-amber-700 dark:text-amber-300'
+                                ? 'bg-success/10 text-success border-success/30'
+                                : 'border-warning/50 text-warning'
                             }
                           >
                             {m.ready ? 'Ready' : 'Missing'}
@@ -582,7 +601,7 @@ export default function Settings() {
                         </p>
                       </div>
 
-                      <div className="mt-4 pt-2 border-t text-[11px] text-muted-foreground flex flex-col gap-1">
+                      <div className="mt-4 pt-2 border-t text-xs text-muted-foreground flex flex-col gap-1">
                         <div><span className="font-medium text-foreground">License:</span> {m.license}</div>
                         <div className="truncate"><span className="font-medium text-foreground">Source:</span> {m.source}</div>
                       </div>
@@ -592,6 +611,12 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Tab: Diagnostics. One screen that says whether the session is healthy
+            and shows the log, so a problem can be read without a debugger. */}
+        <TabsContent value="diagnostics" className="mt-4 flex flex-col gap-5">
+          <DiagnosticsPanel onError={(m) => page.setError(m)} />
         </TabsContent>
 
         {/* Tab 5: About & Updates */}
@@ -643,6 +668,13 @@ export default function Settings() {
               <CardDescription>{d.aboutLine}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
+              {/* The wordmark sits here, where the name is first introduced, so
+                  the symbol beside it in the sidebar links to the full name. */}
+              <img
+                src="./assets/IELTop-motion-wordmark.svg"
+                alt="IELTop"
+                className="h-8 w-auto self-start"
+              />
               <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
                 <div className="rounded border p-3">
                   <div className="font-medium text-foreground">{d.authorLine}</div>

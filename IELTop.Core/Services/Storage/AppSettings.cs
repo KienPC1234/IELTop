@@ -36,6 +36,13 @@ public sealed class AppSettings
     public bool ModelAutoLoad { get; set; }
 
     /// <summary>
+    /// When true (the default), a Speaking part records once and is submitted and
+    /// scored on its own, with no transcript editing. Off keeps the transcript box
+    /// for practice.
+    /// </summary>
+    public bool SpeakingAutoSubmit { get; set; } = true;
+
+    /// <summary>
     /// Velopack update feed. Empty means auto update stays off. Point it at a
     /// release folder URL or a GitHub Releases URL.
     /// </summary>

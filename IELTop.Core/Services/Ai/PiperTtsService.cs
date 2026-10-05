@@ -82,7 +82,9 @@ public sealed class PiperTtsService : ITtsService
             "IELTop", "tts");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"piper_{hash}.wav");
-        if (File.Exists(path))
+        // A cached file that is only the header is a silent wav from an earlier
+        // bad run; regenerate instead of returning it.
+        if (File.Exists(path) && new FileInfo(path).Length > 200)
             return path;
 
         var samples = new List<float>();
@@ -150,10 +152,15 @@ public sealed class PiperTtsService : ITtsService
             NamedOnnxValue.CreateFromTensor(FindInput("scales"), scales),
         });
         var audio = results.First().AsTensor<float>();
-        int len = audio.Dimensions[2];
+
+        // Piper VITS returns [batch, 1, samples] or [batch, 1, 1, samples]. The
+        // audio length is the last dimension, not the third: reading the third on
+        // a 4-D output gives one sample and a silent wav.
+        int rank = audio.Dimensions.Length;
+        int len = audio.Dimensions[rank - 1];
         var output = new float[len];
         for (int i = 0; i < len; i++)
-            output[i] = audio[0, 0, i];
+            output[i] = rank >= 4 ? audio[0, 0, 0, i] : audio[0, 0, i];
         return output;
     }
 

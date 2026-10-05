@@ -74,7 +74,7 @@ export default function Results() {
                     <TableCell>
                       <span className="inline-flex items-center gap-2">
                         {a.correct}/{a.total}
-                        {a.violations > 0 && <Badge variant="outline" className="border-amber-400 text-amber-600 dark:text-amber-400">left test {a.violations}x</Badge>}
+                        {a.violations > 0 && <Badge variant="outline" className="border-warning/50 text-warning">left test {a.violations}x</Badge>}
                       </span>
                     </TableCell>
                     <TableCell>

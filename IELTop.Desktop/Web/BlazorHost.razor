@@ -1,0 +1,65 @@
+@using IELTop.Desktop.Bridge
+@using Microsoft.JSInterop
+@implements IDisposable
+@inject IJSRuntime JS
+@inject JsBridge Bridge
+
+@*
+    Boots the bridge inside BlazorWebView. The visible page is the React app;
+    this component only hands the page an object to call and forwards pushed
+    events back down to it. When the page is hosted by a plain WebView2 instead
+    (the fallback host), this never runs and the page uses the HTTP channel.
+*@
+<div style="display: none"></div>
+
+@code {
+    private DotNetObjectReference<JsBridge>? _self;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        Bridge.Push += OnPushed;
+
+        // The page calls into the bridge object itself, because that is where
+        // the invokable method lives.
+        _self = DotNetObjectReference.Create(Bridge);
+
+        // The host page waits for this call before the page is allowed to use
+        // the bridge, so the first request never races the Blazor runtime.
+        try
+        {
+            await JS.InvokeVoidAsync("ieltopsBridgeAttach", _self);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[bridge] the page could not be given the bridge: {ex.Message}");
+        }
+    }
+
+    private void OnPushed(string json)
+    {
+        // The event may come from a worker thread (an exam timer, an inference
+        // task), so the JS call goes back through the renderer.
+        _ = InvokeAsync(async () =>
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("ieltopsBridgePush", json);
+            }
+            catch
+            {
+                // The page is going away, so there is nothing to report to it.
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        Bridge.Push -= OnPushed;
+        _self?.Dispose();
+    }
+}

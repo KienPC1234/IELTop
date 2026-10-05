@@ -1,22 +1,37 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, RefreshCw } from 'lucide-react'
+import { BookOpen, PencilLine, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { usePage, readTextFile, readImageFiles, readFileBase64, isBinaryDocument } from '@/hooks'
 import { Confirm, EmptyState, ErrorBar, FileImport, PageHeader } from '@/components/shared'
 import { Field } from '@/components/Field'
+import Editor from '@/pages/Editor'
 
+/// The Paper Library and the Exam Editor share this screen: the editor is one
+/// tab of the library rather than a sidebar entry of its own, so the sidebar
+/// stays short. Every action the library had is unchanged; only the frame it
+/// sits in moved.
 export default function Library({ onNavigate }) {
   const page = usePage('library.snapshot')
   const [confirm, setConfirm] = useState(null)
+  const [tab, setTab] = useState('library')
 
   useEffect(() => {
-    if (page.data?.navigateTo) onNavigate?.(page.data.navigateTo)
+    const target = page.data?.navigateTo
+    if (!target) return
+    // Opening a paper for editing switches the tab; "editor" is no longer a
+    // sidebar page, so it is not forwarded to the shell.
+    if (target === 'editor') {
+      setTab('editor')
+      return
+    }
+    onNavigate?.(target)
   }, [page.data?.navigateTo, onNavigate])
 
   const d = page.data
@@ -52,6 +67,23 @@ export default function Library({ onNavigate }) {
 
       <PageHeader title="Library" description={d.librarySummary} />
 
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="library" className="gap-1.5">
+            <BookOpen className="h-4 w-4" />
+            Papers
+          </TabsTrigger>
+          <TabsTrigger value="editor" className="gap-1.5">
+            <PencilLine className="h-4 w-4" />
+            Editor
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {tab === 'editor' ? (
+        <Editor onNavigate={onNavigate} />
+      ) : (
+        <>
       <Card>
         <CardContent className="flex flex-wrap items-center gap-2.5">
           <Input
@@ -224,6 +256,8 @@ export default function Library({ onNavigate }) {
       </Card>
 
       {d.statusMessage && <p className="text-sm leading-relaxed text-muted-foreground">{d.statusMessage}</p>}
+        </>
+      )}
 
       <Confirm
         open={!!confirm}
