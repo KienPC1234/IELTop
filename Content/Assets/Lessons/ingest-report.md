@@ -1,78 +1,18 @@
-# Lesson ingest report
+# Lesson Ingest & Standardization Report
 
-- Units written: 12
-- Files read: 166
-- Vocabulary rows: 1754
-- Warnings: 69
+- Units written: 14
+- Files read: 158
+- Junk/duplicate files skipped: 8
+- Vocabulary rows parsed: 1754
+- Warnings: 0
 
-## Warnings
+## Skipped Files (Duplicates / Drafts / Junk)
 
-- Unit 1.pptx: 35 picture(s) skipped (charts and photos have no readable text)
-- Unit 2.pptx: 23 picture(s) skipped (charts and photos have no readable text)
-- Grammar Practice 2.docx: 1 picture(s) skipped (no text to read without OCR)
-- Relative Clauses Exercise 1(1).docx: 12 picture(s) skipped (no text to read without OCR)
-- Relative Clauses Exercise 1.docx: 12 picture(s) skipped (no text to read without OCR)
-- Unit 3 Speaking.docx: 2 picture(s) skipped (no text to read without OCR)
-- Unit 3.pptx: 17 picture(s) skipped (charts and photos have no readable text)
-- U4 Speaking.docx: 5 picture(s) skipped (no text to read without OCR)
-- Unit 4.pptx: 15 picture(s) skipped (charts and photos have no readable text)
-- Process Handout 0.docx: 4 picture(s) skipped (no text to read without OCR)
-- Process Handout 1 - Sugar Juice.docx: 1 picture(s) skipped (no text to read without OCR)
-- Process Handout 2.docx: 4 picture(s) skipped (no text to read without OCR)
-- Process Handout 3.docx: 4 picture(s) skipped (no text to read without OCR)
-- Process Handout Extra.docx: 10 picture(s) skipped (no text to read without OCR)
-- T1 Process.pptx: 26 picture(s) skipped (charts and photos have no readable text)
-- Reading + Listening Unit 5.pptx: 3 picture(s) skipped (charts and photos have no readable text)
-- U5 Speaking.docx: 5 picture(s) skipped (no text to read without OCR)
-- Unit 5.pptx: 32 picture(s) skipped (charts and photos have no readable text)
-- Maps Handout 2.docx: 5 picture(s) skipped (no text to read without OCR)
-- Maps Handout Extra(1).docx: 4 picture(s) skipped (no text to read without OCR)
-- Maps Handout Extra.docx: 4 picture(s) skipped (no text to read without OCR)
-- T1 Maps.pptx: 25 picture(s) skipped (charts and photos have no readable text)
-- Lesson 6.pptx: 3 picture(s) skipped (charts and photos have no readable text)
-- U6 Speaking.docx: 5 picture(s) skipped (no text to read without OCR)
-- T1 Trends Data.pptx: 29 picture(s) skipped (charts and photos have no readable text)
-- Trends - Comprehensive Practice.docx: 7 picture(s) skipped (no text to read without OCR)
-- Lesson 7.pptx: 3 picture(s) skipped (charts and photos have no readable text)
-- Speaking U7.pptx: 35 picture(s) skipped (charts and photos have no readable text)
-- Comparison Handout 1.docx: 1 picture(s) skipped (no text to read without OCR)
-- Comparison Handout 2.docx: 7 picture(s) skipped (no text to read without OCR)
-- Comparison Handout 3.docx: 6 picture(s) skipped (no text to read without OCR)
-- T1 Comparison Data.pptx: 22 picture(s) skipped (charts and photos have no readable text)
-- Lesson 8 Listening.pptx: 7 picture(s) skipped (charts and photos have no readable text)
-- Lesson 8.pptx: 7 picture(s) skipped (charts and photos have no readable text)
-- U8 Reading.docx: 1 picture(s) skipped (no text to read without OCR)
-- U8 Speaking.pptx: 32 picture(s) skipped (charts and photos have no readable text)
-- Unit 8 Listening.docx: 1 picture(s) skipped (no text to read without OCR)
-- Lesson 9.pptx: 3 picture(s) skipped (charts and photos have no readable text)
-- Lesson 10.pptx: 3 picture(s) skipped (charts and photos have no readable text)
-- T1 Multiple Charts.docx: 7 picture(s) skipped (no text to read without OCR)
-- Unit 9.pptx: 32 picture(s) skipped (charts and photos have no readable text)
-- 1. Core Sentence Structure.pptx: 1 picture(s) skipped (charts and photos have no readable text)
-- 2. Noun-phrase.pptx: 1 picture(s) skipped (charts and photos have no readable text)
-- 3. Complex Sentence.pptx: 1 picture(s) skipped (charts and photos have no readable text)
-- 4. Relative Clause + Reduced Form.pptx: 1 picture(s) skipped (charts and photos have no readable text)
-- 5. Comparative Adj - Adv.pptx: 2 picture(s) skipped (charts and photos have no readable text)
-- Process Handout 0.docx: 4 picture(s) skipped (no text to read without OCR)
-- Process Handout 1 - Sugar Juice.docx: 1 picture(s) skipped (no text to read without OCR)
-- Process Handout 2.docx: 4 picture(s) skipped (no text to read without OCR)
-- Process Handout 3.docx: 4 picture(s) skipped (no text to read without OCR)
-- Process Handout Extra.docx: 10 picture(s) skipped (no text to read without OCR)
-- T1 Process.pptx: 26 picture(s) skipped (charts and photos have no readable text)
-- Maps Handout 2.docx: 5 picture(s) skipped (no text to read without OCR)
-- Maps Handout Extra.docx: 4 picture(s) skipped (no text to read without OCR)
-- T1 Maps.pptx: 25 picture(s) skipped (charts and photos have no readable text)
-- T1 Trends Data.pptx: 29 picture(s) skipped (charts and photos have no readable text)
-- Trends - Comprehensive Practice.docx: 7 picture(s) skipped (no text to read without OCR)
-- Comparison Handout 1.docx: 1 picture(s) skipped (no text to read without OCR)
-- Comparison Handout 2.docx: 7 picture(s) skipped (no text to read without OCR)
-- Comparison Handout 3.docx: 6 picture(s) skipped (no text to read without OCR)
-- T1 Comparison Data.pptx: 22 picture(s) skipped (charts and photos have no readable text)
-- T1 Correction Practice.pptx: 1 picture(s) skipped (charts and photos have no readable text)
-- T1 Multiple Charts.docx: 7 picture(s) skipped (no text to read without OCR)
-- Writing Task 1 Review.docx: 6 picture(s) skipped (no text to read without OCR)
-- Opinion (One-sided).pptx: 3 picture(s) skipped (charts and photos have no readable text)
-- Discussion.pptx: 1 picture(s) skipped (charts and photos have no readable text)
-- Pros-Cons.pptx: 1 picture(s) skipped (charts and photos have no readable text)
-- Problems - Solutions.pptx: 5 picture(s) skipped (charts and photos have no readable text)
-- Double Question - Review.pptx: 10 picture(s) skipped (charts and photos have no readable text)
+- Bản sao của Unit 7 Listening.docx
+- Bản sao của Unit 9 Listening.docx
+- Bản sao của Unit 9 Reading.docx
+- Copy of Unit 9 Listening.docx
+- Maps Handout Extra(1).docx
+- Relative Clauses Exercise 1(1).docx
+- Vietnam Al Contest 2025_Registration-form.pdf
+- Vietnam Al Contest 2025_ThuyetMinh.pdf

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { call } from '@/bridge'
 import { Button } from '@/components/ui/button'
+import GuideDialog from '@/components/GuideDialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ThemeToggle } from '@/components/ThemeToggle'
 import { Badge } from '@/components/ui/badge'
@@ -219,7 +220,8 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <GuideDialog />
             {dashboard?.streakDays > 0 && (
               <Badge variant="outline" className="gap-1 border-warning/30 bg-warning/10 px-2.5 py-1 text-xs font-semibold text-warning">
                 <Flame className="h-3.5 w-3.5 fill-current" />

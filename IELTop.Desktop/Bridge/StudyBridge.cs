@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using IELTop.Services.App;
 using IELTop.Services.Learn;
 
 namespace IELTop.Desktop.Bridge;
@@ -15,14 +16,18 @@ namespace IELTop.Desktop.Bridge;
 public sealed class StudyBridge
 {
     private readonly StudyService _study;
+    private readonly SpeakingTutorService _tutor;
 
-    public StudyBridge(StudyService study)
+    public StudyBridge(StudyService study, SpeakingTutorService tutor)
     {
         _study = study;
+        _tutor = tutor;
     }
 
     public void Register(BridgeRouter router)
     {
+        _study.SetBroadcaster((evt, payload) => router.Broadcast(evt, payload));
+
         // ---- Chat ----
         router.Register("study.chat.snapshot", Act(a =>
             _study.ChatSnapshot(Int(a, "sessionId"), Str(a, "unit"), Str(a, "query"))));
@@ -44,6 +49,13 @@ public sealed class StudyBridge
             await _study.AskAsync(Int(a, "sessionId"), Str(a, "question"), Str(a, "unit"), ct)));
         router.Register("study.chat.runTool", ActAsync(async (a, ct) =>
             await _study.RunToolAsync(Int(a, "sessionId"), Str(a, "tool"), Str(a, "input"), Str(a, "unit"), ct)));
+        router.Register("study.tutor.curriculum", Act(_ => _study.CurriculumOverview()));
+        router.Register("study.tutor.teachTopic", ActAsync(async (a, ct) =>
+            await _study.TeachTopicAsync(Int(a, "sessionId"), Str(a, "unit"), Str(a, "topic"), ct)));
+        router.Register("study.tutor.generateExercise", ActAsync(async (a, ct) =>
+            await _study.GenerateInteractiveExerciseAsync(Int(a, "sessionId"), Str(a, "skill"), Str(a, "topic"), Str(a, "kind"), Str(a, "unit"), ct)));
+        router.Register("study.tutor.checkAnswer", Act(a =>
+            _study.CheckExerciseAnswer(Str(a, "questionJson"), Str(a, "userAnswer"))));
 
         // ---- Practice ----
         router.Register("study.practice.snapshot", Act(a =>
@@ -59,7 +71,7 @@ public sealed class StudyBridge
         router.Register("study.practice.build", ActAsync(async (a, ct) =>
             await _study.BuildPracticeAsync(
                 Int(a, "sessionId"), Str(a, "unit"), Str(a, "skill"),
-                Str(a, "difficulty"), Int(a, "count"), Str(a, "scope"), ct)));
+                Str(a, "difficulty"), Int(a, "count"), Str(a, "topic"), Str(a, "scope"), Str(a, "mode"), ct)));
         router.Register("study.practice.openSet", Act(a =>
             _study.OpenSet(Int(a, "setId"), Str(a, "scope"))));
         router.Register("study.practice.answer", Act(a =>
@@ -68,9 +80,48 @@ public sealed class StudyBridge
         router.Register("study.practice.explain", ActAsync(async (a, ct) =>
             await _study.ExplainAsync(Int(a, "questionId"), ct)));
 
+        // ---- Materials / Lessons ----
+        router.Register("study.materials.snapshot", Act(a =>
+            _study.MaterialSnapshot(Str(a, "unit"), Str(a, "sectionId"), Str(a, "topic"), Str(a, "skill"))));
+
         // ---- Vocabulary ----
         router.Register("study.vocab.snapshot", Act(a =>
             _study.VocabSnapshot(Str(a, "query"), Str(a, "unit"))));
+
+        // ---- Speaking tutor ----
+        router.Register("study.speaking.snapshot", Act(a =>
+            _tutor.Snapshot(Int(a, "sessionId"), Str(a, "part"), Str(a, "query"))));
+        router.Register("study.speaking.newSession", Act(a =>
+            _tutor.NewSession(Str(a, "part"))));
+        router.Register("study.speaking.renameSession", Act(a =>
+            _tutor.RenameSession(Int(a, "sessionId"), Str(a, "title"))));
+        router.Register("study.speaking.pinSession", Act(a =>
+            _tutor.PinSession(Int(a, "sessionId"))));
+        router.Register("study.speaking.deleteSession", Act(a =>
+            _tutor.DeleteSession(Int(a, "sessionId"))));
+        router.Register("study.speaking.suggestTopic", Act(a =>
+            _tutor.SuggestTopic(Str(a, "part"))));
+        router.Register("study.speaking.generateDrill", ActAsync(async (a, ct) =>
+            await _tutor.GenerateSegmentDrillAsync(Str(a, "sentence"), Str(a, "reason"), Str(a, "drillType"), ct)));
+        router.Register("study.speaking.submitAnswer", ActAsync(async (a, ct) =>
+            await _tutor.SubmitAnswerAsync(
+                Int(a, "sessionId"), Str(a, "part"), Str(a, "cue"), Str(a, "audioBase64"), ct)));
+        router.Register("study.speaking.submitReadAloud", ActAsync(async (a, ct) =>
+        {
+            var (snapshot, words) = await _tutor.SubmitReadAloudAsync(
+                Int(a, "sessionId"), Str(a, "line"), Str(a, "audioBase64"), ct);
+            return new { snapshot, words };
+        }));
+        router.Register("study.speaking.feedback", ActAsync(async (a, ct) =>
+            await _tutor.FeedbackAsync(Int(a, "attemptId"), Int(a, "sessionId"), Str(a, "part"), ct)));
+        router.Register("study.speaking.deleteAttempt", Act(a =>
+            _tutor.DeleteAttempt(Int(a, "attemptId"), Int(a, "sessionId"), Str(a, "part"))));
+        router.Register("study.speaking.openAttempt", ActAsync(async (a, ct) =>
+        {
+            var (snapshot, words) = await _tutor.OpenAttemptAsync(
+                Int(a, "attemptId"), Int(a, "sessionId"), Str(a, "part"), ct);
+            return new { snapshot, words };
+        }));
     }
 
     private static Func<JsonElement?, CancellationToken, Task<object?>> Act(Func<JsonElement?, object?> handler)

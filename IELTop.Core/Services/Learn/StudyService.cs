@@ -20,9 +20,29 @@ public sealed record StudySessionRow(
 public sealed record StudySource(string Unit, string Section, string Snippet);
 
 public sealed record StudyMessageRow(
-    int Id, string Role, string Text, IReadOnlyList<StudySource> Sources, DateTime CreatedAt);
+    int Id, string Role, string Text, IReadOnlyList<StudySource> Sources, DateTime CreatedAt, string ExerciseJson = "");
 
-public sealed record StudyUnitRow(string Slug, string Title, int SectionCount, int WordCount, int PicturesSkipped);
+public sealed record StudyUnitRow(
+    string Slug, string Title, string Category, int SectionCount, int WordCount, int PicturesSkipped,
+    IReadOnlyList<string> Topics, IReadOnlyList<string> Skills);
+
+public sealed record StudyMaterialSectionRow(
+    string Id, string Title, string Skill, string Topic, bool IsAnswerKey, string KeySectionId, string TargetSectionId, int BlockCount);
+
+public sealed record StudyMaterialSnapshot
+{
+    public IReadOnlyList<StudyUnitRow> Units { get; init; } = Array.Empty<StudyUnitRow>();
+    public string SelectedUnit { get; init; } = string.Empty;
+    public string SelectedCategory { get; init; } = string.Empty;
+    public IReadOnlyList<string> UnitTopics { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> UnitSkills { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<StudyMaterialSectionRow> Sections { get; init; } = Array.Empty<StudyMaterialSectionRow>();
+    public string SelectedSectionId { get; init; } = string.Empty;
+    public LessonSection? CurrentSection { get; init; }
+    public LessonSection? PairedKeySection { get; init; }
+    public IReadOnlyList<LessonSlide> CurrentSlides { get; init; } = Array.Empty<LessonSlide>();
+    public IReadOnlyList<string> CurrentAudio { get; init; } = Array.Empty<string>();
+}
 
 public sealed record PracticeSetRow(
     int Id, int SessionId, string Title, string Skill, string Unit, string Status,
@@ -112,6 +132,7 @@ public sealed class StudyService
 
     private readonly LessonService _lessons;
     private readonly ILlmService _llm;
+    private Action<string, object?>? _broadcaster;
 
     public StudyService(LessonService lessons, ILlmService llm)
     {
@@ -119,9 +140,133 @@ public sealed class StudyService
         _llm = llm;
     }
 
+    public void SetBroadcaster(Action<string, object?> broadcaster)
+    {
+        _broadcaster = broadcaster;
+    }
+
     private bool CanUseAi => _llm.IsConfigured;
     private static string AiHint =>
         "Add a language model in Settings to chat with the tutor and build practice sets.";
+
+    public static readonly IReadOnlyList<LlmToolDefinition> TutorTools = new List<LlmToolDefinition>
+    {
+        new(
+            Name: "search_curriculum",
+            Description: "Search the official IELTS lesson curriculum (14 units, 165 sections) for grammar explanations, passages, writing strategies, and vocabulary.",
+            ParametersJsonSchema: """
+            {
+                "type": "object",
+                "properties": {
+                    "query": { "type": "string", "description": "Key concept, topic or grammar point to search in curriculum" },
+                    "unit": { "type": "string", "description": "Optional unit filter, e.g. 'unit-1' or empty string" }
+                },
+                "required": ["query"]
+            }
+            """
+        ),
+        new(
+            Name: "get_vocabulary_entry",
+            Description: "Lookup an academic or IELTS vocabulary word in the curriculum dictionary, returning its definition, phonetics, examples, and collocations.",
+            ParametersJsonSchema: """
+            {
+                "type": "object",
+                "properties": {
+                    "word": { "type": "string", "description": "The English word to look up" }
+                },
+                "required": ["word"]
+            }
+            """
+        ),
+        new(
+            Name: "generate_interactive_exercise",
+            Description: "Generate an interactive IELTS practice question card for the student to practice immediately (formats: single, multiple, gap, match, reorder, identify_error, rewrite, short).",
+            ParametersJsonSchema: """
+            {
+                "type": "object",
+                "properties": {
+                    "topic": { "type": "string", "description": "Topic or grammar point for the question" },
+                    "skill": { "type": "string", "description": "Skill: Reading, Writing, Listening, Speaking, or Grammar" },
+                    "kind": { "type": "string", "description": "Format: single, multiple, gap, match, reorder, identify_error, rewrite, short" }
+                },
+                "required": ["topic", "skill", "kind"]
+            }
+            """
+        )
+    };
+
+    public async Task<string> ExecuteTutorToolAsync(string toolName, string argumentsJson, CancellationToken ct)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson);
+            var root = doc.RootElement;
+
+            switch (toolName)
+            {
+                case "search_curriculum":
+                {
+                    string query = root.TryGetProperty("query", out var q) ? q.GetString() ?? "" : "";
+                    string unit = root.TryGetProperty("unit", out var u) ? u.GetString() ?? "" : "";
+                    var hits = _lessons.Search(query, max: 4, unitSlug: string.IsNullOrWhiteSpace(unit) ? null : unit);
+                    if (hits.Count == 0) return JsonSerializer.Serialize(new { result = "No specific lesson sections found for query." });
+                    return JsonSerializer.Serialize(new
+                    {
+                        result = hits.Select(h => new
+                        {
+                            unit = h.Unit,
+                            section = h.SectionTitle,
+                            content = h.Body.Length > 500 ? h.Body[..500] : h.Body
+                        })
+                    });
+                }
+                case "get_vocabulary_entry":
+                {
+                    string word = root.TryGetProperty("word", out var w) ? w.GetString() ?? "" : "";
+                    var match = _lessons.Units.SelectMany(u => u.Vocabulary)
+                        .FirstOrDefault(v => string.Equals(v.Word, word, StringComparison.OrdinalIgnoreCase) ||
+                                             v.Word.Contains(word, StringComparison.OrdinalIgnoreCase));
+                    if (match == null) return JsonSerializer.Serialize(new { result = $"Word '{word}' not found in dictionary." });
+                    return JsonSerializer.Serialize(new
+                    {
+                        word = match.Word,
+                        definition = match.Meaning,
+                        form = match.Form,
+                        ipa = match.Ipa,
+                        example = match.Example
+                    });
+                }
+                case "generate_interactive_exercise":
+                {
+                    string topic = root.TryGetProperty("topic", out var t) ? t.GetString() ?? "IELTS Grammar" : "IELTS Grammar";
+                    string skill = root.TryGetProperty("skill", out var s) ? s.GetString() ?? "Reading" : "Reading";
+                    string kind = root.TryGetProperty("kind", out var k) ? k.GetString() ?? "single" : "single";
+                    
+                    var hits = _lessons.Search(topic, max: 1);
+                    string material = hits.Count > 0 ? hits[0].Body : "General IELTS Practice.";
+                    string prompt = StudyPrompts.BuildInteractiveExercise(topic, skill, material, kind);
+                    var res = await _llm.CompleteAsync(new[]
+                    {
+                        LlmMessage.System(StudyPrompts.InteractiveExerciseSystem),
+                        LlmMessage.User(prompt)
+                    }, ct).ConfigureAwait(false);
+
+                    string exerciseJson = res.Success ? res.Text.Trim() : "{}";
+                    int sIdx = exerciseJson.IndexOf('{');
+                    int eIdx = exerciseJson.LastIndexOf('}');
+                    if (sIdx >= 0 && eIdx > sIdx) exerciseJson = exerciseJson.Substring(sIdx, eIdx - sIdx + 1);
+
+                    return exerciseJson;
+                }
+                default:
+                    return JsonSerializer.Serialize(new { error = $"Unknown tool: {toolName}" });
+            }
+        }
+        catch (Exception ex)
+        {
+            return JsonSerializer.Serialize(new { error = ex.Message });
+        }
+    }
 
     // ------------------------------------------------------------ units
 
@@ -249,7 +394,9 @@ public sealed class StudyService
 
     private List<StudyUnitRow> UnitRows() =>
         _lessons.Units
-            .Select(u => new StudyUnitRow(u.Slug, u.Title, u.Sections.Count, u.Vocabulary.Count, u.PicturesSkipped))
+            .Select(u => new StudyUnitRow(
+                u.Slug, u.DisplayTitle, u.Category, u.Sections.Count, u.Vocabulary.Count, u.PicturesSkipped,
+                u.Topics, u.Skills))
             .ToList();
 
     // ------------------------------------------------------------ sessions
@@ -409,8 +556,227 @@ public sealed class StudyService
             .ToListAsync()
             .GetAwaiter().GetResult();
 
-        return rows.Select(m => new StudyMessageRow(
-            m.Id, m.Role, m.Text, ParseSources(m.SourcesJson), m.CreatedAt)).ToList();
+        return rows.Select(m =>
+        {
+            string text = m.Text;
+            string exerciseJson = "";
+            int start = text.IndexOf("<!-- EXERCISE -->", StringComparison.Ordinal);
+            int end = text.IndexOf("<!-- /EXERCISE -->", StringComparison.Ordinal);
+            if (start >= 0 && end > start)
+            {
+                exerciseJson = text.Substring(start + 17, end - (start + 17)).Trim();
+                text = (text[..start] + text[(end + 18)..]).Trim();
+            }
+            return new StudyMessageRow(
+                m.Id, m.Role, text, ParseSources(m.SourcesJson), m.CreatedAt, exerciseJson);
+        }).ToList();
+    }
+
+    public sealed record CheckAnswerResult(bool IsCorrect, double Score, string Explanation, string ModelAnswer);
+    public sealed record CurriculumUnitSummary(
+        string Slug, string Title, string Category,
+        IReadOnlyList<string> Topics, IReadOnlyList<string> Skills,
+        int SectionCount, int VocabCount,
+        string MainTheme = "", string GrammarFocus = "");
+
+    public IReadOnlyList<CurriculumUnitSummary> CurriculumOverview()
+    {
+        return _lessons.Units.Select(u => new CurriculumUnitSummary(
+            u.Slug, u.DisplayTitle, u.Category, u.Topics, u.Skills, u.Sections.Count, u.Vocabulary.Count,
+            u.MainTheme, u.GrammarFocus
+        )).ToList();
+    }
+
+    public CheckAnswerResult CheckExerciseAnswer(string questionJson, string userAnswer)
+    {
+        userAnswer = (userAnswer ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(questionJson))
+            return new CheckAnswerResult(false, 0, "Question data missing.", "");
+
+        try
+        {
+            using var doc = JsonDocument.Parse(questionJson);
+            var root = doc.RootElement;
+            string kind = root.TryGetProperty("kind", out var k) ? k.GetString() ?? "single" : "single";
+            string correctKey = root.TryGetProperty("correctKey", out var ck) ? ck.GetString() ?? "" : "";
+            string gapAnswer = root.TryGetProperty("gapAnswer", out var ga) ? ga.GetString() ?? "" : "";
+            string explanation = root.TryGetProperty("explanation", out var ex) ? ex.GetString() ?? "" : "";
+
+            bool isCorrect = false;
+            double score = 0;
+            string modelAnswer = "";
+
+            switch (kind.ToLowerInvariant())
+            {
+                case "single":
+                case "tfng":
+                    isCorrect = string.Equals(userAnswer, correctKey.Trim(), StringComparison.OrdinalIgnoreCase);
+                    score = isCorrect ? 1.0 : 0.0;
+                    modelAnswer = correctKey;
+                    break;
+                case "gap":
+                case "completion":
+                    var accepted = gapAnswer.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim().ToLowerInvariant()).ToList();
+                    isCorrect = accepted.Contains(userAnswer.ToLowerInvariant());
+                    score = isCorrect ? 1.0 : 0.0;
+                    modelAnswer = gapAnswer;
+                    break;
+                case "reorder":
+                    modelAnswer = correctKey.Length > 0 ? correctKey : gapAnswer;
+                    isCorrect = string.Equals(userAnswer.Replace(" ", ""), modelAnswer.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
+                    score = isCorrect ? 1.0 : 0.0;
+                    break;
+                case "error_fix":
+                case "paraphrase":
+                    modelAnswer = gapAnswer.Length > 0 ? gapAnswer : explanation;
+                    isCorrect = userAnswer.Length >= 5;
+                    score = isCorrect ? 1.0 : 0.5;
+                    break;
+                default:
+                    isCorrect = string.Equals(userAnswer, correctKey, StringComparison.OrdinalIgnoreCase);
+                    score = isCorrect ? 1.0 : 0.0;
+                    modelAnswer = correctKey;
+                    break;
+            }
+
+            return new CheckAnswerResult(isCorrect, score, explanation, modelAnswer);
+        }
+        catch (Exception ex)
+        {
+            return new CheckAnswerResult(false, 0, "Error evaluating: " + ex.Message, "");
+        }
+    }
+
+    public async Task<StudyChatSnapshot> TeachTopicAsync(
+        int sessionId, string unitSlug, string topic, CancellationToken ct = default)
+    {
+        if (sessionId <= 0)
+        {
+            var s = NewChatSession(unitSlug);
+            sessionId = s.SelectedSessionId;
+        }
+
+        var unit = _lessons.GetUnit(unitSlug) ?? _lessons.Units.FirstOrDefault();
+        string material = "";
+        if (unit != null)
+        {
+            var relevantSections = unit.Sections
+                .Where(s => string.Equals(s.Topic, topic, StringComparison.OrdinalIgnoreCase) || s.Title.Contains(topic, StringComparison.OrdinalIgnoreCase))
+                .Take(2)
+                .ToList();
+            if (relevantSections.Count == 0) relevantSections = unit.Sections.Take(2).ToList();
+            material = string.Join("\n\n", relevantSections.Select(s => s.Title + ":\n" + s.FlatText));
+        }
+
+        string prompt = $"Teach the student about topic '{topic}' based on the authentic IELTS curriculum below.\n" +
+            "Provide 3-4 clear key learning points with examples, and end with an encouraging prompt to practice.\n\n" +
+            "Curriculum Material:\n" + material;
+
+        var messages = new List<LlmMessage>
+        {
+            LlmMessage.System(StudyPrompts.ChatSystem),
+            LlmMessage.User(prompt),
+        };
+
+        string explanation;
+        if (_llm.UseStreaming)
+        {
+            var sb = new System.Text.StringBuilder();
+            try
+            {
+                await foreach (var token in _llm.StreamAsync(messages, ct).ConfigureAwait(false))
+                {
+                    sb.Append(token);
+                    _broadcaster?.Invoke("study.chat.chunk", new
+                    {
+                        sessionId,
+                        delta = token,
+                        isDone = false
+                    });
+                }
+                explanation = sb.Length > 0 ? sb.ToString().Trim() : "Here is the key material for " + topic + ":\n" + material;
+            }
+            catch (Exception ex)
+            {
+                explanation = $"The model could not answer: {ex.Message}";
+            }
+        }
+        else
+        {
+            var result = await _llm.CompleteAsync(messages, ct).ConfigureAwait(false);
+            explanation = result.Success ? result.Text.Trim() : "Here is the key material for " + topic + ":\n" + material;
+        }
+
+        var assistantMsg = new ChatMessage
+        {
+            SessionId = sessionId,
+            Role = "assistant",
+            Text = explanation,
+            CreatedAt = DateTime.UtcNow,
+        };
+        await AppDbContext.InsertAsync(assistantMsg).ConfigureAwait(false);
+
+        _broadcaster?.Invoke("study.chat.chunk", new
+        {
+            sessionId,
+            messageId = assistantMsg.Id,
+            delta = "",
+            isDone = true
+        });
+
+        await GenerateInteractiveExerciseAsync(sessionId, "Reading", topic, "single", unitSlug, ct).ConfigureAwait(false);
+        return ChatSnapshot(sessionId, unitSlug);
+    }
+
+    public async Task<StudyChatSnapshot> GenerateInteractiveExerciseAsync(
+        int sessionId, string skill, string topic, string kind, string unitSlug, CancellationToken ct = default)
+    {
+        if (sessionId <= 0)
+        {
+            var s = NewChatSession(unitSlug);
+            sessionId = s.SelectedSessionId;
+        }
+
+        var unit = _lessons.GetUnit(unitSlug) ?? _lessons.Units.FirstOrDefault();
+        string material = "";
+        if (unit != null)
+        {
+            var sec = unit.Sections.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.FlatText));
+            material = sec?.FlatText ?? "";
+        }
+        if (string.IsNullOrWhiteSpace(material))
+        {
+            var hits = _lessons.Search(topic, max: 2);
+            material = hits.Count > 0 ? hits[0].Body : "General IELTS practice.";
+        }
+
+        string prompt = StudyPrompts.BuildInteractiveExercise(topic, skill, material, kind);
+        var messages = new List<LlmMessage>
+        {
+            LlmMessage.System(StudyPrompts.InteractiveExerciseSystem),
+            LlmMessage.User(prompt),
+        };
+
+        var result = await _llm.CompleteAsync(messages, ct).ConfigureAwait(false);
+        string json = result.Success ? result.Text.Trim() : "";
+        int sIdx = json.IndexOf('{');
+        int eIdx = json.LastIndexOf('}');
+        if (sIdx >= 0 && eIdx > sIdx)
+        {
+            json = json.Substring(sIdx, eIdx - sIdx + 1);
+        }
+
+        string messageText = "<!-- EXERCISE -->" + json + "<!-- /EXERCISE -->";
+
+        await AppDbContext.InsertAsync(new ChatMessage
+        {
+            SessionId = sessionId,
+            Role = "assistant",
+            Text = messageText,
+            CreatedAt = DateTime.UtcNow,
+        }).ConfigureAwait(false);
+
+        return ChatSnapshot(sessionId, unitSlug);
     }
 
     private static IReadOnlyList<StudySource> ParseSources(string json)
@@ -479,16 +845,70 @@ public sealed class StudyService
         var recent = history.TakeLast(8).ToList();
         var messages = BuildChatMessages(question, sourceText, recent);
 
-        var result = await _llm.CompleteAsync(messages, ct).ConfigureAwait(false);
+        string responseText;
+        Action<string, string> onToolInvoked = (toolName, _) =>
+        {
+            _broadcaster?.Invoke("study.chat.chunk", new
+            {
+                sessionId,
+                delta = string.Empty,
+                toolName,
+                isDone = false
+            });
+        };
 
-        await AppDbContext.InsertAsync(new ChatMessage
+        if (_llm.UseStreaming)
+        {
+            Action<string> onTokenChunk = (chunk) =>
+            {
+                _broadcaster?.Invoke("study.chat.chunk", new
+                {
+                    sessionId,
+                    delta = chunk,
+                    isDone = false
+                });
+            };
+
+            var result = await _llm.CompleteWithToolsAsync(
+                messages,
+                TutorTools,
+                ExecuteTutorToolAsync,
+                onToolInvoked: onToolInvoked,
+                onTokenChunk: onTokenChunk,
+                ct: ct).ConfigureAwait(false);
+
+            responseText = result.Success ? result.Text.Trim() : DescribeLlmError(result);
+        }
+        else
+        {
+            var result = await _llm.CompleteWithToolsAsync(
+                messages,
+                TutorTools,
+                ExecuteTutorToolAsync,
+                onToolInvoked: onToolInvoked,
+                ct: ct).ConfigureAwait(false);
+
+            responseText = result.Success ? result.Text.Trim() : DescribeLlmError(result);
+        }
+
+        var assistantMsg = new ChatMessage
         {
             SessionId = sessionId,
             Role = "assistant",
-            Text = result.Success ? result.Text.Trim() : DescribeLlmError(result),
+            Text = responseText,
             SourcesJson = JsonSerializer.Serialize(sources, Json),
             CreatedAt = DateTime.UtcNow,
-        }).ConfigureAwait(false);
+        };
+        await AppDbContext.InsertAsync(assistantMsg).ConfigureAwait(false);
+
+        _broadcaster?.Invoke("study.chat.chunk", new
+        {
+            sessionId,
+            messageId = assistantMsg.Id,
+            delta = "",
+            isDone = true,
+            sources
+        });
 
         session.Topic = question.Length > 80 ? question[..80] : question;
         if (string.IsNullOrWhiteSpace(session.Unit) && hits.Count > 0) session.Unit = hits[0].Unit;
@@ -541,34 +961,40 @@ public sealed class StudyService
         foreach (var hit in hits)
         {
             builder.AppendLine($"- {hit.Unit} / {hit.SectionTitle}:");
-            builder.AppendLine(Shorten(hit.Body, 1200));
+            builder.AppendLine(Shorten(hit.Body, 1800));
         }
         return builder.ToString();
     }
 
     /// <summary>
-    /// The lesson text a practice set is built from, for one skill. A section is
-    /// usable when it is not an answer key and matches the skill, or when it is
-    /// an answer key for the same skill: that key is where the original tasks and
-    /// their correct answers live, which is what makes a built set follow the
-    /// lesson instead of drifting. Vocabulary is added for every skill when the
-    /// section text is thin, and used alone when nothing else matched.
+    /// The lesson text a practice set is built from, for one skill and optional topic.
+    /// When a topic is selected, sections belonging to that topic are prioritized.
+    /// When an answer key exists for a section, both the task and the key are included
+    /// so the generated questions are grounded in real IELTS material.
     /// </summary>
     public static string BuildPracticeMaterial(
-        LessonService lessons, LessonUnit? lesson, string? unitSlug, string skill)
+        LessonService lessons, LessonUnit? lesson, string? unitSlug, string skill, string? topic = null)
     {
         var material = new StringBuilder();
         if (lesson is not null)
         {
-            foreach (var section in lesson.Sections)
+            var sections = lesson.Sections.AsEnumerable();
+            if (!string.IsNullOrWhiteSpace(topic) && !topic.Equals("All", StringComparison.OrdinalIgnoreCase))
+            {
+                var matched = sections.Where(s => string.Equals(s.Topic, topic, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (matched.Count > 0) sections = matched;
+            }
+
+            foreach (var section in sections)
             {
                 if (section.FlatText.Length == 0) continue;
 
-                bool skillMatch = section.Skill.Equals(skill, StringComparison.OrdinalIgnoreCase)
+                bool skillMatch = string.IsNullOrWhiteSpace(skill)
+                    || section.Skill.Equals(skill, StringComparison.OrdinalIgnoreCase)
                     || section.Skill.Equals("Lesson", StringComparison.OrdinalIgnoreCase)
                     || skill == "Vocabulary";
 
-                if (section.IsAnswerKey && !section.Skill.Equals(skill, StringComparison.OrdinalIgnoreCase))
+                if (section.IsAnswerKey && !string.IsNullOrWhiteSpace(skill) && !section.Skill.Equals(skill, StringComparison.OrdinalIgnoreCase))
                     continue;
                 if (!section.IsAnswerKey && !skillMatch)
                     continue;
@@ -576,9 +1002,13 @@ public sealed class StudyService
                 material.AppendLine(section.IsAnswerKey
                     ? $"## {section.Title} (tasks and answers)"
                     : $"## {section.Title}");
-                material.AppendLine(Shorten(section.FlatText, 1400));
+                if (!string.IsNullOrWhiteSpace(section.Topic))
+                {
+                    material.AppendLine($"Topic: {section.Topic}");
+                }
+                material.AppendLine(Shorten(section.FlatText, 1800));
                 material.AppendLine();
-                if (material.Length > 8000) break;
+                if (material.Length > 9000) break;
             }
 
             if (skill == "Vocabulary" || material.Length < 3000)
@@ -607,9 +1037,39 @@ public sealed class StudyService
     // ------------------------------------------------------------ practice
 
     public async Task<StudyPracticeSnapshot> BuildPracticeAsync(
-        int sessionId, string unit, string skill, string difficulty, int count, string scope = "All", CancellationToken ct = default)
+        int sessionId, string unit, string skill, string difficulty, int count, string topic = "", string scope = "All", string mode = "auto", CancellationToken ct = default)
     {
         count = Math.Clamp(count, 1, 20);
+
+        var unitSlug = string.IsNullOrWhiteSpace(unit) ? null : unit;
+        var lesson = unitSlug is null ? null : _lessons.GetUnit(unitSlug);
+
+        var topicLabel = !string.IsNullOrWhiteSpace(topic) && !topic.Equals("All", StringComparison.OrdinalIgnoreCase)
+            ? topic
+            : (lesson?.Title ?? (string.IsNullOrWhiteSpace(unit) ? "mixed IELTS practice" : unit));
+
+        // Offline / Lesson mode: instant practice set without calling LLM
+        if (string.Equals(mode, "lesson", StringComparison.OrdinalIgnoreCase) || (!CanUseAi && !string.Equals(mode, "ai", StringComparison.OrdinalIgnoreCase)))
+        {
+            var offlineSet = BuildOfflinePracticeSet(_lessons, unitSlug, skill, topic, count, difficulty);
+            if (offlineSet is not null && offlineSet.Questions.Count > 0)
+            {
+                var id = await SavePracticeAsync(sessionId, offlineSet, skill, unit ?? string.Empty, topicLabel, lesson?.Source ?? "Lesson Material")
+                    .ConfigureAwait(false);
+                return PracticeSnapshot(sessionId, id, scope) with
+                {
+                    StatusMessage = $"Created practice set with {offlineSet.Questions.Count} question(s) from lesson content."
+                };
+            }
+
+            if (!CanUseAi)
+            {
+                return PracticeSnapshot(sessionId, 0, scope) with
+                {
+                    StatusMessage = AiHint,
+                };
+            }
+        }
 
         if (!CanUseAi)
         {
@@ -619,27 +1079,25 @@ public sealed class StudyService
             };
         }
 
-        var unitSlug = string.IsNullOrWhiteSpace(unit) ? null : unit;
-        var lesson = unitSlug is null ? null : _lessons.GetUnit(unitSlug);
-
-        var topic = lesson?.Title ?? (string.IsNullOrWhiteSpace(unit) ? "mixed IELTS practice" : unit);
-        var material = BuildPracticeMaterial(_lessons, lesson, unitSlug, skill);
+        var material = BuildPracticeMaterial(_lessons, lesson, unitSlug, skill, topic);
 
         var messages = new List<LlmMessage>
         {
-            LlmMessage.System(StudyPrompts.ChatSystem),
-            LlmMessage.User(StudyPrompts.BuildPractice(topic, skill, material, count, difficulty)),
+            LlmMessage.System(StudyPrompts.PracticeSystem),
+            LlmMessage.User(StudyPrompts.BuildPractice(topicLabel, skill, material, count, difficulty)),
         };
 
         var result = await _llm.CompleteAsync(messages, ct).ConfigureAwait(false);
 
-        // One retry with a blunt reminder: a model that wrapped the JSON in prose
-        // usually gets it right the second time, and a lost set is the worst case.
+        // One retry with a blunt reminder if the model failed JSON schema
         if (result.Success && !TryParsePractice(result.Text, count, out var retryParsed))
         {
             var retry = messages
-                .Concat(new[] { LlmMessage.Assistant(Shorten(result.Text, 800)), LlmMessage.User(
-                    "That was not valid question JSON. Reply again with only the JSON object, no prose and no code fences.") })
+                .Concat(new[]
+                {
+                    LlmMessage.Assistant(Shorten(result.Text, 800)),
+                    LlmMessage.User("The response was not valid question JSON. Reply with ONLY the raw JSON object, without markdown code fences, comments, or conversational text.")
+                })
                 .ToList();
             var second = await _llm.CompleteAsync(retry, ct).ConfigureAwait(false);
             if (second.Success && TryParsePractice(second.Text, count, out retryParsed))
@@ -656,12 +1114,127 @@ public sealed class StudyService
         }
         else
         {
-            status = result.Success
-                ? "The model reply could not be read as questions. Try again."
-                : DescribeLlmError(result);
+            // Graceful fallback to authentic offline questions if LLM failed
+            var fallbackSet = BuildOfflinePracticeSet(_lessons, unitSlug, skill, topic, count, difficulty);
+            if (fallbackSet is not null && fallbackSet.Questions.Count > 0)
+            {
+                setId = await SavePracticeAsync(sessionId, fallbackSet, skill, unit ?? string.Empty, topicLabel, lesson?.Source ?? "Lesson Material")
+                    .ConfigureAwait(false);
+                status = $"AI generation could not complete. Loaded {fallbackSet.Questions.Count} question(s) from lesson content instead.";
+            }
+            else
+            {
+                status = result.Success
+                    ? "The model reply could not be read as questions. Try again or use Quick Quiz."
+                    : DescribeLlmError(result);
+            }
         }
 
         return PracticeSnapshot(sessionId, setId, scope) with { StatusMessage = status };
+    }
+
+    /// <summary>
+    /// Builds an authentic practice set directly from the lesson text and vocabulary without needing an LLM.
+    /// </summary>
+    private static ParsedSet BuildOfflinePracticeSet(
+        LessonService lessons, string? unitSlug, string skill, string? topic, int count, string difficulty)
+    {
+        var set = new ParsedSet();
+        var lesson = string.IsNullOrWhiteSpace(unitSlug) ? null : lessons.GetUnit(unitSlug);
+        var unitTitle = lesson?.Title ?? (string.IsNullOrWhiteSpace(unitSlug) ? "IELTS" : unitSlug);
+        set.Title = $"{unitTitle} {skill} Practice";
+
+        count = Math.Clamp(count, 1, 20);
+        var questions = new List<ParsedQuestion>();
+
+        // 1. Reading and Grammar section question extraction
+        if (lesson is not null && (skill.Equals("Reading", StringComparison.OrdinalIgnoreCase) || skill.Equals("Grammar", StringComparison.OrdinalIgnoreCase)))
+        {
+            var sections = lesson.Sections.Where(s => !s.IsAnswerKey && s.FlatText.Length > 0);
+            if (!string.IsNullOrWhiteSpace(topic) && !topic.Equals("All", StringComparison.OrdinalIgnoreCase))
+            {
+                var matched = sections.Where(s => string.Equals(s.Topic, topic, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (matched.Count > 0) sections = matched;
+            }
+
+            foreach (var sec in sections)
+            {
+                var lines = sec.FlatText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                foreach (var line in lines)
+                {
+                    if ((line.Contains("___") || Regex.IsMatch(line, @"^\d+[\.\)]\s+")) && line.Length > 15 && line.Length < 350)
+                    {
+                        var q = new ParsedQuestion
+                        {
+                            Kind = line.Contains("___") ? "gap" : "short",
+                            Prompt = line,
+                            Explanation = $"Derived from lesson section: {sec.Title}.",
+                        };
+                        questions.Add(q);
+                        if (questions.Count >= count) break;
+                    }
+                }
+                if (questions.Count >= count) break;
+            }
+        }
+
+        // 2. Vocabulary-based questions (consistent, accurate, and completely offline)
+        var vocabList = lessons.Vocabulary(null, unitSlug, 60).Select(x => x.Word).ToList();
+        if (vocabList.Count >= 2 && questions.Count < count)
+        {
+            var rnd = new Random();
+            var shuffled = vocabList.OrderBy(_ => rnd.Next()).ToList();
+
+            foreach (var w in shuffled)
+            {
+                if (questions.Count >= count) break;
+
+                if (!string.IsNullOrWhiteSpace(w.Example) && w.Example.Contains(w.Word, StringComparison.OrdinalIgnoreCase) && rnd.Next(2) == 0)
+                {
+                    var pattern = Regex.Escape(w.Word);
+                    var blanked = Regex.Replace(w.Example, pattern, "___", RegexOptions.IgnoreCase);
+                    questions.Add(new ParsedQuestion
+                    {
+                        Kind = "gap",
+                        Prompt = $"Complete the sentence with the correct vocabulary word:\n\"{blanked}\"",
+                        GapAnswer = w.Word,
+                        Explanation = $"\"{w.Word}\" ({w.Form}) means: {w.Meaning}. Example: {w.Example}",
+                    });
+                }
+                else
+                {
+                    var distractors = shuffled.Where(o => o.Word != w.Word && !string.IsNullOrWhiteSpace(o.Meaning))
+                        .Take(3).Select(o => o.Meaning).ToList();
+                    if (distractors.Count >= 3)
+                    {
+                        var options = new List<string> { w.Meaning };
+                        options.AddRange(distractors);
+                        options = options.OrderBy(_ => rnd.Next()).ToList();
+
+                        char correctLetter = 'A';
+                        var optList = new List<PracticeOption>();
+                        for (int i = 0; i < options.Count; i++)
+                        {
+                            char letter = (char)('A' + i);
+                            if (options[i] == w.Meaning) correctLetter = letter;
+                            optList.Add(new PracticeOption(letter.ToString(), options[i]));
+                        }
+
+                        questions.Add(new ParsedQuestion
+                        {
+                            Kind = "single",
+                            Prompt = $"What is the meaning of the word \"{w.Word}\" ({w.Form})?",
+                            Options = optList,
+                            CorrectKey = correctLetter.ToString(),
+                            Explanation = $"\"{w.Word}\" ({w.Form}): {w.Meaning}. Example: {w.Example}",
+                        });
+                    }
+                }
+            }
+        }
+
+        set.Questions = questions;
+        return set;
     }
 
     private sealed class ParsedSet
@@ -693,9 +1266,16 @@ public sealed class StudyService
         var json = ExtractJsonObject(text);
         if (json is null) return false;
 
+        var options = new JsonDocumentOptions
+        {
+            AllowTrailingCommas = true,
+            CommentHandling = JsonCommentHandling.Skip,
+            MaxDepth = 64
+        };
+
         try
         {
-            using var doc = JsonDocument.Parse(json);
+            using var doc = JsonDocument.Parse(json, options);
             var root = doc.RootElement;
             if (root.ValueKind != JsonValueKind.Object) return false;
 
@@ -707,9 +1287,6 @@ public sealed class StudyService
                 return false;
             }
 
-            // Read each question by hand, so a model that writes options as plain
-            // strings, or misses one field, still yields a usable set. A question
-            // that cannot be read is skipped; the rest are kept.
             var list = new List<ParsedQuestion>();
             foreach (var element in questions.EnumerateArray())
             {
@@ -725,10 +1302,10 @@ public sealed class StudyService
                 };
                 if (string.IsNullOrWhiteSpace(q.Prompt)) continue;
 
-                if (element.TryGetProperty("options", out var options) && options.ValueKind == JsonValueKind.Array)
+                if (element.TryGetProperty("options", out var opts) && opts.ValueKind == JsonValueKind.Array)
                 {
                     int index = 0;
-                    foreach (var option in options.EnumerateArray())
+                    foreach (var option in opts.EnumerateArray())
                     {
                         if (option.ValueKind == JsonValueKind.Object)
                         {
@@ -737,7 +1314,16 @@ public sealed class StudyService
                         }
                         else if (option.ValueKind == JsonValueKind.String)
                         {
-                            q.Options.Add(new PracticeOption(Letter(index), option.GetString() ?? string.Empty));
+                            var strVal = option.GetString() ?? string.Empty;
+                            var m = Regex.Match(strVal, @"^([A-Z])[\.\)\:\-]\s*(.*)$");
+                            if (m.Success)
+                            {
+                                q.Options.Add(new PracticeOption(m.Groups[1].Value, m.Groups[2].Value.Trim()));
+                            }
+                            else
+                            {
+                                q.Options.Add(new PracticeOption(Letter(index), strVal));
+                            }
                         }
                         index++;
                     }
@@ -785,14 +1371,84 @@ public sealed class StudyService
     private static string Letter(int index) =>
         index is >= 0 and < 26 ? ((char)('A' + index)).ToString() : (index + 1).ToString();
 
-    /// <summary>Models sometimes wrap JSON in prose or fences; pull the object out.</summary>
+    /// <summary>Extracts the JSON object from raw LLM text, handling code blocks, whitespace, and balanced braces.</summary>
     private static string? ExtractJsonObject(string text)
     {
         if (string.IsNullOrWhiteSpace(text)) return null;
-        int start = text.IndexOf('{');
-        int end = text.LastIndexOf('}');
-        if (start < 0 || end <= start) return null;
-        return text.Substring(start, end - start + 1);
+
+        var cleaned = text.Trim();
+        if (cleaned.StartsWith("```"))
+        {
+            var firstLine = cleaned.IndexOf('\n');
+            if (firstLine > 0)
+            {
+                var lastFence = cleaned.LastIndexOf("```", StringComparison.Ordinal);
+                if (lastFence > firstLine)
+                {
+                    cleaned = cleaned.Substring(firstLine + 1, lastFence - firstLine - 1).Trim();
+                }
+            }
+        }
+
+        int start = cleaned.IndexOf('{');
+        if (start < 0) return null;
+
+        int depth = 0;
+        bool inString = false;
+        bool escape = false;
+        int end = -1;
+
+        for (int i = start; i < cleaned.Length; i++)
+        {
+            char c = cleaned[i];
+            if (escape)
+            {
+                escape = false;
+                continue;
+            }
+
+            if (c == '\\' && inString)
+            {
+                escape = true;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inString = !inString;
+                continue;
+            }
+
+            if (!inString)
+            {
+                if (c == '{')
+                {
+                    depth++;
+                }
+                else if (c == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        end = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (end > start)
+        {
+            return cleaned.Substring(start, end - start + 1);
+        }
+
+        int lastClose = cleaned.LastIndexOf('}');
+        if (lastClose > start)
+        {
+            return cleaned.Substring(start, lastClose - start + 1);
+        }
+
+        return null;
     }
 
     private static async Task<int> SavePracticeAsync(
@@ -1127,5 +1783,71 @@ public sealed class StudyService
         await AppDbContext.UpdateAsync(session).ConfigureAwait(false);
 
         return ChatSnapshot(sessionId, unitFilter);
+    }
+
+    // ------------------------------------------------------------ materials
+
+    public StudyMaterialSnapshot MaterialSnapshot(
+        string unitSlug = "", string sectionId = "", string topicFilter = "", string skillFilter = "")
+    {
+        var units = UnitRows();
+        var targetUnit = !string.IsNullOrWhiteSpace(unitSlug)
+            ? _lessons.GetUnit(unitSlug)
+            : (_lessons.Units.Count > 0 ? _lessons.Units[0] : null);
+
+        if (targetUnit is null)
+        {
+            return new StudyMaterialSnapshot
+            {
+                Units = units,
+            };
+        }
+
+        var sectionsQuery = targetUnit.Sections.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(topicFilter) && !topicFilter.Equals("All", StringComparison.OrdinalIgnoreCase))
+        {
+            sectionsQuery = sectionsQuery.Where(s => string.Equals(s.Topic, topicFilter, StringComparison.OrdinalIgnoreCase));
+        }
+        if (!string.IsNullOrWhiteSpace(skillFilter) && !skillFilter.Equals("All", StringComparison.OrdinalIgnoreCase))
+        {
+            sectionsQuery = sectionsQuery.Where(s => string.Equals(s.Skill, skillFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var sectionRows = sectionsQuery.Select(s => new StudyMaterialSectionRow(
+            s.Id, s.Title, s.Skill, s.Topic, s.IsAnswerKey, s.KeySectionId, s.TargetSectionId, s.Blocks.Count)).ToList();
+
+        var selectedSection = (!string.IsNullOrWhiteSpace(sectionId)
+            ? targetUnit.Sections.FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase))
+            : null) ?? (sectionRows.Count > 0 ? targetUnit.Sections.FirstOrDefault(s => s.Id == sectionRows[0].Id) : targetUnit.Sections.FirstOrDefault());
+
+        LessonSection? pairedKey = null;
+        if (selectedSection is not null)
+        {
+            if (!string.IsNullOrWhiteSpace(selectedSection.KeySectionId))
+            {
+                pairedKey = targetUnit.Sections.FirstOrDefault(s => string.Equals(s.Id, selectedSection.KeySectionId, StringComparison.OrdinalIgnoreCase));
+            }
+            else if (selectedSection.IsAnswerKey && !string.IsNullOrWhiteSpace(selectedSection.TargetSectionId))
+            {
+                pairedKey = targetUnit.Sections.FirstOrDefault(s => string.Equals(s.Id, selectedSection.TargetSectionId, StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        var slides = targetUnit.Slides.SelectMany(d => d.Slides).ToList();
+
+        return new StudyMaterialSnapshot
+        {
+            Units = units,
+            SelectedUnit = targetUnit.Slug,
+            SelectedCategory = targetUnit.Category,
+            UnitTopics = targetUnit.Topics,
+            UnitSkills = targetUnit.Skills,
+            Sections = sectionRows,
+            SelectedSectionId = selectedSection?.Id ?? string.Empty,
+            CurrentSection = selectedSection,
+            PairedKeySection = pairedKey,
+            CurrentSlides = slides,
+            CurrentAudio = targetUnit.Audio,
+        };
     }
 }

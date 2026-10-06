@@ -98,3 +98,59 @@ export async function applyOutputDevice(audioEl, deviceId) {
     // Not supported for this element; the default speaker is used.
   }
 }
+
+/// Decodes a recorded blob to 16 kHz mono WAV, base64, the model input format.
+/// Empty string when the blob cannot be decoded.
+export async function blobToWavBase64(blob: Blob): Promise<string> {
+  const Ctx = window.AudioContext || (window as any).webkitAudioContext
+  const Offline = window.OfflineAudioContext || (window as any).webkitOfflineAudioContext
+  let decodeCtx
+  try {
+    const buf = await blob.arrayBuffer()
+    decodeCtx = new Ctx()
+    const decoded = await decodeCtx.decodeAudioData(buf.slice(0))
+    const frames = Math.max(1, Math.round(decoded.duration * 16000))
+    const offline = new Offline(1, frames, 16000)
+    const source = offline.createBufferSource()
+    source.buffer = decoded
+    source.connect(offline.destination)
+    source.start()
+    const rendered = await offline.startRendering()
+    return encodeWavBase64(rendered.getChannelData(0), 16000)
+  } catch {
+    return ''
+  } finally {
+    decodeCtx?.close().catch(() => {})
+  }
+}
+
+function encodeWavBase64(samples, sampleRate) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2)
+  const view = new DataView(buffer)
+  const writeStr = (offset, text) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i))
+  }
+  writeStr(0, 'RIFF')
+  view.setUint32(4, 36 + samples.length * 2, true)
+  writeStr(8, 'WAVE')
+  writeStr(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  writeStr(36, 'data')
+  view.setUint32(40, samples.length * 2, true)
+  let offset = 44
+  for (let i = 0; i < samples.length; i++) {
+    const s = Math.max(-1, Math.min(1, samples[i]))
+    view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7fff, true)
+    offset += 2
+  }
+  let binary = ''
+  const bytes = new Uint8Array(buffer)
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return 'data:audio/wav;base64,' + btoa(binary)
+}

@@ -34,8 +34,12 @@ public sealed class LessonSection
 {
     public string Id { get; set; } = string.Empty;
     public string Skill { get; set; } = string.Empty;
+    public string Topic { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public bool IsAnswerKey { get; set; }
+    public string KeySectionId { get; set; } = string.Empty;
+    public string TargetSectionId { get; set; } = string.Empty;
+    public float[]? Embedding { get; set; }
     public IReadOnlyList<LessonBlock> Blocks { get; set; } = Array.Empty<LessonBlock>();
 
     /// <summary>All block text joined, for search and for the model context.</summary>
@@ -73,6 +77,8 @@ public sealed class LessonSlide
 public sealed class LessonDeck
 {
     public string File { get; set; } = string.Empty;
+    public string Topic { get; set; } = string.Empty;
+    public float[]? Embedding { get; set; }
     public IReadOnlyList<LessonSlide> Slides { get; set; } = Array.Empty<LessonSlide>();
 }
 
@@ -81,6 +87,10 @@ public sealed class LessonUnit
 {
     public string Unit { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
+    public string Slug { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public IReadOnlyList<string> Topics { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<string> Skills { get; set; } = Array.Empty<string>();
     public string Source { get; set; } = string.Empty;
     public IReadOnlyList<string> Files { get; set; } = Array.Empty<string>();
     public IReadOnlyList<string> Audio { get; set; } = Array.Empty<string>();
@@ -88,14 +98,88 @@ public sealed class LessonUnit
     public IReadOnlyList<LessonVocabulary> Vocabulary { get; set; } = Array.Empty<LessonVocabulary>();
     public IReadOnlyList<LessonDeck> Slides { get; set; } = Array.Empty<LessonDeck>();
 
-    /// <summary>File stem, used as the stable id (for example "unit-1").</summary>
-    public string Slug { get; set; } = string.Empty;
-
     /// <summary>
     /// Pictures (charts, photos) the ingest could not read without OCR. Reported
     /// so the app can say what is missing instead of silently lacking it.
     /// </summary>
     public int PicturesSkipped { get; set; }
+
+    /// <summary>
+    /// Descriptive title stating clearly what topic and grammar focus the unit covers.
+    /// </summary>
+    [JsonIgnore]
+    public string DisplayTitle
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(Title) && Title.Contains(':'))
+                return Title;
+
+            string theme = MainTheme;
+            string grammar = GrammarFocus;
+
+            if (!string.IsNullOrEmpty(theme) && !string.IsNullOrEmpty(grammar))
+                return $"{Unit}: {theme} ({grammar})";
+            if (!string.IsNullOrEmpty(theme))
+                return $"{Unit}: {theme}";
+            if (!string.IsNullOrEmpty(Title))
+                return Title;
+            return Unit;
+        }
+    }
+
+    /// <summary>
+    /// The primary topical theme or reading subject of this unit.
+    /// </summary>
+    [JsonIgnore]
+    public string MainTheme
+    {
+        get
+        {
+            var readingSec = Sections.FirstOrDefault(s => s.Skill.Equals("Reading", StringComparison.OrdinalIgnoreCase) && !s.IsAnswerKey);
+            if (readingSec != null)
+            {
+                string t = readingSec.Topic;
+                if (string.IsNullOrWhiteSpace(t) || t.Equals("Reading Comprehension", StringComparison.OrdinalIgnoreCase))
+                    t = readingSec.Title;
+                if (t.StartsWith("Reading:", StringComparison.OrdinalIgnoreCase))
+                    t = t[8..].Trim();
+                if (!string.IsNullOrWhiteSpace(t))
+                    return t;
+            }
+
+            var otherTopic = Topics.FirstOrDefault(t =>
+                !t.Equals("Grammar", StringComparison.OrdinalIgnoreCase) &&
+                !t.Equals("Listening Comprehension", StringComparison.OrdinalIgnoreCase) &&
+                !t.Equals("Reading Comprehension", StringComparison.OrdinalIgnoreCase) &&
+                !t.Equals("Reading Vocabulary", StringComparison.OrdinalIgnoreCase) &&
+                !t.Equals("Speaking Practice", StringComparison.OrdinalIgnoreCase) &&
+                !t.Equals("Writing", StringComparison.OrdinalIgnoreCase));
+
+            return otherTopic ?? Title;
+        }
+    }
+
+    /// <summary>
+    /// The specific grammar or language structure focus of this unit.
+    /// </summary>
+    [JsonIgnore]
+    public string GrammarFocus
+    {
+        get
+        {
+            var grammarSec = Sections.FirstOrDefault(s => s.Skill.Equals("Grammar", StringComparison.OrdinalIgnoreCase) && !s.IsAnswerKey);
+            if (grammarSec != null)
+            {
+                string g = grammarSec.Title;
+                if (string.IsNullOrWhiteSpace(g) || g.Equals("Grammar", StringComparison.OrdinalIgnoreCase))
+                    g = grammarSec.Topic;
+                if (!string.IsNullOrWhiteSpace(g))
+                    return g;
+            }
+            return string.Empty;
+        }
+    }
 }
 
 /// <summary>
@@ -111,7 +195,9 @@ public sealed record LessonHit(
     string Skill,
     string Snippet,
     int Score,
-    string Body);
+    string Body,
+    string Topic = "",
+    string SectionId = "");
 
 /// <summary>
 /// Reads the normalized lesson JSON and searches it. The shipped folder is read
@@ -137,12 +223,39 @@ public sealed class LessonService
         _userDirOverride = path;
     }
 
-    private static string ShippedDir =>
-        Path.Combine(AppContext.BaseDirectory, "Assets", "Lessons");
+    private static string? _shippedDirOverride;
+    public static void SetShippedDirForTesting(string? path) => _shippedDirOverride = path;
+
+    private static string ShippedDir
+    {
+        get
+        {
+            if (_shippedDirOverride is not null) return _shippedDirOverride;
+            var p1 = Path.Combine(AppContext.BaseDirectory, "Assets", "Lessons");
+            if (Directory.Exists(p1)) return p1;
+            // In unit tests with mock user dir, keep shipped dir isolated so mock data is not contaminated
+            if (_userDirOverride is not null) return p1;
+            var p2 = Path.Combine(Directory.GetCurrentDirectory(), "Content", "Assets", "Lessons");
+            if (Directory.Exists(p2)) return p2;
+            var p3 = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Content", "Assets", "Lessons");
+            if (Directory.Exists(p3)) return Path.GetFullPath(p3);
+            return p1;
+        }
+    }
 
     private static string UserDir => _userDirOverride ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "IELTop", "content", "Lessons");
+
+    /// <summary>Summary metrics of all ingested lesson knowledge.</summary>
+    public (int UnitCount, int SectionCount, int VocabCount, int SlideCount) GetKnowledgeMetrics()
+    {
+        var units = Units;
+        int sections = units.Sum(u => u.Sections.Count);
+        int vocabs = units.Sum(u => u.Vocabulary.Count);
+        int slides = units.Sum(u => u.Slides.Sum(s => s.Slides.Count));
+        return (units.Count, sections, vocabs, slides);
+    }
 
     /// <summary>All units, shipped plus user, newest file wins on the same slug.</summary>
     public IReadOnlyList<LessonUnit> Units
@@ -175,14 +288,18 @@ public sealed class LessonService
 
     private static (int, int, string) SortKey(string slug)
     {
-        // "unit-3" sorts before "unit-10"; anything else sorts after by name.
+        // "unit-1".."unit-10" sort by number
         var parts = slug.Split('-');
         if (parts.Length == 2 && parts[0].Equals("unit", StringComparison.OrdinalIgnoreCase)
             && int.TryParse(parts[1], out var number))
         {
             return (0, number, slug);
         }
-        return (1, 0, slug);
+        if (slug.StartsWith("writing-grammar", StringComparison.OrdinalIgnoreCase)) return (1, 1, slug);
+        if (slug.StartsWith("writing-task-1", StringComparison.OrdinalIgnoreCase)) return (1, 2, slug);
+        if (slug.StartsWith("writing-task-2", StringComparison.OrdinalIgnoreCase)) return (1, 3, slug);
+        if (slug.StartsWith("midterm", StringComparison.OrdinalIgnoreCase)) return (2, 0, slug);
+        return (3, 0, slug);
     }
 
     private void ReadFolder(string folder, Dictionary<string, LessonUnit> into)
@@ -196,6 +313,14 @@ public sealed class LessonService
                 if (unit is null) continue;
                 unit.Slug = Path.GetFileNameWithoutExtension(file);
                 if (string.IsNullOrWhiteSpace(unit.Unit)) unit.Unit = unit.Slug;
+                if (unit.Topics.Count == 0)
+                {
+                    unit.Topics = unit.Sections.Select(s => s.Topic).Where(t => !string.IsNullOrWhiteSpace(t)).Distinct().OrderBy(t => t).ToList();
+                }
+                if (unit.Skills.Count == 0)
+                {
+                    unit.Skills = unit.Sections.Select(s => s.Skill).Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().OrderBy(s => s).ToList();
+                }
                 into[unit.Slug] = unit;
             }
             catch (JsonException)
@@ -205,18 +330,47 @@ public sealed class LessonService
         }
     }
 
+    public static float CosineSimilarity(IReadOnlyList<float> a, IReadOnlyList<float> b)
+    {
+        if (a.Count == 0 || b.Count == 0 || a.Count != b.Count) return 0f;
+        float dot = 0f;
+        for (int i = 0; i < a.Count; i++)
+        {
+            dot += a[i] * b[i];
+        }
+        return dot;
+    }
+
+    public (LessonSection? Section, LessonSection? KeySection, LessonUnit? Unit) GetSection(string unitSlug, string sectionId)
+    {
+        var unit = GetUnit(unitSlug);
+        if (unit is null) return (null, null, null);
+        var section = (!string.IsNullOrWhiteSpace(sectionId)
+            ? unit.Sections.FirstOrDefault(s => string.Equals(s.Id, sectionId, StringComparison.OrdinalIgnoreCase))
+            : null) ?? unit.Sections.FirstOrDefault();
+        if (section is null) return (null, null, unit);
+
+        LessonSection? keySection = null;
+        if (!string.IsNullOrWhiteSpace(section.KeySectionId))
+        {
+            keySection = unit.Sections.FirstOrDefault(s => string.Equals(s.Id, section.KeySectionId, StringComparison.OrdinalIgnoreCase));
+        }
+        else if (section.IsAnswerKey && !string.IsNullOrWhiteSpace(section.TargetSectionId))
+        {
+            keySection = unit.Sections.FirstOrDefault(s => string.Equals(s.Id, section.TargetSectionId, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return (section, keySection, unit);
+    }
+
     /// <summary>
-    /// Search over section text, slide decks, and vocabulary. Sections and decks
-    /// are ranked by TF-IDF cosine similarity (a local lexical vector index built
-    /// from the loaded units), so a document that is really about the query
-    /// outranks one that mentions a word once. Returns the best matches with a
-    /// short snippet, which the chat uses as sources.
+    /// Hybrid search over section text, slide decks, and vocabulary. Combines lexical TF-IDF
+    /// with pre-computed vector cosine similarity when available.
     /// </summary>
-    public IReadOnlyList<LessonHit> Search(string query, int max = 6, string? unitSlug = null)
+    public IReadOnlyList<LessonHit> Search(
+        string query, int max = 6, string? unitSlug = null, string? topic = null, float[]? queryEmbedding = null)
     {
         var terms = Tokenize(query);
-        if (terms.Count == 0) return Array.Empty<LessonHit>();
-
         var index = GetIndex();
         var hits = new List<LessonHit>();
         var units = unitSlug is null
@@ -227,14 +381,33 @@ public sealed class LessonService
         {
             foreach (var section in unit.Sections)
             {
+                if (!string.IsNullOrWhiteSpace(topic) && !string.Equals(section.Topic, topic, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 var text = section.FlatText;
                 if (text.Length == 0) continue;
 
-                double score = index.Score(text, terms);
+                double lexicalScore = terms.Count > 0 ? index.Score(text, terms) : 0;
+                float vectorScore = 0f;
+                if (queryEmbedding is not null && section.Embedding is not null && section.Embedding.Length > 0)
+                {
+                    vectorScore = Math.Max(0f, CosineSimilarity(queryEmbedding, section.Embedding));
+                }
+
+                double score = lexicalScore;
+                if (vectorScore > 0)
+                {
+                    score = (lexicalScore * 0.3) + (vectorScore * 1.5);
+                }
+
+                if (terms.Any(t => section.Title.Contains(t, StringComparison.OrdinalIgnoreCase))) score += 0.4;
+                if (terms.Any(t => section.Topic.Contains(t, StringComparison.OrdinalIgnoreCase))) score += 0.4;
+
                 if (score <= 0) continue;
                 hits.Add(new LessonHit(
                     unit.Unit, unit.Slug, section.Title, section.Skill,
-                    Snippet(text, terms), (int)Math.Round(score * 1000), Snippet(text, terms, width: 1600)));
+                    Snippet(text, terms), (int)Math.Round(score * 1000), Snippet(text, terms, width: 1800),
+                    section.Topic, section.Id));
             }
 
             foreach (var deck in unit.Slides)
@@ -242,27 +415,44 @@ public sealed class LessonService
                 var text = string.Join("\n", deck.Slides.Select(s => s.Text));
                 if (string.IsNullOrWhiteSpace(text)) continue;
 
-                double score = index.Score(text, terms);
+                double lexicalScore = terms.Count > 0 ? index.Score(text, terms) : 0;
+                float vectorScore = 0f;
+                if (queryEmbedding is not null && deck.Embedding is not null && deck.Embedding.Length > 0)
+                {
+                    vectorScore = Math.Max(0f, CosineSimilarity(queryEmbedding, deck.Embedding));
+                }
+
+                double score = lexicalScore;
+                if (vectorScore > 0)
+                {
+                    score = (lexicalScore * 0.3) + (vectorScore * 1.5);
+                }
+
                 if (score <= 0) continue;
                 hits.Add(new LessonHit(
                     unit.Unit, unit.Slug, $"Slides: {deck.File}", "Slides",
-                    Snippet(text, terms), (int)Math.Round(score * 1000), Snippet(text, terms, width: 1600)));
+                    Snippet(text, terms), (int)Math.Round(score * 1000), Snippet(text, terms, width: 1800),
+                    deck.Topic, ""));
             }
 
             // Vocabulary matches are useful on their own, so they count as a hit.
-            var vocab = unit.Vocabulary
-                .Where(v => terms.Any(t =>
-                    v.Word.Contains(t, StringComparison.OrdinalIgnoreCase)
-                    || v.Meaning.Contains(t, StringComparison.OrdinalIgnoreCase)))
-                .Take(12)
-                .ToList();
-            if (vocab.Count > 0)
+            if (terms.Count > 0)
             {
-                var text = string.Join("\n", vocab.Select(v =>
-                    $"{v.Word} ({v.Form}) = {v.Meaning}. {v.Example}"));
-                hits.Add(new LessonHit(
-                    unit.Unit, unit.Slug, "Vocabulary", "Vocabulary",
-                    Snippet(text, terms), vocab.Count * 3, Shorten(text, 2000)));
+                var vocab = unit.Vocabulary
+                    .Where(v => terms.Any(t =>
+                        v.Word.Contains(t, StringComparison.OrdinalIgnoreCase)
+                        || v.Meaning.Contains(t, StringComparison.OrdinalIgnoreCase)))
+                    .Take(12)
+                    .ToList();
+                if (vocab.Count > 0)
+                {
+                    var text = string.Join("\n", vocab.Select(v =>
+                        $"{v.Word} ({v.Form}) = {v.Meaning}. {v.Example}"));
+                    hits.Add(new LessonHit(
+                        unit.Unit, unit.Slug, "Vocabulary", "Vocabulary",
+                        Snippet(text, terms), vocab.Count * 3, Shorten(text, 2000),
+                        "Vocabulary", ""));
+                }
             }
         }
 

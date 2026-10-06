@@ -65,6 +65,12 @@ public interface IMddPhonemeService
 {
     bool IsModelAvailable();
     Task<MddResult> AssessAsync(string wavPath, string targetText, CancellationToken ct = default);
+    /// <summary>
+    /// Clarity of free speech, 0 to 1: the mean per frame confidence of the
+    /// phoneme model. Unlike GOP it needs no target text, so it cannot say
+    /// which sounds were wrong, only how clearly the voice came through.
+    /// </summary>
+    Task<double> ClarityAsync(string wavPath, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -89,6 +95,24 @@ public sealed class MddPhonemeService : IMddPhonemeService
     public bool IsModelAvailable()
     {
         return OnnxModelRegistry.IsComplete(SlotName);
+    }
+
+    public async Task<double> ClarityAsync(string wavPath, CancellationToken ct = default)
+    {
+        if (!IsModelAvailable() || !File.Exists(wavPath)) return 0;
+        if (!_onnx.TryLoad(SlotName, out _)) return 0;
+        var session = _onnx.Get(SlotName);
+        if (session is null) return 0;
+        var labels = LoadLabels();
+        if (labels.Length == 0) return 0;
+        return await Task.Run(() =>
+        {
+            var heard = Recognize(session, labels, wavPath, ct);
+            if (heard.MaxLogPosteriors.Length == 0) return 0;
+            double sum = 0;
+            foreach (var logP in heard.MaxLogPosteriors) sum += Math.Exp(Math.Max(-20, logP));
+            return Math.Round(sum / heard.MaxLogPosteriors.Length, 3);
+        }, ct);
     }
 
     public async Task<MddResult> AssessAsync(string wavPath, string targetText, CancellationToken ct = default)

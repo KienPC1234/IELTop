@@ -219,6 +219,7 @@ public static class MauiProgram
         services.AddSingleton<ServersService>();
         services.AddSingleton<LessonService>();
         services.AddSingleton<StudyService>();
+        services.AddSingleton<SpeakingTutorService>();
         services.AddSingleton(sp => new DiagnosticsService(AppVersion()));
     }
 

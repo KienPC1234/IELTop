@@ -1,11 +1,16 @@
+using System;
+using System.ClientModel;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
+using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Threading;
+using System.Threading.Tasks;
 using IELTop.Services.Storage;
+using OpenAI;
+using OpenAI.Chat;
 
 namespace IELTop.Services.Ai;
 
@@ -18,14 +23,33 @@ public sealed record LlmImage(string Base64, string MediaType);
 /// One chat message in an OpenAI compatible request. Images are only sent when
 /// the model supports vision and the user turned vision on in Settings.
 /// </summary>
-public sealed record LlmMessage(string Role, string Content, IReadOnlyList<LlmImage>? Images = null)
+public sealed record LlmMessage(
+    string Role,
+    string Content,
+    IReadOnlyList<LlmImage>? Images = null,
+    string? ToolCallId = null)
 {
     public static LlmMessage System(string content) => new("system", content);
     public static LlmMessage User(string content) => new("user", content);
     public static LlmMessage Assistant(string content) => new("assistant", content);
+    public static LlmMessage Tool(string toolCallId, string content) => new("tool", content, null, toolCallId);
     public static LlmMessage UserWithImages(string content, IReadOnlyList<LlmImage> images)
         => new("user", content, images);
 }
+
+/// <summary>
+/// Definition of an OpenAI-compatible function tool schema.
+/// </summary>
+public sealed record LlmToolDefinition(
+    string Name,
+    string Description,
+    string ParametersJsonSchema,
+    bool Strict = false);
+
+/// <summary>
+/// Asynchronous executor callback for invoked tools.
+/// </summary>
+public delegate Task<string> LlmToolExecutorAsync(string toolName, string argumentsJson, CancellationToken ct);
 
 /// <summary>
 /// Result of a chat call. When streaming is used, <see cref="Text"/> holds the full reply.
@@ -50,23 +74,28 @@ public interface ILlmService
     bool VisionEnabled { get; }
     Task<LlmResult> CompleteAsync(IReadOnlyList<LlmMessage> messages, CancellationToken ct = default);
     IAsyncEnumerable<string> StreamAsync(IReadOnlyList<LlmMessage> messages, CancellationToken ct = default);
+    Task<LlmResult> CompleteWithToolsAsync(
+        IReadOnlyList<LlmMessage> messages,
+        IReadOnlyList<LlmToolDefinition> tools,
+        LlmToolExecutorAsync toolExecutor,
+        Action<string, string>? onToolInvoked = null,
+        Action<string>? onTokenChunk = null,
+        CancellationToken ct = default);
     Task<LlmResult> TestConnectionAsync(CancellationToken ct = default);
 }
 
 /// <summary>
-/// Talks to any server that implements the OpenAI chat completions API,
-/// for example OpenAI, Azure OpenAI compatible gateways, Ollama, LM Studio,
-/// llama.cpp server or vLLM. Works online and offline on the local network.
+/// Talks to any server that implements the standard OpenAI chat completions API
+/// (OpenAI, Azure, vLLM, Ollama, LM Studio, llama.cpp server) using the official
+/// OpenAI C# library with tool calling (functions) and real-time streaming.
 /// </summary>
 public sealed class OpenAiCompatibleLlmService : ILlmService
 {
     private readonly ISettingsStore _settings;
-    private readonly HttpClient _http;
 
     public OpenAiCompatibleLlmService(ISettingsStore settings)
     {
         _settings = settings;
-        _http = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
     }
 
     public bool IsConfigured =>
@@ -78,52 +107,42 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
     public bool VisionEnabled => _settings.Current.LlmVisionEnabled;
 
     public Task<LlmResult> TestConnectionAsync(CancellationToken ct = default)
-        => CompleteAsync(
-            new[] { LlmMessage.User(LlmPrompts.TestConnectionPrompt) }, ct);
+        => CompleteAsync(new[] { LlmMessage.User(LlmPrompts.TestConnectionPrompt) }, ct);
 
     public async Task<LlmResult> CompleteAsync(
         IReadOnlyList<LlmMessage> messages, CancellationToken ct = default)
     {
         if (!IsConfigured) return LlmResult.Fail(NotConfiguredMessage);
 
-        var endpoint = $"{_settings.Current.LlmBaseUrl.TrimEnd('/')}/chat/completions";
-        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var endpoint = _settings.Current.LlmBaseUrl;
+        var watch = Stopwatch.StartNew();
         using var timeout = new CancellationTokenSource(TimeoutOf(_settings));
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+
         try
         {
-            using var request = BuildRequest(messages, stream: false);
-            using var response = await _http.SendAsync(request, linked.Token);
-            var body = await response.Content.ReadAsStringAsync(ct);
+            var client = CreateChatClient();
+            var chatMessages = MapMessages(messages, VisionEnabled);
+            var options = BuildOptions();
+
+            ChatCompletion completion = await client.CompleteChatAsync(chatMessages, options, linked.Token)
+                .ConfigureAwait(false);
             watch.Stop();
 
-            if (!response.IsSuccessStatusCode)
+            string text = ExtractContent(completion);
+            if (string.IsNullOrWhiteSpace(text))
+            {
                 return new LlmResult(false, string.Empty,
-                    DescribeHttpError(response.StatusCode, body),
-                    (int)response.StatusCode, watch.ElapsedMilliseconds, endpoint);
-
-            var text = ExtractContent(body);
-            return string.IsNullOrEmpty(text)
-                ? new LlmResult(false, string.Empty,
                     "The model returned an empty reply.",
-                    (int)response.StatusCode, watch.ElapsedMilliseconds, endpoint)
-                : new LlmResult(true, text, string.Empty,
-                    (int)response.StatusCode, watch.ElapsedMilliseconds, endpoint);
+                    200, watch.ElapsedMilliseconds, endpoint);
+            }
+
+            return new LlmResult(true, text.Trim(), string.Empty, 200, watch.ElapsedMilliseconds, endpoint);
         }
-        catch (TaskCanceledException)
+        catch (Exception ex)
         {
             watch.Stop();
-            return new LlmResult(false, string.Empty,
-                "The request timed out. Check the server and try again.",
-                0, watch.ElapsedMilliseconds, endpoint);
-        }
-        catch (HttpRequestException)
-        {
-            watch.Stop();
-            // The raw socket message is not useful to a student. Give the cause and the fix.
-            return new LlmResult(false, string.Empty,
-                "Could not reach the model server. Check that it is running and that the base URL in Settings is correct.",
-                0, watch.ElapsedMilliseconds, endpoint);
+            return HandleException(ex, watch.ElapsedMilliseconds, endpoint);
         }
     }
 
@@ -137,77 +156,372 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
             yield break;
         }
 
-        HttpResponseMessage? response = null;
-        Stream? stream = null;
-        StreamReader? reader = null;
         using var timeout = new CancellationTokenSource(TimeoutOf(_settings));
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+
+        string? startupError = null;
+        AsyncCollectionResult<StreamingChatCompletionUpdate>? updates = null;
         try
         {
-            using var request = BuildRequest(messages, stream: true);
-            response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, linked.Token);
+            var client = CreateChatClient();
+            var chatMessages = MapMessages(messages, VisionEnabled);
+            var options = BuildOptions();
+            updates = client.CompleteChatStreamingAsync(chatMessages, options, linked.Token);
+        }
+        catch (Exception ex)
+        {
+            startupError = DescribeException(ex);
+        }
 
-            if (!response.IsSuccessStatusCode)
+        if (startupError != null)
+        {
+            yield return startupError;
+            yield break;
+        }
+
+        string? streamError = null;
+        IAsyncEnumerator<StreamingChatCompletionUpdate>? enumerator = null;
+        try
+        {
+            enumerator = updates!.GetAsyncEnumerator(linked.Token);
+        }
+        catch (Exception ex)
+        {
+            streamError = DescribeException(ex);
+        }
+
+        if (streamError != null)
+        {
+            yield return streamError;
+            yield break;
+        }
+
+        while (true)
+        {
+            StreamingChatCompletionUpdate update;
+            try
             {
-                var body = await response.Content.ReadAsStringAsync(linked.Token);
-                yield return DescribeHttpError(response.StatusCode, body);
-                yield break;
+                if (!await enumerator!.MoveNextAsync().ConfigureAwait(false)) break;
+                update = enumerator.Current;
+            }
+            catch (Exception ex)
+            {
+                streamError = DescribeException(ex);
+                break;
             }
 
-            stream = await response.Content.ReadAsStreamAsync(linked.Token);
-            reader = new StreamReader(stream);
-
-            // Read to end with ReadLineAsync. Checking EndOfStream would block on the stream.
-            while (await reader.ReadLineAsync(linked.Token) is { } line)
+            if (update.ContentUpdate is { Count: > 0 })
             {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                if (!line.StartsWith("data:", StringComparison.Ordinal)) continue;
-
-                var payload = line[5..].Trim();
-                if (payload == "[DONE]") break;
-
-                var delta = ExtractDelta(payload);
-                if (!string.IsNullOrEmpty(delta)) yield return delta;
+                foreach (var part in update.ContentUpdate)
+                {
+                    if (!string.IsNullOrEmpty(part.Text))
+                    {
+                        yield return part.Text;
+                    }
+                }
             }
         }
-        finally
+
+        if (streamError != null)
         {
-            reader?.Dispose();
-            stream?.Dispose();
-            response?.Dispose();
+            yield return $" [stream interrupted: {streamError}]";
+        }
+
+        if (enumerator != null)
+        {
+            await enumerator.DisposeAsync().ConfigureAwait(false);
         }
     }
 
-    private HttpRequestMessage BuildRequest(IReadOnlyList<LlmMessage> messages, bool stream)
+    /// <summary>
+    /// Executes an interactive chat turn with support for OpenAI tool definitions,
+    /// handling model tool invocations, running C# tool handlers, and looping back
+    /// until the final synthesised response is generated.
+    private sealed class PendingStreamingToolCall
     {
-        var url = $"{_settings.Current.LlmBaseUrl.TrimEnd('/')}/chat/completions";
-        double topP = _settings.Current.LlmTopP;
-        if (!double.IsFinite(topP) || topP <= 0 || topP > 1) topP = 1.0;
-        var payload = new
-        {
-            model = _settings.Current.LlmModel,
-            messages = messages.Select(BuildMessage).ToList(),
-            temperature = _settings.Current.LlmTemperature,
-            top_p = topP,
-            max_tokens = _settings.Current.LlmMaxTokens,
-            stream
-        };
+        public string Id { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public System.Text.StringBuilder Arguments { get; } = new();
+    }
 
-        var request = new HttpRequestMessage(HttpMethod.Post, url)
+    /// <summary>
+    /// Executes an interactive chat turn with support for OpenAI tool definitions,
+    /// handling model tool invocations, running C# tool handlers, and streaming
+    /// individual tokens directly from the model over SSE when onTokenChunk is provided.
+    /// </summary>
+    public async Task<LlmResult> CompleteWithToolsAsync(
+        IReadOnlyList<LlmMessage> messages,
+        IReadOnlyList<LlmToolDefinition> tools,
+        LlmToolExecutorAsync toolExecutor,
+        Action<string, string>? onToolInvoked = null,
+        Action<string>? onTokenChunk = null,
+        CancellationToken ct = default)
+    {
+        if (!IsConfigured) return LlmResult.Fail(NotConfiguredMessage);
+
+        var endpoint = _settings.Current.LlmBaseUrl;
+        var watch = Stopwatch.StartNew();
+        using var timeout = new CancellationTokenSource(TimeoutOf(_settings));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeout.Token);
+
+        try
         {
-            Content = new StringContent(
-                JsonSerializer.Serialize(payload, new JsonSerializerOptions
+            var client = CreateChatClient();
+            var chatMessages = MapMessages(messages, VisionEnabled);
+            var options = BuildOptions(tools);
+
+            int round = 0;
+            const int maxRounds = 5;
+
+            while (round++ < maxRounds)
+            {
+                if (onTokenChunk != null)
                 {
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-                }),
-                Encoding.UTF8, "application/json")
+                    // Real-time token streaming direct from OpenAI SSE endpoint
+                    var streamSb = new System.Text.StringBuilder();
+                    var pendingTools = new Dictionary<int, PendingStreamingToolCall>();
+
+                    var updates = client.CompleteChatStreamingAsync(chatMessages, options, linked.Token);
+                    await foreach (var update in updates.ConfigureAwait(false))
+                    {
+                        if (update.ContentUpdate is { Count: > 0 })
+                        {
+                            foreach (var part in update.ContentUpdate)
+                            {
+                                if (!string.IsNullOrEmpty(part.Text))
+                                {
+                                    streamSb.Append(part.Text);
+                                    onTokenChunk(part.Text);
+                                }
+                            }
+                        }
+
+                        if (update.ToolCallUpdates is { Count: > 0 })
+                        {
+                            foreach (var tc in update.ToolCallUpdates)
+                            {
+                                if (!pendingTools.TryGetValue(tc.Index, out var p))
+                                {
+                                    p = new PendingStreamingToolCall();
+                                    pendingTools[tc.Index] = p;
+                                }
+
+                                if (!string.IsNullOrEmpty(tc.ToolCallId))
+                                    p.Id = tc.ToolCallId;
+                                if (!string.IsNullOrEmpty(tc.FunctionName))
+                                    p.Name = tc.FunctionName;
+                                if (tc.FunctionArgumentsUpdate is { } argsChunk)
+                                    p.Arguments.Append(argsChunk.ToString());
+                            }
+                        }
+                    }
+
+                    if (pendingTools.Count > 0)
+                    {
+                        var toolCalls = new List<ChatToolCall>();
+                        foreach (var kvp in pendingTools.OrderBy(k => k.Key))
+                        {
+                            var p = kvp.Value;
+                            string callId = string.IsNullOrEmpty(p.Id) ? $"call_{kvp.Key}" : p.Id;
+                            toolCalls.Add(ChatToolCall.CreateFunctionToolCall(
+                                callId,
+                                p.Name,
+                                BinaryData.FromString(p.Arguments.ToString())));
+                        }
+
+                        chatMessages.Add(new AssistantChatMessage(toolCalls));
+
+                        foreach (var tc in toolCalls)
+                        {
+                            string toolName = tc.FunctionName;
+                            string argsJson = tc.FunctionArguments?.ToString() ?? "{}";
+
+                            onToolInvoked?.Invoke(toolName, argsJson);
+
+                            string toolResult;
+                            try
+                            {
+                                toolResult = await toolExecutor(toolName, argsJson, linked.Token).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                toolResult = JsonSerializer.Serialize(new { error = ex.Message });
+                            }
+
+                            chatMessages.Add(new ToolChatMessage(tc.Id, toolResult));
+                        }
+
+                        // Continue to next round so the model generates the final synthesized answer token-by-token
+                        continue;
+                    }
+
+                    // Direct token streaming finished with no tool calls
+                    watch.Stop();
+                    return new LlmResult(true, streamSb.ToString().Trim(), string.Empty, 200, watch.ElapsedMilliseconds, endpoint);
+                }
+                else
+                {
+                    // Non-streaming mode (e.g. streaming turned off in Settings)
+                    ChatCompletion completion = await client.CompleteChatAsync(chatMessages, options, linked.Token)
+                        .ConfigureAwait(false);
+
+                    if (completion.FinishReason == ChatFinishReason.ToolCalls && completion.ToolCalls is { Count: > 0 })
+                    {
+                        chatMessages.Add(new AssistantChatMessage(completion));
+
+                        foreach (ChatToolCall toolCall in completion.ToolCalls)
+                        {
+                            string toolName = toolCall.FunctionName;
+                            string argsJson = toolCall.FunctionArguments?.ToString() ?? "{}";
+
+                            onToolInvoked?.Invoke(toolName, argsJson);
+
+                            string toolResult;
+                            try
+                            {
+                                toolResult = await toolExecutor(toolName, argsJson, linked.Token).ConfigureAwait(false);
+                            }
+                            catch (Exception ex)
+                            {
+                                toolResult = JsonSerializer.Serialize(new { error = ex.Message });
+                            }
+
+                            chatMessages.Add(new ToolChatMessage(toolCall.Id, toolResult));
+                        }
+
+                        continue;
+                    }
+
+                    watch.Stop();
+                    string text = ExtractContent(completion);
+                    return new LlmResult(true, text.Trim(), string.Empty, 200, watch.ElapsedMilliseconds, endpoint);
+                }
+            }
+
+            watch.Stop();
+            return new LlmResult(false, string.Empty,
+                "The model exceeded the maximum tool execution rounds.",
+                200, watch.ElapsedMilliseconds, endpoint);
+        }
+        catch (Exception ex)
+        {
+            watch.Stop();
+            return HandleException(ex, watch.ElapsedMilliseconds, endpoint);
+        }
+    }
+
+    private ChatClient CreateChatClient()
+    {
+        var rawUrl = (_settings.Current.LlmBaseUrl ?? string.Empty).Trim();
+        var model = (_settings.Current.LlmModel ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(model)) model = "gpt-4o-mini";
+
+        var apiKey = _settings.Current.LlmApiKey?.Trim();
+        if (string.IsNullOrWhiteSpace(apiKey)) apiKey = "local-server-token";
+
+        var clientOptions = new OpenAIClientOptions
+        {
+            NetworkTimeout = TimeoutOf(_settings)
         };
 
-        var key = _settings.Current.LlmApiKey;
-        if (!string.IsNullOrWhiteSpace(key))
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+        if (rawUrl.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
+        {
+            rawUrl = rawUrl[..^"/chat/completions".Length].TrimEnd('/');
+        }
 
-        return request;
+        if (Uri.TryCreate(rawUrl, UriKind.Absolute, out var endpointUri))
+        {
+            clientOptions.Endpoint = endpointUri;
+        }
+
+        return new ChatClient(model, new ApiKeyCredential(apiKey), clientOptions);
+    }
+
+    private ChatCompletionOptions BuildOptions(IReadOnlyList<LlmToolDefinition>? tools = null)
+    {
+        var options = new ChatCompletionOptions();
+
+        if (_settings.Current.LlmTemperature > 0)
+            options.Temperature = (float)_settings.Current.LlmTemperature;
+
+        double topP = _settings.Current.LlmTopP;
+        if (double.IsFinite(topP) && topP > 0 && topP <= 1)
+            options.TopP = (float)topP;
+
+        if (_settings.Current.LlmMaxTokens > 0)
+            options.MaxOutputTokenCount = _settings.Current.LlmMaxTokens;
+
+        if (tools is { Count: > 0 })
+        {
+            foreach (var tool in tools)
+            {
+                options.Tools.Add(ChatTool.CreateFunctionTool(
+                    functionName: tool.Name,
+                    functionDescription: tool.Description,
+                    functionParameters: BinaryData.FromString(tool.ParametersJsonSchema),
+                    functionSchemaIsStrict: tool.Strict));
+            }
+        }
+
+        return options;
+    }
+
+    private static List<ChatMessage> MapMessages(IReadOnlyList<LlmMessage> messages, bool visionEnabled)
+    {
+        var list = new List<ChatMessage>(messages.Count);
+        foreach (var m in messages)
+        {
+            switch (m.Role.ToLowerInvariant())
+            {
+                case "system":
+                    list.Add(new SystemChatMessage(m.Content));
+                    break;
+                case "assistant":
+                    list.Add(new AssistantChatMessage(m.Content));
+                    break;
+                case "tool":
+                    list.Add(new ToolChatMessage(m.ToolCallId ?? "call_0", m.Content));
+                    break;
+                case "user":
+                default:
+                    if (visionEnabled && m.Images is { Count: > 0 })
+                    {
+                        var parts = new List<ChatMessageContentPart>
+                        {
+                            ChatMessageContentPart.CreateTextPart(m.Content)
+                        };
+                        foreach (var img in m.Images)
+                        {
+                            try
+                            {
+                                var bytes = Convert.FromBase64String(img.Base64);
+                                parts.Add(ChatMessageContentPart.CreateImagePart(
+                                    BinaryData.FromBytes(bytes), img.MediaType));
+                            }
+                            catch
+                            {
+                                // Skip malformed images
+                            }
+                        }
+                        list.Add(new UserChatMessage(parts));
+                    }
+                    else
+                    {
+                        list.Add(new UserChatMessage(m.Content));
+                    }
+                    break;
+            }
+        }
+        return list;
+    }
+
+    private static string ExtractContent(ChatCompletion completion)
+    {
+        if (completion.Content is { Count: > 0 })
+        {
+            return string.Concat(completion.Content.Select(c => c.Text));
+        }
+        return string.Empty;
     }
 
     private static TimeSpan TimeoutOf(ISettingsStore settings)
@@ -218,85 +532,49 @@ public sealed class OpenAiCompatibleLlmService : ILlmService
         return TimeSpan.FromSeconds(seconds);
     }
 
-    /// <summary>
-    /// A plain message sends content as a string. A message with images sends the
-    /// multimodal content array that vision models expect.
-    /// </summary>
-    private object BuildMessage(LlmMessage message)
+    private static LlmResult HandleException(Exception ex, long elapsedMs, string endpoint)
     {
-        var useImages = VisionEnabled
-                        && message.Images is { Count: > 0 };
-
-        if (!useImages)
-            return new { role = message.Role, content = message.Content };
-
-        var parts = new List<object> { new { type = "text", text = message.Content } };
-        foreach (var image in message.Images!)
+        if (ex is ClientResultException cre)
         {
-            parts.Add(new
+            string msg = cre.Status switch
             {
-                type = "image_url",
-                image_url = new { url = $"data:{image.MediaType};base64,{image.Base64}" }
-            });
+                401 => "The server rejected the API key. Check the key in Settings.",
+                404 => "The server has no chat endpoint at that URL. Check the base URL in Settings.",
+                429 => "The server is rate limited. Wait a moment and try again.",
+                _ => $"The model server returned error ({cre.Status}): {cre.Message}"
+            };
+            return new LlmResult(false, string.Empty, msg, cre.Status, elapsedMs, endpoint);
         }
 
-        return new { role = message.Role, content = parts };
-    }
-
-    private static string ExtractContent(string body)
-    {
-        using var doc = JsonDocument.Parse(body);
-        if (!doc.RootElement.TryGetProperty("choices", out var choices) ||
-            choices.GetArrayLength() == 0)
-            return string.Empty;
-        if (!choices[0].TryGetProperty("message", out var message))
-            return string.Empty;
-
-        var content = message.TryGetProperty("content", out var c) ? c.GetString() : null;
-        if (!string.IsNullOrWhiteSpace(content)) return content!;
-
-        // Reasoning models may put the whole answer in reasoning_content and leave
-        // content empty when the token budget is spent on thinking. Returning it is
-        // better than reporting an empty reply to the student.
-        var reasoning = message.TryGetProperty("reasoning_content", out var r) ? r.GetString() : null;
-        return reasoning ?? string.Empty;
-    }
-
-    private static string ExtractDelta(string payload)
-    {
-        try
+        if (ex is OperationCanceledException)
         {
-            using var doc = JsonDocument.Parse(payload);
-            if (!doc.RootElement.TryGetProperty("choices", out var choices) ||
-                choices.GetArrayLength() == 0)
-                return string.Empty;
-            if (!choices[0].TryGetProperty("delta", out var delta))
-                return string.Empty;
-            if (delta.TryGetProperty("content", out var content) && !string.IsNullOrEmpty(content.GetString()))
-                return content.GetString() ?? string.Empty;
-            return delta.TryGetProperty("reasoning_content", out var reasoning)
-                ? reasoning.GetString() ?? string.Empty
-                : string.Empty;
+            return new LlmResult(false, string.Empty,
+                "The request timed out. Check the server and try again.",
+                0, elapsedMs, endpoint);
         }
-        catch (JsonException)
-        {
-            return string.Empty;
-        }
+
+        return new LlmResult(false, string.Empty,
+            $"Could not reach the model server: {ex.Message}",
+            0, elapsedMs, endpoint);
     }
 
-    private static string DescribeHttpError(System.Net.HttpStatusCode status, string body)
+    private static string DescribeException(Exception ex)
     {
-        var shortBody = body.Length > 300 ? body[..300] : body;
-        return status switch
+        if (ex is ClientResultException cre)
         {
-            System.Net.HttpStatusCode.Unauthorized =>
-                "The server rejected the API key. Check the key in Settings.",
-            System.Net.HttpStatusCode.NotFound =>
-                "The server has no chat endpoint at that URL. Check the base URL in Settings.",
-            System.Net.HttpStatusCode.TooManyRequests =>
-                "The server is rate limited. Wait a moment and try again.",
-            _ => $"The model server returned an error ({(int)status}). {shortBody}"
-        };
+            return cre.Status switch
+            {
+                401 => "The server rejected the API key. Check the key in Settings.",
+                404 => "The server has no chat endpoint at that URL. Check the base URL in Settings.",
+                429 => "The server is rate limited. Wait a moment and try again.",
+                _ => $"The model server returned error ({cre.Status}): {cre.Message}"
+            };
+        }
+        if (ex is OperationCanceledException)
+        {
+            return "The request timed out. Check the server and try again.";
+        }
+        return $"Could not reach the model server: {ex.Message}";
     }
 
     private const string NotConfiguredMessage =

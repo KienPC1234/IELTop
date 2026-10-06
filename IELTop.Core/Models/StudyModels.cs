@@ -138,3 +138,53 @@ public sealed class PracticeQuestion
 }
 
 public sealed record PracticeOption(string Key, string Text);
+
+/// <summary>
+/// One tutor speaking attempt: a cue answer or a read aloud turn, with the
+/// measurements the app could take itself (pace, pauses, clarity or GOP) and
+/// the optional AI feedback. The wav stays on disk, only its path is stored.
+/// </summary>
+[Table("TutorSpeakingAttempts")]
+public sealed class TutorSpeakingAttempt
+{
+    [PrimaryKey, AutoIncrement]
+    public int Id { get; set; }
+
+    [Indexed]
+    public int SessionId { get; set; }
+
+    /// <summary>Answer or ReadAloud.</summary>
+    public string Mode { get; set; } = "Answer";
+
+    /// <summary>Part1, Part2 or Part3 for answers; empty for read aloud.</summary>
+    public string Part { get; set; } = string.Empty;
+
+    public string Cue { get; set; } = string.Empty;
+
+    public string Transcript { get; set; } = string.Empty;
+
+    public double WordsPerMinute { get; set; }
+
+    public double SpeechSeconds { get; set; }
+
+    public int PauseCount { get; set; }
+
+    public double MeanPauseSeconds { get; set; }
+
+    /// <summary>
+    /// Mean frame confidence of the phoneme model on free speech, 0 to 1.
+    /// Empty for read aloud, which uses PronunciationAccuracy instead.
+    /// </summary>
+    public double Clarity { get; set; }
+
+    public double PronunciationAccuracy { get; set; }
+
+    public double MeanGop { get; set; }
+
+    public string AiFeedback { get; set; } = string.Empty;
+
+    public string AudioPath { get; set; } = string.Empty;
+
+    [Indexed]
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}

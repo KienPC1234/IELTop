@@ -31,6 +31,7 @@ public sealed class AppDbContext : IDisposable
     public TableQuery<ChatMessage> ChatMessages => _db.Table<ChatMessage>();
     public TableQuery<PracticeSet> PracticeSets => _db.Table<PracticeSet>();
     public TableQuery<PracticeQuestion> PracticeQuestions => _db.Table<PracticeQuestion>();
+    public TableQuery<TutorSpeakingAttempt> TutorSpeakingAttempts => _db.Table<TutorSpeakingAttempt>();
 
     public SQLiteConnection Connection => _db;
 
@@ -162,6 +163,7 @@ public sealed class AppDbContext : IDisposable
         await db.CreateTableAsync<ChatMessage>().ConfigureAwait(false);
         await db.CreateTableAsync<PracticeSet>().ConfigureAwait(false);
         await db.CreateTableAsync<PracticeQuestion>().ConfigureAwait(false);
+        await db.CreateTableAsync<TutorSpeakingAttempt>().ConfigureAwait(false);
     }
 
     public static void EnsureCreated()

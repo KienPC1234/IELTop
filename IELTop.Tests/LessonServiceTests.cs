@@ -164,4 +164,37 @@ public sealed class LessonServiceTests : IDisposable
         Assert.NotEmpty(hits);
         Assert.Equal("U9 Grammar", hits[0].SectionTitle);
     }
+
+    [Fact]
+    public void CosineSimilarity_ComputesCorrectDotProduct()
+    {
+        var v1 = new float[] { 1f, 0f, 0f };
+        var v2 = new float[] { 1f, 0f, 0f };
+        var v3 = new float[] { 0f, 1f, 0f };
+
+        Assert.Equal(1f, LessonService.CosineSimilarity(v1, v2));
+        Assert.Equal(0f, LessonService.CosineSimilarity(v1, v3));
+    }
+
+    [Fact]
+    public void GetSection_ResolvesSectionAndPairedKey()
+    {
+        var unit = new
+        {
+            unit = "Unit 9",
+            title = "Unit 9",
+            sections = new object[]
+            {
+                new { id = "u9-read", title = "U9 Reading", isAnswerKey = false, keySectionId = "u9-read-keys", blocks = Array.Empty<object>() },
+                new { id = "u9-read-keys", title = "U9 Reading Keys", isAnswerKey = true, targetSectionId = "u9-read", blocks = Array.Empty<object>() }
+            }
+        };
+        WriteUnit("unit-9", unit);
+        _lessons.Reload();
+
+        var (sec, key, loadedUnit) = _lessons.GetSection("unit-9", "u9-read");
+        Assert.NotNull(sec);
+        Assert.NotNull(key);
+        Assert.Equal("u9-read-keys", key!.Id);
+    }
 }

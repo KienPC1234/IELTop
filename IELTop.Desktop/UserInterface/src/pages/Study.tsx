@@ -1,93 +1,43 @@
-import { useEffect, useState } from 'react'
-import { call } from '@/bridge'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { useState } from 'react'
+import { MessageSquare, Mic, AlertCircle } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ErrorBar, PageHeader } from '@/components/shared'
-import { MessageSquare, Layers, BookText } from 'lucide-react'
-import StudyChat from '@/pages/study/StudyChat'
-import StudyPractice from '@/pages/study/StudyPractice'
-import StudyVocab from '@/pages/study/StudyVocab'
+import StudyChatTutor from '@/pages/study/StudyChatTutor'
+import StudySpeakingCoach from '@/pages/study/StudySpeakingCoach'
 
-/// The Study screen: a tutor chat grounded in the lesson content, a practice
-/// builder, and a vocabulary browser. Reading and browsing work offline; the
-/// chat and the builder need a language model and say so when none is set.
-export default function Study({ onNavigate }) {
-  const [tab, setTab] = useState('chat')
-  const [units, setUnits] = useState<any[]>([])
-  const [canUseAi, setCanUseAi] = useState(false)
-  const [aiHint, setAiHint] = useState('')
-  const [hasUnits, setHasUnits] = useState(true)
-  const [status, setStatus] = useState('')
+/// The renovated Study screen: divided cleanly into two interactive tabs:
+/// 1. AI Study Tutor: an interactive chatbot grounded in the complete 14-unit lesson
+///    curriculum, capable of explaining concepts and generating 8 interactive exercise types.
+/// 2. Speaking Coach: an intelligent speaking partner with flexible topic suggestions,
+///    official 4-criteria IELTS evaluation (FC, LR, GRA, PR), and transcript-aligned audio slicing.
+export default function Study({ onNavigate }: { onNavigate?: (target: string) => void }) {
+  const [tab, setTab] = useState<'tutor' | 'speaking'>('tutor')
   const [error, setError] = useState('')
 
-  async function loadShell() {
-    try {
-      const snap = await call('study.chat.snapshot', { sessionId: 0, unit: '' })
-      setUnits(snap?.units ?? [])
-      setCanUseAi(!!snap?.canUseAi)
-      setAiHint(snap?.aiHint ?? '')
-      setHasUnits(snap?.hasUnits ?? true)
-      if (snap?.statusMessage) setStatus(snap.statusMessage)
-    } catch (e: any) {
-      setError(e.message)
-    }
-  }
-
-  useEffect(() => {
-    loadShell()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <ErrorBar message={error} onDismiss={() => setError('')} />
 
       <PageHeader
-        title="Study"
-        description="A tutor chat, practice sets, and the course vocabulary. Bands are practice estimates only."
+        title="Study & Speaking"
+        description="Interactive IELTS AI tutor grounded in authentic curriculum, and Speaking coach with 4-criteria assessment and audio segment drills."
       />
 
-      {!hasUnits && (
-        <Card>
-          <CardContent>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              No lesson content was found. Run the lesson ingest tool once to add the
-              course units, then reload this screen.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {!canUseAi && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-warning/30 bg-warning/10 px-3.5 py-2.5 text-sm text-warning">
-          <span>{aiHint}</span>
-          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => onNavigate?.('settings')}>
-            Open Settings
-          </Button>
-        </div>
-      )}
-
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="chat" className="gap-1.5">
+      <Tabs value={tab} onValueChange={(val: any) => setTab(val)}>
+        <TabsList className="grid w-full max-w-[400px] grid-cols-2">
+          <TabsTrigger value="tutor" className="gap-2">
             <MessageSquare className="h-4 w-4" />
-            Tutor chat
+            AI Study Tutor
           </TabsTrigger>
-          <TabsTrigger value="practice" className="gap-1.5">
-            <Layers className="h-4 w-4" />
-            Practice
-          </TabsTrigger>
-          <TabsTrigger value="vocab" className="gap-1.5">
-            <BookText className="h-4 w-4" />
-            Vocabulary
+          <TabsTrigger value="speaking" className="gap-2">
+            <Mic className="h-4 w-4" />
+            Speaking Coach
           </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {tab === 'chat' && <StudyChat units={units} canUseAi={canUseAi} onError={setError} />}
-      {tab === 'practice' && <StudyPractice units={units} canUseAi={canUseAi} onError={setError} />}
-      {tab === 'vocab' && <StudyVocab units={units} onError={setError} />}
+      {tab === 'tutor' && <StudyChatTutor onError={setError} />}
+      {tab === 'speaking' && <StudySpeakingCoach onError={setError} />}
     </div>
   )
 }

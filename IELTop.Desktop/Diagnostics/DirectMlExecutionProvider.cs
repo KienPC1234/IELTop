@@ -58,15 +58,23 @@ public sealed class DirectMlExecutionProvider : IOnnxExecutionProvider
     }
 
     /// <summary>
-    /// Every real GPU name, so the log and the health output are honest about
-    /// what is present. Virtual display adapters and the Microsoft Basic Render
-    /// Driver are skipped: they do not run a model any faster.
+    /// Every usable GPU name, so the log and the health output are honest about
+    /// what is present. Skipped: virtual display adapters and the Microsoft Basic
+    /// Render Driver (not real GPUs), adapters Windows reports as broken or
+    /// disabled (bad Status or non-zero ConfigManagerErrorCode, e.g. a dead card
+    /// the driver already flagged), and names in IELTOP_GPU_BLOCKLIST (a ";"
+    /// separated list of extra name fragments to skip without a code change).
     /// </summary>
     private static IReadOnlyList<string> DetectGpuNames()
     {
+        var blocked = new List<string>();
+        var extra = Environment.GetEnvironmentVariable("IELTOP_GPU_BLOCKLIST");
+        if (!string.IsNullOrWhiteSpace(extra))
+            blocked.AddRange(extra.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
         var names = new List<string>();
         using var searcher = new ManagementObjectSearcher(
-            "SELECT Name FROM Win32_VideoController");
+            "SELECT Name, Status, ConfigManagerErrorCode FROM Win32_VideoController");
         foreach (ManagementObject adapter in searcher.Get())
         {
             var name = adapter["Name"] as string ?? string.Empty;
@@ -76,6 +84,25 @@ public sealed class DirectMlExecutionProvider : IOnnxExecutionProvider
             if (name.Contains("Virtual", StringComparison.OrdinalIgnoreCase)) continue;
             if (name.Contains("Remote", StringComparison.OrdinalIgnoreCase)) continue;
             if (name.Contains("Microsoft", StringComparison.OrdinalIgnoreCase)) continue;
+
+            // A card Windows flagged as broken or disabled must never be picked:
+            // DirectML device 0 could resolve to it and every inference fails.
+            var status = adapter["Status"] as string ?? string.Empty;
+            uint code = 0;
+            try { code = Convert.ToUInt32(adapter["ConfigManagerErrorCode"]); } catch { /* unknown, treat as usable */ }
+            if (code != 0 || (!status.Equals("OK", StringComparison.OrdinalIgnoreCase) && status.Length > 0))
+            {
+                AppLog.Warn("onnx", $"Skipping unusable GPU '{name}' (status '{status}', code {code}).");
+                continue;
+            }
+
+            string? hit = blocked.Find(b => b.Length > 0 && name.Contains(b, StringComparison.OrdinalIgnoreCase));
+            if (hit is not null)
+            {
+                AppLog.Warn("onnx", $"Skipping blocked GPU '{name}' (matched '{hit}').");
+                continue;
+            }
+
             names.Add(name);
         }
         return names;

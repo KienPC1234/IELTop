@@ -128,6 +128,23 @@ public sealed class SelfTestRunner
         results.Add(RunBridge("bridge.lessons", "study.chat.snapshot", new { sessionId = 0, unit = "", query = "" }));
         results.Add(RunBridge("bridge.practice", "study.practice.snapshot", new { sessionId = 0, setId = 0, scope = "All", query = "" }));
         results.Add(RunBridge("bridge.vocab", "study.vocab.snapshot", new { query = "arctic", unit = "" }));
+        results.Add(RunBridge("bridge.tutor.curriculum", "study.tutor.curriculum", new { }));
+        results.Add(RunBridge("bridge.tutor.checkAnswer", "study.tutor.checkAnswer", new { questionJson = "{\"kind\":\"single\",\"correctKey\":\"A\"}", userAnswer = "A" }));
+        results.Add(RunBridge("bridge.speaking.suggestTopic", "study.speaking.suggestTopic", new { part = "Part2" }));
+        results.Add(Run("speaking tutor", () =>
+        {
+            int cues = SpeakingBank.Part1.Sum(t => t.Questions.Count)
+                + SpeakingBank.Part2.Count
+                + SpeakingBank.Part3.Sum(s => s.Questions.Count)
+                + SpeakingBank.ReadAloud.Count;
+            if (cues == 0) throw new InvalidOperationException("the speaking cue bank is empty.");
+            var args = JsonDocument.Parse(JsonSerializer.Serialize(
+                new { sessionId = 0, part = "Part1", query = "" })).RootElement.Clone();
+            var response = _router.HandleDirectAsync("selftest", "study.speaking.snapshot", args, CancellationToken.None)
+                .GetAwaiter().GetResult();
+            if (response.Error is not null) throw new InvalidOperationException(response.Error);
+            return $"{cues} cue(s), snapshot ok";
+        }));
         results.Add(RunBridge("bridge.diagnostics", "diagnostics.snapshot", new { tailLines = 5 }));
 
         results.Add(Run("log tail via bridge", () =>

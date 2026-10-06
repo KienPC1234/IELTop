@@ -1,441 +1,423 @@
 {
   "unit": "Midterm Review",
-  "title": "Midterm Review",
+  "title": "Midterm Review (Units 1-5)",
+  "slug": "midterm-review",
+  "category": "Review",
+  "topics": [
+    "General"
+  ],
+  "skills": [
+    "Lesson"
+  ],
   "source": "IELTop lesson content. Used and redistributed with the owner's permission. Original teaching material from the IELTop course.",
   "files": [
-    "T1 Multiple Charts.docx",
-    "Unit 9.pptx"
+    "Midterm Review/T1 Multiple Charts.docx"
   ],
   "audio": [],
   "sections": [
     {
       "id": "t1-multiple-charts",
       "skill": "Lesson",
+      "topic": "General",
       "title": "T1 Multiple Charts",
       "isAnswerKey": false,
+      "keySectionId": "",
+      "targetSectionId": "",
       "blocks": [
         {
           "type": "text",
           "text": "WRITING HANDOUT \nTASK 1 – MULTIPLE CHARTS\nQuestion 1: The chart below shows the results of a survey about people's coffee and tea buying and drinking habits in five Australian cities.\nSummarise the information by selecting and reporting the main features, and make comparisons where relevant.\nQuestion 2: The tables below show sales of Fairtrade*-labelled coffee and bananas in five countries in Europe in 1999 and 2004.\n*Fairtrade: a category of products for which farmers from developing countries have been paid an officially agreed fair price.\nQuestion 3: The graphs below show how much water was used globally from 1900 to 2000 as well as in Brazil and Congo in 2000. Summarize the graphs by selecting and reporting the main features and make comparison where relevant\nQuestion 4: The chart below shows what Anthropology graduates from one university did after finishing their undergraduate degree courses. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.\nQuestion 5: The chart shows export values of one country by category for 2015-2016. The table shows percentage changes between these years. Summarise the main features and make comparisons.\nQuestion 6: The two bar charts below show the proportion of 14- to 16-year-old students studying a foreign language in an English speaking country, and the top three foreign languages. Summarise the information by selecting and reporting the main features, and make comparisons where relevant.\nQuestion 6: The charts below give information on the location and types of dance classes young people in a town in Australia are currently attending. Summarize the information by selecting and reporting the main features, and make comparisons where relevant."
         }
+      ],
+      "embedding": [
+        0.01587,
+        -0.04382,
+        -0.00984,
+        -0.01467,
+        0.03581,
+        0.00402,
+        -0.01513,
+        0.03431,
+        0.03099,
+        -0.00989,
+        0.0141,
+        -0.04221,
+        0.03458,
+        -0.0153,
+        0.01337,
+        0.00444,
+        -0.00754,
+        -0.079,
+        -0.03889,
+        -0.02475,
+        0.03473,
+        -0.00752,
+        -0.03668,
+        -0.03874,
+        0.08953,
+        -0.02169,
+        0.01121,
+        -0.04495,
+        -0.03824,
+        -0.2094,
+        0.02602,
+        0.00418,
+        0.00687,
+        -0.00361,
+        -0.04537,
+        0.01258,
+        0.0177,
+        0.02312,
+        0.00397,
+        -0.00948,
+        0.04469,
+        0.01198,
+        -0.00862,
+        -0.03792,
+        -0.04353,
+        -0.02999,
+        -0.0662,
+        0.01859,
+        0.02399,
+        0.03855,
+        -0.03587,
+        -0.06078,
+        -0.01327,
+        0.03049,
+        0.01566,
+        0.01434,
+        0.03626,
+        -0.02108,
+        -0.0135,
+        0.03031,
+        0.06583,
+        -0.0306,
+        -0.22247,
+        0.07463,
+        0.01311,
+        0.04279,
+        -0.03247,
+        0.07747,
+        -0.04735,
+        0.07658,
+        -0.039,
+        -0.03803,
+        0.01672,
+        0.01849,
+        -0.00255,
+        -0.02224,
+        -0.04753,
+        -0.01236,
+        -0.00386,
+        -0.04361,
+        -0.05804,
+        0.03879,
+        0.03721,
+        -0.01262,
+        -0.01978,
+        0.00234,
+        0.02739,
+        -0.00206,
+        0.02223,
+        -0.02495,
+        0.03042,
+        0.01879,
+        0.01697,
+        -0.00561,
+        -0.04606,
+        -0.05074,
+        0.0302,
+        -0.01117,
+        0.01781,
+        0.34676,
+        -0.03747,
+        -0.01901,
+        0.04395,
+        0.01009,
+        0.01354,
+        -0.02674,
+        0.04248,
+        -0.06088,
+        0.0013,
+        0.06647,
+        0.02387,
+        -0.0346,
+        -0.00412,
+        -0.05393,
+        0.01107,
+        -0.02815,
+        0.02899,
+        0.0276,
+        0.04119,
+        0.01806,
+        0.00402,
+        0.00462,
+        0.05398,
+        -0.06062,
+        0.01372,
+        0.00623,
+        0.04408,
+        0.0385,
+        0.02029,
+        -0.00727,
+        0.0429,
+        -0.03118,
+        -0.04198,
+        0.01397,
+        0.00527,
+        -0.02137,
+        0.03663,
+        0.00027,
+        0.04345,
+        0.06457,
+        -0.00249,
+        -0.00032,
+        0.01211,
+        -0.06504,
+        -0.03642,
+        0.13335,
+        0.02473,
+        0.00515,
+        0.03518,
+        0.00291,
+        0.00121,
+        0.05317,
+        0.02207,
+        -0.0409,
+        0.01329,
+        0.08053,
+        0.06715,
+        0.02873,
+        0.00764,
+        -0.0255,
+        0.00187,
+        -0.05567,
+        -0.03476,
+        0.07121,
+        0.07373,
+        -0.1362,
+        -0.01749,
+        0.02818,
+        -0.01211,
+        -0.06662,
+        0.03652,
+        0.0148,
+        -0.0203,
+        -0.01423,
+        0.06668,
+        -0.00949,
+        0.006,
+        0.00298,
+        0.0336,
+        0.0043,
+        0.01648,
+        0.00713,
+        -0.00706,
+        -0.01443,
+        -0.03737,
+        0.0148,
+        -0.01929,
+        -0.01012,
+        -0.01688,
+        0.04082,
+        0.01531,
+        -0.03042,
+        -0.04645,
+        0.042,
+        -0.00333,
+        -0.00123,
+        0.00153,
+        -0.03826,
+        -0.00388,
+        -0.00718,
+        0.02107,
+        -0.02466,
+        0.00199,
+        -0.01307,
+        0.01967,
+        0.03658,
+        0.07969,
+        0.01186,
+        0.06831,
+        -0.02016,
+        0.00761,
+        0.06741,
+        -0.07063,
+        -0.01775,
+        -0.03494,
+        -0.03771,
+        0.05662,
+        0.05243,
+        0.00915,
+        0.022,
+        0.0116,
+        -0.08121,
+        -0.02762,
+        -0.34908,
+        -0.04213,
+        0.05306,
+        0.05259,
+        0.03581,
+        -0.01194,
+        -0.0229,
+        -0.02833,
+        -0.01234,
+        0.0998,
+        0.07979,
+        0.01463,
+        -0.00043,
+        0.00217,
+        -0.02841,
+        -0.04208,
+        -0.0479,
+        0.0341,
+        0.00873,
+        -0.02024,
+        -0.00081,
+        0.00716,
+        0.01332,
+        -0.04058,
+        0.02398,
+        0.01091,
+        0.17517,
+        -0.04395,
+        -0.05467,
+        -0.03587,
+        0.0009,
+        0.03044,
+        -0.00538,
+        -0.03871,
+        0.02586,
+        -0.01731,
+        -0.05483,
+        -0.04034,
+        -0.01652,
+        -0.02736,
+        0.00916,
+        0.01506,
+        -0.01872,
+        -0.0277,
+        -0.07384,
+        -0.00746,
+        -0.00735,
+        -0.05383,
+        -0.01167,
+        0.04184,
+        -0.01895,
+        0.01245,
+        -0.03284,
+        0.01186,
+        -0.0331,
+        -0.02121,
+        -0.08985,
+        -0.00097,
+        -0.0424,
+        -0.03181,
+        0.03068,
+        -0.01892,
+        0.08216,
+        -0.01667,
+        0.0081,
+        0.03265,
+        -0.0229,
+        -0.02794,
+        0.01713,
+        0.03866,
+        -0.00143,
+        0.06462,
+        -0.01672,
+        -0.03007,
+        0.03247,
+        0.06452,
+        -0.03147,
+        0.00562,
+        0.02475,
+        0.05024,
+        0.06857,
+        -0.02028,
+        -0.0146,
+        0.02263,
+        0.01212,
+        0.05304,
+        0.06973,
+        -0.06641,
+        0.02228,
+        0.02528,
+        0.03365,
+        -0.02083,
+        0.0041,
+        0.0083,
+        -0.0001,
+        0.03394,
+        -0.26966,
+        -0.00258,
+        -0.01579,
+        0.0197,
+        0.03107,
+        -0.00404,
+        0.00637,
+        0.0032,
+        -0.00346,
+        -0.00161,
+        0.00168,
+        0.05509,
+        0.04532,
+        -0.03571,
+        -0.03036,
+        -0.01589,
+        0.10486,
+        -0.00526,
+        -0.01019,
+        -0.01214,
+        0.05651,
+        -0.00976,
+        0.154,
+        0.0741,
+        -0.01991,
+        0.02248,
+        -0.02186,
+        -0.05972,
+        0.04616,
+        0.04126,
+        0.0464,
+        -0.00389,
+        0.08737,
+        0.03595,
+        0.02379,
+        0.00932,
+        -0.00922,
+        -0.02923,
+        -0.00334,
+        0.00984,
+        -0.02178,
+        -0.03284,
+        -0.10818,
+        -0.0711,
+        0.07021,
+        -0.00219,
+        0.00426,
+        -0.13167,
+        -0.00989,
+        -0.01874,
+        -0.03257,
+        -0.05867,
+        -0.06573,
+        -0.00309,
+        0.02258,
+        0.04363,
+        0.01775,
+        -0.02267,
+        -0.00821,
+        -0.05525,
+        -0.00078,
+        0.00139,
+        0.01609,
+        0.01392,
+        0.00763
       ]
     }
   ],
   "vocabulary": [],
-  "slides": [
-    {
-      "file": "Unit 9.pptx",
-      "slides": [
-        {
-          "index": 1,
-          "text": "Unit 9: Revision\nInstructor: Hoang Tien Hao"
-        },
-        {
-          "index": 2,
-          "text": "SHOW\nshows (information about)\nillustrates (data about)\ndemonstrates (information about)\nhighlights (data about)\nGive (information about)\nProvide (data about)\nPresent\nPARAPHRASE THE QUESTION + CHART /GRAPH\nGraph Type + Verb + What + Where + When\nIntroduction"
-        },
-        {
-          "index": 3,
-          "text": "The pictures below show the process of making clothes from recycled plastic bottles. Summarize the information by selecting and reporting the main features and make comparisons where relevant."
-        },
-        {
-          "index": 4,
-          "text": "Overview: Introductory phrase"
-        },
-        {
-          "index": 6,
-          "text": "Sentence Combining Techniques"
-        },
-        {
-          "index": 7,
-          "text": "Task 1: Process\nOverall Structure of a Task 1 Answer\nUnderstanding the OPAL process\nUsing grammar to combine ideas"
-        },
-        {
-          "index": 8,
-          "text": "Structure of a Response"
-        },
-        {
-          "index": 9,
-          "text": "There + be + … steps/stages/phases (involved) in the process of ….., beginning/starting with……., ending/finishing with\nWhat stands out from the diagram is that there are twelve steps involved in the process of recycling plastic bottles, beginning with bottles being transported and finishing with end products being made.Be involved in STH: bị liên quan tới gì đó\nThe process + be + composed of/comprised of… steps/stages/phases….., beginning/starting with……., ending/finishing with\nAs can be seen in the picture, the process of recycling plastic bottles is composed of twelve steps, beginning with bottles being collected and finishing with clothes being made.\nOverview"
-        },
-        {
-          "index": 10,
-          "text": "The pictures below show the process of making clothes from recycled plastic bottles. Summarize the information by selecting and reporting the main features and make comparisons where relevant\nSample Outline"
-        },
-        {
-          "index": 11,
-          "text": "Step 2: Grammatical Transformations"
-        },
-        {
-          "index": 12,
-          "text": "Step 1: Outlining with Simple Sentences\nPlastic bottles are collected from the garbage bins\nPlastic bottles are transported by trucks to factories\n3)   The factory receives the bottles    The bottles are received at the factory\n4 + 5) Plastic bottles are sorted on several conveyor belts and are cut into pieces.\nStep 2: Combining using GR structures Having been collected, plastic bottles are transported by trucks to factories where they are received, sorted and subsequently cut into pieces.\nStep 3: Adding Details with Adj, Adv, Prep phrases Having been initially collected from the garbage bins by workers, plastic bottles are transported by a fleet of green trucks to industrial recycling factories where they are received, sorted on several conveyor belts and subsequently cut into pieces by a large cutting machine.\nClause-based Transformation: Relative Clauses"
-        },
-        {
-          "index": 13,
-          "text": "Step 1: Outlining with Simple Sentences\n10) In the next stage, the plastic strains are dyed with different colors and rolled into spools.  The next stage in which the plastic strains are dyed with different colors and rolled into spools = NOUN PHRASE with a RC\n11) The colored yarns are weaved into recycled cloth.\n The weaving of the colored yarns into recycled cloth = NOUN PHRASE (using gerund)\nStep 2: Combining using GR structuresSimple sentence with complicated NOUN PHRASES:\nThe next stage in which the plastic strains are dyed with different colors and rolled into spools (10) precedes/ is followed by/ is succeeded by/ happens (occurs/takes place) before + (11) the weaving of the colored yarns into recycled cloth.= STEP A PRECEDES STEP B\nNoun-based Transformation:"
-        },
-        {
-          "index": 14,
-          "text": "Time Marker\npresentation title"
-        },
-        {
-          "index": 15,
-          "text": "Task 1: Maps\nCharacteristics of Information on Maps\nVocabulary for Task 1 Maps\nUsing OPAL Procedure + Grammar in T1 Maps"
-        },
-        {
-          "index": 16,
-          "text": "Structure 1: geographical division"
-        },
-        {
-          "index": 17,
-          "text": "Maps\nStep 2: Planning Sentences"
-        },
-        {
-          "index": 18,
-          "text": "Maps"
-        },
-        {
-          "index": 19,
-          "text": "Step 2: Grammatical Transformations"
-        },
-        {
-          "index": 20,
-          "text": "Step 2 + 3: Clause-based Transformation"
-        },
-        {
-          "index": 21,
-          "text": "Step 2 + 3: Noun-based Transformation"
-        },
-        {
-          "index": 22,
-          "text": "Step 4: Linking Sentences with Cohesive Devices:\nAddition (used for general purpose): in addition, additionally, furthermore, moreover, besides, …\nHighlighting: Noticeably, Noteworthily, It is also worth noting that …\nSimilarity: Similarly, Likewise, …\nContrast: In contrast, In comparison, However, On the other hand, …\nIntroducing & Transitioning: a) Specifically, To begin with, Firstly, …b) To continue, Concerning/Regarding + N- Phrase, …In terms of + N-Phrase"
-        },
-        {
-          "index": 23,
-          "text": "Task 1 – Dynamic Chart"
-        },
-        {
-          "index": 24,
-          "text": "Line chart\nBar chart\nDynamic chart types\nPie chart"
-        },
-        {
-          "index": 25,
-          "text": "Structure of a Response"
-        },
-        {
-          "index": 26,
-          "text": "What stands out from the chart is that S+V+O\nIt is clear (conspicuous/ evident) from the graph that\nThe most striking feature from the graph is that\nAs can be seen,…\nIt can be clearly seen that…\nIt is noticeable that..\nIn general,\n------------------------------------------------\nAnother interesting point is that ….\nAs/while + data of the category 1 + experience(d)/ witness(ed) … + a/an + ADJ + N (downward trend), data of the category 2 + V (upward trend ) + ADV + at the same time\nEx. While Margarine and Butter experienced a downward trend (saw an upward trajectory), Low fat and reduced spreads generally increased (decreased) at the same time.\nOverview - Sample"
-        },
-        {
-          "index": 27,
-          "text": "Body Paragraph Structure:"
-        },
-        {
-          "index": 28,
-          "text": "Step 1: 3 Key Notices when Outlining:"
-        },
-        {
-          "index": 29,
-          "text": "Example"
-        },
-        {
-          "index": 30,
-          "text": "Step 2: Plan Sentence Structure\nVocabulary + Sentence Structure"
-        },
-        {
-          "index": 32,
-          "text": "Structure to describe trend: 1/ Using Verb Phrase:\nEx. The number of visitors in Vietnam decreased significantly"
-        },
-        {
-          "index": 33,
-          "text": "Structure to describe trend: 2-3-4/ Using Noun Phrase:"
-        },
-        {
-          "index": 34,
-          "text": "3) Verb – Noun for Future Prediction\nVerb + Adv/ Verb + Noun-Phrase = be + predicted/expected/forecasted/projected + TO V-inf + ….\nEx: The data of country A will increase significantly  The data of country A is expected TO increase significantly …Ex: The data of country A will witness a significant increase  The data of country A is forecasted TO witness a significant increase …"
-        },
-        {
-          "index": 35,
-          "text": "3) Verb – Noun for Future Prediction\n1) Future forecast/projection/… suggest/shows/indicates/… a significant increase in the data of country.2) Future forecast/projection/… suggest/shows/indicates/… THAT country A will see significant growth in its data.\n3) According to the projection, a significant rise is expected in country A’s figures.\n4) There is a forecast for a notable upward trend in country A’s data.5) The prediction/forecast/… highlights a sharp increase in country A’s statistics."
-        },
-        {
-          "index": 36,
-          "text": "Structure to describe multiple trends: 5-6/ Using Noun Phrase with Post-sentence Expansion:\n(2) (3) There + be + a/an + ADJ + N (downward trend) + in + data of the category+ (5) followed by (preceding) + a/an + ADJ + N (upward trend)\nEx. There was a significant decrease in the number of visitors in Vietnam in 2020, followed by a dramatic growth in 2021 (2 + 5)Ex: The number of visitors in Vietnam saw a significant decrease in 2020, followed by a dramatic growth in 2021 (3 + 5)\n(1) (3) Data of the category + experience(d)/ witness(ed)… + a/an + ADJ + N,\n+ (6) before/after + V-ing (V-phrase)\nEx. The number of visitors in Vietnam experienced a significant growth from 2020 to 2021, before hitting a free fall from 2021 to 2022 || falling freely from 2021 to 2022."
-        },
-        {
-          "index": 37,
-          "text": "Structure to describe multiple trends:7- 8/ Using Clause with Post-sentence Expansion:\nPrimary Clause (could be in any form)+ (7) after which + clause\nEx. The number of visitors in Vietnam decreased significantly in 2020 (1), after which a dramatic growth could be seen by this number in 2021 (1 + 7.4)\nPrimary Clause (could be in any form),\n+ (8) with a subsequent/ further + Noun-phrase describing trends\nEx. The number of visitors in Vietnam experienced a significant growth from 2020 to 2021 (3), with a subsequent dramatic drop in 2022 (8)."
-        },
-        {
-          "index": 38,
-          "text": "Structure to describe multiple trends:9/ Using Verb Phrase with Pre-sentence Expansion:\n(9) Participle Phrase (V-ing/V-ed), (1) (3) Data of the category + Verb-Phrase 1 + (data phrase), then Verb-Phrase 2\nEx: (9) Having increased significantly, (3) the proportion of travelers to Castle witnessed a moderate decrease, (5) followed by a gradual decline.\n(10) For/… figure/data A, Noun-phrase describing Trend 1 + (10) precede/ be followed by + Noun-phrase describing Trend 2\nEx: Regarding the number of visitors to Vietnam, a considerable growth during the first 5 years (of the surveyed period) preceded a subsequent, slight drop in the next decade.\n10/ Using Noun phrases in a simple sentence:"
-        },
-        {
-          "index": 39,
-          "text": "Step 2: Structure Overview"
-        },
-        {
-          "index": 40,
-          "text": "5 Key Strategies when Writing Sentences in Step 2:"
-        },
-        {
-          "index": 41,
-          "text": "Step 1:\nCastle:\n80-95: increase\n95-00: decrease\n00-10: slightly decrease\nStep 2:\nHaving increased at first, the number of visitors to Castle experienced a significant decline, followed by a slight decrease."
-        },
-        {
-          "index": 42,
-          "text": "Prepositional Phrase for DATA INSERTION"
-        },
-        {
-          "index": 43,
-          "text": "Prepositional Phrase for DATA INSERTION"
-        },
-        {
-          "index": 44,
-          "text": "Task 1 – Static Type"
-        },
-        {
-          "index": 45,
-          "text": "Bar chart\nStatic charts: No time period\nPie chart"
-        },
-        {
-          "index": 47,
-          "text": "Dynamic: with time period\nStatic: No time period\nTables: Dynamic and Static\nStatic: only time point"
-        },
-        {
-          "index": 48,
-          "text": "Structure of a Response"
-        },
-        {
-          "index": 49,
-          "text": "Overview"
-        },
-        {
-          "index": 50,
-          "text": "Step 1: Outlining\nGrouping and Arranging Ideas"
-        },
-        {
-          "index": 51,
-          "text": "1) Outline: Comparing the 2 approaches\nParagraphing choice should depend on:\nThe ease of paraphrasing categories/ subject’s names\nNumber of categories in a graph\n But both need cross-linking comparison"
-        },
-        {
-          "index": 52,
-          "text": "1) Outline: Key takeaways"
-        },
-        {
-          "index": 53,
-          "text": "Body Paragraph Structure:"
-        },
-        {
-          "index": 54,
-          "text": "Step 2: Planning Sentence Structure\nComparative Structures: - with figures- with subjects of data\nSuperlative Structures:"
-        },
-        {
-          "index": 55,
-          "text": "2A) Planning Sentence Structure: Comparative Structurewith A, B = figures"
-        },
-        {
-          "index": 56,
-          "text": "2A) Planning Sentence Structure: Comparative Structurewith A, B = figures"
-        },
-        {
-          "index": 57,
-          "text": "2B) Planning Sentence Structure: Comparative Structurewith A, B = subjects of data"
-        },
-        {
-          "index": 58,
-          "text": "2C) Planning Sentence Structure: Superlative Structure"
-        },
-        {
-          "index": 59,
-          "text": "2C) Planning Sentence Structure: Superlative Structure"
-        },
-        {
-          "index": 60,
-          "text": "Step 3: Adding Details\nAdding numbers to static data points- with prepositional phrases- with relative clauses and their derivatives\nAdding adverbs, adjective, …"
-        },
-        {
-          "index": 61,
-          "text": "3) Adding Details: with prepositional phrase"
-        },
-        {
-          "index": 62,
-          "text": "3) Adding Details: with prepositional phrase"
-        },
-        {
-          "index": 63,
-          "text": "Step 4: Linking Sentences with Cohesive Devices:\nAddition (used for general purpose): in addition, additionally, furthermore, moreover, besides, …\nHighlighting: Noticeably, Noteworthily, It is also worth noting that …\nSimilarity: Similarly, Likewise, …\nContrast: In contrast, In comparison, However, On the other hand, Conversely, …\nIntroducing & Transitioning: a) Specifically, To begin with, Firstly, …b) To continuec) Concerning/Regarding + N- Phrase, …In terms of + N-Phrase"
-        },
-        {
-          "index": 64,
-          "text": "Body Sample:\nRegarding global spending, expenditure is distributed fairly evenly among different categories. (Topic Sentence introducing main characteristics of the first graph)\nRanking second, the proportion of Food, at 24%, is higher than transport’s figure by a margin of 6%.\nNoticeably, the percentage of expenditure for Housing, which accounts for 12%, is twice THAT OF clothing.\nFinally, the highest amount of money is spent on other categories, with a whopping 40%."
-        },
-        {
-          "index": 65,
-          "text": "Describing Static Data\nOther creative choices"
-        },
-        {
-          "index": 66,
-          "text": "Useful Vocabulary for Paraphrasing\n[table] Word/Phrase | Meaning | Example / accounted for | formed a part of something. | Transport accounted for 15% of total expenditure. / comprised | consisted of | The group comprised five categories. / constituted | formed or made up. | Women constituted 60% of the workforce. / represented | showed or depicted. | Leisure represented a small proportion (10%) of spending. / was responsible for | caused or contributed to. | Food was responsible for 40% of total household spending / made up | formed part of a whole. | Rent made up over half of their expenses. / stood at | was at a particular level | Unemployment stood at 4% in 2020. / was recorded at | was noted at a level. | Sales were recorded at $2 million. / was negligible | too small to be significant. | Expenditure on books was negligible. / dominated | was the largest or most important. | Housing dominated total spending. / prevailed | was most common. | Online shopping prevailed in urban areas. / be evenly distributed among | spread equally. | Income was evenly distributed among sectors. / dwarf | to make something seem small by comparison. | The new skyscraper will dwarf all those near it."
-        },
-        {
-          "index": 67,
-          "text": "Subject Choice when Writing Sentences\nData category (people/country/nation/products) Ex 1 : The figure of highschool graduates who were unemployed was at 40% in 1980. Highschool graduates were unemployed at 40% of the total surveyed number in 1980. Ex 2: The consumption of the US was at 35 quadrillions in 1980 The US consumed 35 quadrillion units of petrol and oil in 1980.\nNumbers, figures (data) Ex: 40% of the surveyed people were employed in 1980, … … compared to 30% of the unemployed … and were more than that of the unemployed\nTrend/Difference (upward/downward trend/an increase/growth,...)Ex: Subsequently, a sharp decline to 38% in 1990 and to 37% in 2000 was seen/experienced in the further education ratio. Ex 2: A disparity/margin/ gap of 10% is present/witnessed/observed between the higher figure of A, at 20%, and of B\nDummy Subjects Ex: There is a wide margin/difference/disparity of 40% between A and B in 2000"
-        },
-        {
-          "index": 68,
-          "text": "Adding Comparative Elements\nInto Dynamic Charts"
-        },
-        {
-          "index": 69,
-          "text": "Mixed Information in Charts:\nBAR CHART: Trend + Comparison\nThe chart below shows the percentage of people accessing news via different media in one country in 2013, 2015 and 2017."
-        },
-        {
-          "index": 70,
-          "text": "COMPARISON: Sentences’ Order in a Paragraph\nTREND: Main Sentence Structure\nBeing the second most accessed media in 2013, Newspapers then witnessed a gradual decline in readership from 40% to 30% in 2015 and more than 20% in 2017"
-        },
-        {
-          "index": 71,
-          "text": "Adding Comparative Information"
-        },
-        {
-          "index": 72,
-          "text": "Specifically, while both attendance to Castle and Zoo increased throughout the period, they exhibited radically different phases during this time span. Having surged dramatically from 23% in 1980 to its peak of 45% in 1995, the figure for Castle witnessed a moderate drop of about 36 percentage points by 2000, followed by a slight decline to under 32% in 2010. In contrast, visitors’ percentage of Zoo began at a modest 10% in the first year before oscillating in the range of approximately 15% and nearly 7% for the next 2 decades, with a subsequent, moderate rise to over 20% in 2010.\nRegarding (tourist attractions with a decreasing number of visitors) the remaining destinations, the proportion of tourists to Festival gradually decreased from almost 30% in 1980 to about 17% in 2010. Conversely, there was an initial, significant increase in the percentage of travelers to Aquarium from 20% in 1980 to 35% in 1985, preceding a substantial decrease back to 20% in the next 5 years.By 1995, this number climbed moderately by 5 percentage points again, after which it slowly fell back to its bottom at 10%. (Band 8)\nApplication: Adding Comparative Information into this Body Section"
-        },
-        {
-          "index": 73,
-          "text": "Lesson’s Objectives: Reading"
-        },
-        {
-          "index": 74,
-          "text": "Skimming & Scanning & Detailed Reading:"
-        },
-        {
-          "index": 75,
-          "text": "Order of importance of words in SCANNING:"
-        },
-        {
-          "index": 76,
-          "text": "Identifying Core Sentence Structure (CSS):Practice 1 Keys\nIt took humans 10,000 years to learn how to grow most of the crops we now take for granted. Along the way, we despoiled most of the land we worked, often turning verdant, natural ecozones into semi-arid deserts. Within that same time frame, we evolved into an urban species, in which 60% of the human population now lives vertically in cities. This means that, for the majority, we humans have shelter from the elements, yet we subject our food-bearing plants to the rigours of the great outdoors and can do no more than hope for a good weather year. However, more often than not now, due to a rapidly changing climate, that is not what happens. Massive floods, long droughts, hurricanes and severe monsoons take their toll each year, destroying millions of tons of valuable crops."
-        },
-        {
-          "index": 77,
-          "text": "Identifying CSS:Things to omit"
-        },
-        {
-          "index": 78,
-          "text": "Reduced Form of Relative Clauses:"
-        },
-        {
-          "index": 79,
-          "text": "20XX\npresentation title\nIn a standard Passage 1 with only Gap-Filling and T/F/NG Questions, you should always SCAN and READ INDIVIDUAL PARTS of the TEXT. OMIT all the REDUNDANT INFORMATION that is not related to a given Question.\nTest Strategy: Scanning Types"
-        },
-        {
-          "index": 80,
-          "text": "Note Completion: Strategy"
-        },
-        {
-          "index": 81,
-          "text": "T/F/NG Strategy:"
-        },
-        {
-          "index": 82,
-          "text": "presentation title\nWhen there is a matching paragraph task in your Reading Passage, always remember to:\nExamine all the question types, identify which strategy is needed for each\nHighlight scanning keywords at the beginning section of each type\nRead each paragraph and do all questions related to that paragraph\nMove on to the next paragraph\nTest Strategy 2: Parallel Reading"
-        },
-        {
-          "index": 83,
-          "text": "Matching Features: with specific nouns"
-        },
-        {
-          "index": 84,
-          "text": "Matching Information: by Paragraphs"
-        },
-        {
-          "index": 85,
-          "text": "Matching Paragraphs: Quick Tips"
-        },
-        {
-          "index": 86,
-          "text": "Matching Headings: Strategy"
-        },
-        {
-          "index": 87,
-          "text": "MIDTERM TEST: Passage 1 + Passage 2\nCam 18 Test 2: Passage 1 + 3\nCam 18 Test 3: Passage 1 + 2"
-        },
-        {
-          "index": 88,
-          "text": "Lesson’s Objectives: Listening"
-        },
-        {
-          "index": 89,
-          "text": "Note Completion: Strategy"
-        },
-        {
-          "index": 90,
-          "text": "Review: Grammatical Rules for Articles:"
-        },
-        {
-          "index": 91,
-          "text": "Map Labelling: Strategy"
-        },
-        {
-          "index": 92,
-          "text": "2 Types of Maps:"
-        },
-        {
-          "index": 93,
-          "text": "Multiple Choice Question: Strategy"
-        },
-        {
-          "index": 94,
-          "text": "MIDTERM TEST:Full Test\nCam 18 Test 2\nPresentation title"
-        },
-        {
-          "index": 95,
-          "text": "Lesson’s Objectives: Speaking"
-        },
-        {
-          "index": 96,
-          "text": "The IELTS Speaking Test Format"
-        },
-        {
-          "index": 97,
-          "text": "Part 1 Development: I – E Structure"
-        },
-        {
-          "index": 98,
-          "text": "Preparation Tips:"
-        },
-        {
-          "index": 99,
-          "text": "Structure of a Part 2 Response:"
-        },
-        {
-          "index": 100,
-          "text": "5W 1H Technique for Part 2"
-        },
-        {
-          "index": 101,
-          "text": "Storytelling Technique: The S.E.E.D Framework"
-        },
-        {
-          "index": 102,
-          "text": "Part 2 Test: Travel\n20XX\npresentation title\nDescribe a place you would like to visit for a short time\nYou should say:\nWhere is that place\nWhom you will go there with\nWhat you will do there\nAnd explain why you would like to visit for a short time"
-        },
-        {
-          "index": 103,
-          "text": "Part 2 Test: Food\n20XX\npresentation title\nDescribe an unusual meal you had\nYou should say:\nWhen you had it\nWhere you had it\nWhom you had it with\nAnd explain why it was unusual"
-        },
-        {
-          "index": 104,
-          "text": "Part 2 Test: Sport\n20XX\npresentation title\nDescribe a sport you enjoyed when you were young\nYou should say:\nWhat it was\nWhere you did it\nWho you did it with\nAnd explain how you felt about it"
-        },
-        {
-          "index": 105,
-          "text": "Part 2 Test: Experience\n20XX\npresentation title\nDescribe an outdoor activity you did in a new place recently\nYou should say:\nWhat the activity is\nWho invited you to participate in it\nWhether you asked for help in the activity\nAnd explain what change you had in the activity"
-        }
-      ]
-    }
-  ],
-  "picturesSkipped": 39
+  "slides": [],
+  "picturesSkipped": 7
 }

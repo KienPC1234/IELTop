@@ -1,132 +1,246 @@
+using System;
+using System.Globalization;
 using System.Text;
+using IELTop.Models;
 
 namespace IELTop.Services.Ai;
 
 /// <summary>
-/// Prompts for the Study screen: the tutor chat and the practice builder.
-/// Kept beside the other prompts so wording is reviewed in one place. Every
-/// prompt that asks for data ends with an exact JSON shape, like the rest of
-/// the app, and the model is told to stay on the supplied lesson text.
+/// Prompts for the Study screen: the interactive tutor chat, rich exercise generation,
+/// and official 4-criteria IELTS speaking evaluation.
 /// </summary>
 public static class StudyPrompts
 {
-    /// <summary>How the chat model should behave: a patient tutor, grounded in the lesson.</summary>
+    /// <summary>System prompt for the interactive IELTS tutor.</summary>
     public const string ChatSystem =
-        "You are a patient, precise IELTS tutor for a Vietnamese learner. " +
-        "Answer in clear, simple English. Explain the grammar, vocabulary, or strategy the student asks about. " +
-        "Use the lesson sources when they are given and say which unit or section a fact comes from. " +
-        "If the sources do not cover the question, say so and answer from general IELTS knowledge. " +
-        "Keep replies short and practical, with a short example. Never invent official IELTS scores.";
+        "You are an interactive, encouraging, and highly competent personal IELTS tutor. " +
+        "You actively teach the student using authentic IELTS lesson materials provided in the context. " +
+        "Keep explanations concise, well-structured, and practical (maximum 3 to 5 clear points with real examples). " +
+        "Whenever appropriate, conclude with a quick interactive check question or invite the student to practice. " +
+        "Bands mentioned are practice estimates, never official IELTS scores.";
+
+    /// <summary>System prompt for official 4-criteria speaking evaluation.</summary>
+    public const string SpeakingFeedbackSystem =
+        "You are an expert IELTS Speaking examiner assessing candidate responses strictly according to the " +
+        "Official IELTS Speaking Band Descriptors (British Council / IDP / Cambridge). " +
+        "Evaluate the candidate across all 4 criteria: Fluency and Coherence (FC), Lexical Resource (LR), " +
+        "Grammatical Range and Accuracy (GRA), and Pronunciation (PR). " +
+        "Always return ONLY a valid JSON object matching the requested schema with zero markdown conversational filler.";
+
+    public static string BuildSpeakingFeedback(
+        string mode, string part, string cue, string transcript,
+        double wpm, double speechSeconds, int pauses, double meanPause,
+        double clarity, double accuracy, double meanGop)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine(IeltsBandDescriptors.BuildOfficialSpeakingRubricPrompt());
+        sb.AppendLine();
+        sb.AppendLine("CANDIDATE ATTEMPT EVIDENCE:");
+        sb.AppendLine($"Task / Part: {part} ({mode})");
+        sb.AppendLine($"Prompt / Topic: {(string.IsNullOrWhiteSpace(cue) ? "Free practice" : cue)}");
+        sb.AppendLine();
+        sb.AppendLine("Transcript (Speech recognition text):");
+        sb.AppendLine(string.IsNullOrWhiteSpace(transcript) ? "(No speech detected)" : transcript);
+        sb.AppendLine();
+        sb.AppendLine("Objective Acoustic Measurements (measured directly from audio):");
+        sb.AppendLine($"- Pace: {wpm.ToString("0", CultureInfo.InvariantCulture)} words per minute over {speechSeconds.ToString("0.#", CultureInfo.InvariantCulture)}s speaking duration.");
+        sb.AppendLine($"- Pauses (silence >= 250ms): {pauses} pause(s), mean pause length {meanPause.ToString("0.0", CultureInfo.InvariantCulture)}s.");
+        if (accuracy > 0)
+            sb.AppendLine($"- Read-aloud phoneme match: {accuracy.ToString("0", CultureInfo.InvariantCulture)}%, mean GOP score: {meanGop.ToString("0.00", CultureInfo.InvariantCulture)}.");
+        else if (clarity > 0)
+            sb.AppendLine($"- Voice clarity score: {clarity.ToString("0.00", CultureInfo.InvariantCulture)} (0.0 to 1.0 scale).");
+        sb.AppendLine();
+        sb.AppendLine("REQUIRED JSON OUTPUT SCHEMA:");
+        sb.AppendLine("""
+        {
+          "overallBand": 6.5,
+          "fcBand": 6.0,
+          "fcFeedback": "Detailed observation on pace, flow, discourse markers and hesitation.",
+          "lrBand": 7.0,
+          "lrFeedback": "Detailed observation on vocabulary range, collocations, idiomatic use.",
+          "graBand": 6.0,
+          "graFeedback": "Detailed observation on sentence structures, clauses, and grammatical accuracy.",
+          "prBand": 6.5,
+          "prFeedback": "Detailed observation on intelligibility, stress, rhythm and sound clarity.",
+          "keyErrors": [
+            {"quote": "exact words spoken", "correction": "corrected sentence", "reason": "why this is incorrect"}
+          ],
+          "upgrades": [
+            {"original": "simple phrase", "upgraded": "academic/native phrase (Band 7+)", "note": "usage note"}
+          ],
+          "drills": [
+            "1 concrete exercise for tomorrow (e.g. shadow specific sentence, practice relative clauses)"
+          ]
+        }
+        """);
+
+        return sb.ToString();
+    }
+
+    /// <summary>System prompt for generating interactive study questions.</summary>
+    public const string InteractiveExerciseSystem =
+        "You are an expert IELTS curriculum designer. Generate authentic, interactive practice exercises strictly " +
+        "based on the provided lesson text or requested IELTS topic. " +
+        "Return ONLY a parseable JSON object matching the specified schema. No markdown fences or intro text.";
+
+    public static string BuildInteractiveExercise(
+        string topic, string skill, string sourceText, string kind = "single", string difficulty = "standard")
+    {
+        var clipped = sourceText.Length > 6000 ? sourceText[..6000] + "..." : sourceText;
+
+        return $$"""
+        Generate 1 high-quality IELTS practice question based on the material below.
+        Target Skill: {{skill}}
+        Topic: {{topic}}
+        Difficulty: {{difficulty}}
+        Question Kind: {{kind}} (Allowed kinds: single, multiple, gap, completion, tfng, match, reorder, error_fix, paraphrase)
+
+        Lesson material:
+        {{clipped}}
+
+        REQUIRED JSON OUTPUT SCHEMA:
+        {
+          "kind": "{{kind}}",
+          "prompt": "Clear instruction or question prompt",
+          "contextText": "Optional excerpt or sentence for the question",
+          "options": [
+            {"key": "A", "text": "Option text"},
+            {"key": "B", "text": "Option text"},
+            {"key": "C", "text": "Option text"},
+            {"key": "D", "text": "Option text"}
+          ],
+          "matchRows": [
+            {"label": "Item 1", "answer": "Match 1"},
+            {"label": "Item 2", "answer": "Match 2"}
+          ],
+          "reorderTokens": ["words", "in", "scrambled", "order"],
+          "correctKey": "A",
+          "gapAnswer": "accepted answer|alternative accepted answer",
+          "explanation": "Detailed explanation citing evidence from the material."
+        }
+        """;
+    }
+
+    /// <summary>Prompts the AI to generate a targeted exercise for an audio segment.</summary>
+    public static string BuildAudioSegmentDrill(string sentence, string reason, string drillType)
+    {
+        return $$"""
+        A candidate said the following sentence during their IELTS speaking practice:
+        Sentence: "{{sentence}}"
+        Identified Issue: {{reason}}
+        Requested Drill: {{drillType}} (shadowing, grammar_correction, vocabulary_upgrade)
+
+        Return ONLY a JSON object:
+        {
+          "drillType": "{{drillType}}",
+          "targetSentence": "{{sentence}}",
+          "explanation": "Brief tip on how to say or formulate this better.",
+          "modelAnswer": "The ideal Band 8.0+ spoken version of this sentence.",
+          "gapExercise": "Optional fill-in-the-blank test sentence with ___."
+        }
+        """;
+    }
 
     public static string BuildChat(string question, string sources)
     {
-        var builder = new StringBuilder();
+        var sb = new StringBuilder();
         if (!string.IsNullOrWhiteSpace(sources))
         {
-            builder.AppendLine("Lesson sources (use these first and name them):");
-            builder.AppendLine(sources);
-            builder.AppendLine();
+            sb.AppendLine("Authentic lesson curriculum context (ground your explanation on this):");
+            sb.AppendLine(sources);
+            sb.AppendLine();
         }
-        builder.AppendLine("Student question:");
-        builder.AppendLine(question);
-        builder.AppendLine();
-        builder.AppendLine("Answer as the tutor. Plain text, no markdown fences.");
-        return builder.ToString();
+        sb.AppendLine("Student query:");
+        sb.AppendLine(question);
+        sb.AppendLine();
+        sb.AppendLine("Answer as the tutor in clear, friendly English. Structure your response with bullet points where helpful.");
+        return sb.ToString();
     }
 
-    /// <summary>
-    /// Asks for a practice set as strict JSON. The shape matches PracticeQuestion
-    /// so the host can store it without guessing.
-    /// </summary>
+    public const string PracticeSystem =
+        "You are an expert IELTS test developer. " +
+        "Your task is to generate authentic IELTS practice questions strictly based on the provided lesson text. " +
+        "You must respond with ONLY a valid, parseable JSON object matching the requested schema. " +
+        "Do not include any conversational greeting, markdown commentary, or text before or after the JSON. " +
+        "Do not include trailing commas in arrays or objects. Ensure all quotes inside text values are properly escaped.";
+
     public static string BuildPractice(string topic, string skill, string sourceText, int count, string difficulty)
     {
-        var clipped = sourceText.Length > 6000 ? sourceText[..6000] + "..." : sourceText;
+        var clipped = sourceText.Length > 8000 ? sourceText[..8000] + "..." : sourceText;
         var depth = difficulty?.Trim().ToLowerInvariant() switch
         {
-            "easy" => "recognition and recall: ask for a fact, a form, or a word that appears in the material.",
-            "hard" => "transformation and analysis: ask the student to reword, correct, or compare two items from the material.",
-            _ => "application: ask the student to use the material in a short sentence or a normal exam task.",
+            "easy" => "recognition and recall: direct facts or clear forms from the text.",
+            "hard" => "inference, analysis, or transformation: paraphrasing, distinguishing subtle details.",
+            _ => "standard exam application: authentic IELTS question style.",
         };
+
         return new StringBuilder()
-            .AppendLine($"Build {count} IELTS practice questions for this student.")
+            .AppendLine($"Generate {count} IELTS practice questions based SOLELY on the lesson text below.")
             .AppendLine($"Skill: {skill}. Topic: {topic}. Difficulty: {depth}")
-            .AppendLine("Base every question on the lesson material below. Do not invent facts.")
-            .AppendLine("When the material shows the task and its answers, keep the same fact and wording, only vary the question.")
-            .AppendLine("Every answer you give must be findable in the material.")
+            .AppendLine("Rules:")
+            .AppendLine("1. Grounding: Every question and answer must be strictly supported by the text below.")
+            .AppendLine("2. Allowed question kinds:")
+            .AppendLine("   - single: Multiple-choice question with 4 options labeled A, B, C, D in options array, and correctKey set to the letter.")
+            .AppendLine("   - gap: Sentence with ___ (three underscores) for the blank. Put the exact word(s) in gapAnswer. Separate alternative accepted forms with |.")
+            .AppendLine("   - completion: Short summary or note with ___. Put accepted answers in gapAnswer.")
+            .AppendLine("   - match: Matching exercise. Fill rows with objects containing label and answer.")
+            .AppendLine("3. Explanations: Every question must include a concise explanation quoting evidence from the text.")
+            .AppendLine("4. Output: Return ONLY raw JSON. No markdown code blocks, no backticks, no comments.")
             .AppendLine()
             .AppendLine("Lesson material:")
             .AppendLine(clipped)
             .AppendLine()
-            .AppendLine("Kinds allowed:")
-            .AppendLine("- gap: one blank, one accepted answer, gapAnswer with | between accepted forms.")
-            .AppendLine("- completion: a short note or table with one to three blanks; put the note in prompt and the answers in gapAnswer (| between them).")
-            .AppendLine("- single: one correct choice, 3 or 4 options, correctKey is the option key.")
-            .AppendLine("- multiple: two or more correct choices, correctKey lists the keys joined by comma.")
-            .AppendLine("- short: a written answer of a few words, gapAnswer holds accepted forms.")
-            .AppendLine("- match: place 4 to 6 labels into the right answer. Fill \"rows\" with {\"label\",\"answer\"} pairs; leave correctKey and gapAnswer empty.")
-            .AppendLine("Every question needs a short explanation of why the answer is right.")
-            .AppendLine("Return only JSON with this shape:")
+            .AppendLine("Required JSON Schema:")
             .AppendLine("{")
-            .AppendLine("  \"title\": \"short set title\",")
+            .AppendLine("  \"title\": \"Descriptive Set Title\",")
             .AppendLine("  \"questions\": [")
-            .AppendLine("    { \"kind\": \"gap\", \"prompt\": \"The library opens at ___.\", \"options\": [], \"rows\": [], \"correctKey\": \"\", \"gapAnswer\": \"8|8:00|8am\", \"explanation\": \"The clip says eight in the morning.\" },")
-            .AppendLine("    { \"kind\": \"single\", \"prompt\": \"What time does the library close on weekdays?\", \"options\": [{\"key\":\"A\",\"text\":\"8 pm\"},{\"key\":\"B\",\"text\":\"10 pm\"}], \"rows\": [], \"correctKey\": \"B\", \"gapAnswer\": \"\", \"explanation\": \"The speaker says it closes at ten at night.\" },")
-            .AppendLine("    { \"kind\": \"match\", \"prompt\": \"Match each word with its meaning.\", \"options\": [], \"rows\": [{\"label\":\"arctic\",\"answer\":\"very cold\"},{\"label\":\"drought\",\"answer\":\"a long dry spell\"}], \"correctKey\": \"\", \"gapAnswer\": \"\", \"explanation\": \"Both meanings come from the vocabulary sheet.\" }")
+            .AppendLine("    {")
+            .AppendLine("      \"kind\": \"single\",")
+            .AppendLine("      \"prompt\": \"According to the text, why did the author conclude...?\",")
+            .AppendLine("      \"options\": [")
+            .AppendLine("        {\"key\": \"A\", \"text\": \"First option\"},")
+            .AppendLine("        {\"key\": \"B\", \"text\": \"Second option\"},")
+            .AppendLine("        {\"key\": \"C\", \"text\": \"Third option\"},")
+            .AppendLine("        {\"key\": \"D\", \"text\": \"Fourth option\"}")
+            .AppendLine("      ],")
+            .AppendLine("      \"rows\": [],")
+            .AppendLine("      \"correctKey\": \"B\",")
+            .AppendLine("      \"gapAnswer\": \"\",")
+            .AppendLine("      \"explanation\": \"Paragraph 3 states that...\"")
+            .AppendLine("    },")
+            .AppendLine("    {")
+            .AppendLine("      \"kind\": \"gap\",")
+            .AppendLine("      \"prompt\": \"The total number of surveyed students was ___.\",")
+            .AppendLine("      \"options\": [],")
+            .AppendLine("      \"rows\": [],")
+            .AppendLine("      \"correctKey\": \"\",")
+            .AppendLine("      \"gapAnswer\": \"450|four hundred and fifty\",")
+            .AppendLine("      \"explanation\": \"Section 2 explicitly mentions 450 participants.\"")
+            .AppendLine("    }")
             .AppendLine("  ]")
             .AppendLine("}")
             .ToString();
     }
 
-    /// <summary>How a tutor tool should behave: grounded, short, in the student's language where asked.</summary>
     public const string ToolSystem =
-        "You are a precise IELTS tutor tool for a Vietnamese learner. " +
-        "Use the given lesson sources when they are present and name the unit or section. " +
-        "If the sources do not cover the request, say so, then answer from general IELTS knowledge. " +
-        "Be compact and practical. Never invent official IELTS scores.";
+        "You are an IELTS tutor tool. Provide compact, practical explanations for the student's request.";
 
-    /// <summary>
-    /// One tool request: a named tool, the student's input, and the lesson
-    /// sources that were found for it. Each tool maps to one instruction so the
-    /// wording of every tool is reviewed here.
-    /// </summary>
     public static string BuildTool(string tool, string input, string sources)
     {
-        var instruction = (tool ?? string.Empty).Trim().ToLowerInvariant() switch
-        {
-            "lookup" => "Explain the word, phrase, or grammar point the student gives: part of speech, meaning, an example, and one common mistake.",
-            "translate" => "Translate the student's English into natural Vietnamese, then back translate the key phrase into English.",
-            "summarize" => "Summarise the lesson source in five short bullet points the student can revise from.",
-            "flashcards" => "Make six flashcards from the lesson source. Each line is Front :: Back, one per line, no extra text.",
-            "fix" => "Correct the student's English. Show the corrected sentence, then one line on what was wrong.",
-            "paraphrase" => "Rewrite the student's sentence in two different IELTS-friendly ways, then name the words you changed.",
-            _ => "Answer the student's request about the lesson.",
-        };
-
-        var builder = new StringBuilder();
-        if (!string.IsNullOrWhiteSpace(sources))
-        {
-            builder.AppendLine("Lesson sources (use these first and name them):");
-            builder.AppendLine(sources);
-            builder.AppendLine();
-        }
-        builder.AppendLine(instruction);
-        builder.AppendLine();
-        builder.AppendLine("Student input:");
-        builder.AppendLine(input);
-        builder.AppendLine();
-        builder.AppendLine("Answer in plain text, no markdown fences.");
-        return builder.ToString();
+        return $"""
+        Tool: {tool}
+        Input: {input}
+        Sources: {sources}
+        Provide a concise, practical response.
+        """;
     }
 
-    /// <summary>Asks for a plain-language explanation of one wrong answer.</summary>
     public static string BuildExplain(string prompt, string correct, string chosen, string sourceText)
     {
-        var clipped = sourceText.Length > 3000 ? sourceText[..3000] + "..." : sourceText;
-        return
-            "Lesson material:\n" + clipped + "\n\n" +
-            "Question:\n" + prompt + "\n\n" +
-            $"Correct answer: {correct}. The student wrote: {chosen}.\n\n" +
-            "Reply in exactly two short lines. Line 1: why the correct answer is right, with a short quote. " +
-            "Line 2: one tip to get it right next time.";
+        return $"""
+        Question: {prompt}
+        Correct answer: {correct}. Student wrote: {chosen}.
+        Explain in two concise lines why the correct answer is right and one tip.
+        """;
     }
 }

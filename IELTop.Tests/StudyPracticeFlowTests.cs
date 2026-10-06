@@ -231,6 +231,18 @@ internal sealed class FakeLlm : ILlmService
         yield break;
     }
 
+    public Task<LlmResult> CompleteWithToolsAsync(
+        IReadOnlyList<LlmMessage> messages,
+        IReadOnlyList<LlmToolDefinition> tools,
+        LlmToolExecutorAsync toolExecutor,
+        Action<string, string>? onToolInvoked = null,
+        Action<string>? onTokenChunk = null,
+        CancellationToken ct = default)
+    {
+        if (onTokenChunk != null) onTokenChunk(_reply);
+        return Task.FromResult(new LlmResult(true, _reply, string.Empty));
+    }
+
     public Task<LlmResult> TestConnectionAsync(CancellationToken ct = default)
         => Task.FromResult(new LlmResult(true, "OK", string.Empty));
 }
