@@ -51,16 +51,36 @@ public sealed class LessonSection
             var builder = new StringBuilder();
             foreach (var block in Blocks)
             {
-                if (block.Type == "table")
+                if (block.Type == "table" && block.Rows.Count > 0)
                 {
-                    foreach (var row in block.Rows)
+                    int maxCols = block.Rows.Max(r => r.Count);
+                    for (int r = 0; r < block.Rows.Count; r++)
                     {
-                        builder.AppendLine(string.Join(" | ", row));
+                        var row = block.Rows[r];
+                        if (row.Count == 0) continue;
+                        if (row.Count == 1 && maxCols > 1)
+                        {
+                            builder.AppendLine();
+                            builder.AppendLine($"**{row[0]}**");
+                            builder.AppendLine();
+                            continue;
+                        }
+
+                        var padded = row.Count < maxCols
+                            ? row.Concat(Enumerable.Repeat(string.Empty, maxCols - row.Count))
+                            : row;
+                        builder.AppendLine("| " + string.Join(" | ", padded) + " |");
+                        if (r == 0)
+                        {
+                            builder.AppendLine("| " + string.Join(" | ", Enumerable.Repeat("---", maxCols)) + " |");
+                        }
                     }
+                    builder.AppendLine();
                 }
                 else if (!string.IsNullOrWhiteSpace(block.Text))
                 {
                     builder.AppendLine(block.Text);
+                    builder.AppendLine();
                 }
             }
             return builder.ToString().Trim();
@@ -104,6 +124,81 @@ public sealed class LessonUnit
     /// </summary>
     public int PicturesSkipped { get; set; }
 
+    public static readonly Dictionary<string, (string Title, string MainTheme, string GrammarFocus)> KnownUnitMeta =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["unit-1"] = (
+                "Unit 1: Ocean Garbage & Sentence Fundamentals",
+                "Ocean Ecology & Marine Garbage (Cam 14)",
+                "Relative Clauses & Core Grammar"
+            ),
+            ["unit-2"] = (
+                "Unit 2: Tenses & Historic Discoveries",
+                "California Megafires & Ancient History (Mary Rose, Pyramids, Cutty Sark)",
+                "Tenses & Aspect (Mixed Tense Practice)"
+            ),
+            ["unit-3"] = (
+                "Unit 3: Relative Clauses, Tourism & World History",
+                "Tourism New Zealand, Dead Sea Scrolls & History of Glass",
+                "Sentence Building & Relative Clauses"
+            ),
+            ["unit-4"] = (
+                "Unit 4: Participles, Infinitives & World Heritage",
+                "Roman Shipbuilding, Silk History & White Horse of Uffington",
+                "Participle & Infinitive Phrases"
+            ),
+            ["unit-5"] = (
+                "Unit 5: Writing Process Diagrams & Biological Sciences",
+                "Oxytocin, Health Sciences & The Thylacine",
+                "Writing Task 1 Process Flows & Manufacturing Diagrams"
+            ),
+            ["unit-6"] = (
+                "Unit 6: Writing Map Diagrams & Ancient Civilisations",
+                "The Little Ice Age & Civilisation of Easter Island",
+                "Writing Task 1 Map & Spatial Comparisons"
+            ),
+            ["unit-7"] = (
+                "Unit 7: Writing Trends & Sustainable Architecture",
+                "Recovery of Natural Environments in Architecture",
+                "Writing Task 1 Time-Series Trends & Dynamic Charts"
+            ),
+            ["unit-8"] = (
+                "Unit 8: Writing Comparison & Cognitive Psychology",
+                "Neuroscience of Decisions (Iconoclasts), Educating Psyche & Numbers",
+                "Writing Task 1 Comparative Charts & Categorical Data"
+            ),
+            ["unit-9"] = (
+                "Unit 9: Technology, Artificial Intelligence & Future Work",
+                "Attitudes to AI, Environmental Practices & Future of Work",
+                "Academic Reading Analysis & Synthesis"
+            ),
+            ["unit-10"] = (
+                "Unit 10: Full Practice Review & Academic Vocabulary",
+                "Comprehensive IELTS Practice & High-Frequency Academic Vocabulary",
+                "Exam Technique & Vocabulary Mastery"
+            ),
+            ["midterm-review"] = (
+                "Skills Review: Multi-Chart & Grammar Synthesis",
+                "Comprehensive Skills Practice & Multi-Chart Reporting",
+                "Review of Core Grammar & Task 1 Reporting"
+            ),
+            ["writing-task-1"] = (
+                "Writing Task 1: Academic Data & Visual Reports",
+                "Line Graphs, Bar Charts, Tables, Maps & Process Diagrams",
+                "Task 1 Overview, Grouping Data, Trends & Comparisons"
+            ),
+            ["writing-task-2"] = (
+                "Writing Task 2: Academic Essay Mastery",
+                "Opinion, Discussion, Problems/Solutions, Pros/Cons & Double Questions",
+                "Essay Structures, Thesis Statements, Topic Sentences & Planning"
+            ),
+            ["writing-grammar-review"] = (
+                "Writing Grammar: Sentence Structures & Academic Cohesion",
+                "Grammar Mastery for Band 7+ Writing",
+                "Core Sentences, Noun Phrases, Complex Clauses, Relative Clauses & Comparatives"
+            ),
+        };
+
     /// <summary>
     /// Descriptive title stating clearly what topic and grammar focus the unit covers.
     /// </summary>
@@ -112,6 +207,9 @@ public sealed class LessonUnit
     {
         get
         {
+            if (KnownUnitMeta.TryGetValue(Slug, out var meta))
+                return meta.Title;
+
             if (!string.IsNullOrWhiteSpace(Title) && Title.Contains(':'))
                 return Title;
 
@@ -136,6 +234,9 @@ public sealed class LessonUnit
     {
         get
         {
+            if (KnownUnitMeta.TryGetValue(Slug, out var meta))
+                return meta.MainTheme;
+
             var readingSec = Sections.FirstOrDefault(s => s.Skill.Equals("Reading", StringComparison.OrdinalIgnoreCase) && !s.IsAnswerKey);
             if (readingSec != null)
             {
@@ -168,6 +269,9 @@ public sealed class LessonUnit
     {
         get
         {
+            if (KnownUnitMeta.TryGetValue(Slug, out var meta))
+                return meta.GrammarFocus;
+
             var grammarSec = Sections.FirstOrDefault(s => s.Skill.Equals("Grammar", StringComparison.OrdinalIgnoreCase) && !s.IsAnswerKey);
             if (grammarSec != null)
             {
@@ -400,8 +504,10 @@ public sealed class LessonService
                     score = (lexicalScore * 0.3) + (vectorScore * 1.5);
                 }
 
+                if (terms.Any(t => unit.Unit.Contains(t, StringComparison.OrdinalIgnoreCase) || unit.Slug.Contains(t, StringComparison.OrdinalIgnoreCase))) score += 0.5;
                 if (terms.Any(t => section.Title.Contains(t, StringComparison.OrdinalIgnoreCase))) score += 0.4;
                 if (terms.Any(t => section.Topic.Contains(t, StringComparison.OrdinalIgnoreCase))) score += 0.4;
+                if (terms.Any(t => section.Skill.Contains(t, StringComparison.OrdinalIgnoreCase))) score += 0.3;
 
                 if (score <= 0) continue;
                 hits.Add(new LessonHit(
@@ -427,6 +533,9 @@ public sealed class LessonService
                 {
                     score = (lexicalScore * 0.3) + (vectorScore * 1.5);
                 }
+
+                if (terms.Any(t => unit.Unit.Contains(t, StringComparison.OrdinalIgnoreCase) || unit.Slug.Contains(t, StringComparison.OrdinalIgnoreCase))) score += 0.5;
+                if (terms.Any(t => deck.Topic.Contains(t, StringComparison.OrdinalIgnoreCase))) score += 0.4;
 
                 if (score <= 0) continue;
                 hits.Add(new LessonHit(
@@ -582,10 +691,11 @@ public sealed class LessonService
 
     private static List<string> Tokenize(string query) =>
         query
+            .Replace('\u00A0', ' ')
             .ToLowerInvariant()
-            .Split(new[] { ' ', '\t', '\n', ',', '.', '?', '!', ';', ':', '"', '\'', '(', ')' },
+            .Split(new[] { ' ', '\t', '\n', '\r', ',', '.', '?', '!', ';', ':', '"', '\'', '(', ')', '[', ']', '{', '}', '/', '\\', '-', '_', '|' },
                 StringSplitOptions.RemoveEmptyEntries)
-            .Where(t => t.Length > 1)
+            .Where(t => t.Length > 1 || (t.Length == 1 && char.IsAsciiDigit(t[0])))
             .Distinct()
             .ToList();
 

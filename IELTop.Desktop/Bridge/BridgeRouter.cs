@@ -214,13 +214,23 @@ public sealed class BridgeRouter
         {
             request = JsonSerializer.Deserialize<BridgeRequest>(rawMessage, Json);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            // The postMessage channel drops an empty reply, which leaves the
+            // page waiting until its timeout. Answer with an error when the id
+            // is still readable so the caller fails fast instead.
+            var fallbackId = TryExtractId(rawMessage);
+            AppLog.Warn("bridge", $"Bad page message{(string.IsNullOrEmpty(fallbackId) ? string.Empty : $" (id {fallbackId})")}: {ex.Message}");
+            if (!string.IsNullOrEmpty(fallbackId))
+                return Serialize(new BridgeResponse { Id = fallbackId, Error = "The action message was invalid." });
             return string.Empty;
         }
 
         if (request is null || string.IsNullOrEmpty(request.Id))
+        {
+            AppLog.Warn("bridge", "Page message without id was dropped.");
             return string.Empty;
+        }
 
         var response = await HandleDirectAsync(request.Id, request.Method, request.Args, ct).ConfigureAwait(false);
         return Serialize(response);
@@ -228,5 +238,22 @@ public sealed class BridgeRouter
 
     public static string Serialize(object? value)
         => JsonSerializer.Serialize(value, Json);
+
+    private static string TryExtractId(string rawMessage)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(rawMessage);
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("id", out var id)
+                && id.ValueKind == JsonValueKind.String)
+                return id.GetString() ?? string.Empty;
+        }
+        catch (JsonException)
+        {
+        }
+
+        return string.Empty;
+    }
 }
 

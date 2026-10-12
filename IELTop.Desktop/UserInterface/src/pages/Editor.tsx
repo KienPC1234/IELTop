@@ -11,8 +11,6 @@ import {
   Trash2,
   AlertTriangle,
   Sparkles,
-  Upload,
-  Image,
   Clock,
   HelpCircle,
   Headphones,
@@ -29,7 +27,7 @@ import { Separator } from '@/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePage, readTextFile, readImageFiles, readFileBase64, isBinaryDocument } from '@/hooks'
-import { Confirm, ErrorBar, FileImport, PageHeader } from '@/components/shared'
+import { Confirm, ErrorBar, FileImport } from '@/components/shared'
 import { Field } from '@/components/Field'
 
 export default function Editor({ onNavigate }) {

@@ -32,8 +32,6 @@ public sealed class StudyBridge
         router.Register("study.chat.snapshot", Act(a =>
             _study.ChatSnapshot(Int(a, "sessionId"), Str(a, "unit"), Str(a, "query"))));
         router.Register("study.chat.newSession", Act(a => _study.NewChatSession(Str(a, "unit"))));
-        router.Register("study.chat.selectSession", Act(a =>
-            _study.ChatSnapshot(Int(a, "sessionId"), Str(a, "unit"))));
         router.Register("study.chat.setUnit", Act(a =>
             _study.SetChatUnit(Int(a, "sessionId"), Str(a, "unit"))));
         router.Register("study.chat.renameSession", Act(a =>
@@ -54,8 +52,8 @@ public sealed class StudyBridge
             await _study.TeachTopicAsync(Int(a, "sessionId"), Str(a, "unit"), Str(a, "topic"), ct)));
         router.Register("study.tutor.generateExercise", ActAsync(async (a, ct) =>
             await _study.GenerateInteractiveExerciseAsync(Int(a, "sessionId"), Str(a, "skill"), Str(a, "topic"), Str(a, "kind"), Str(a, "unit"), ct)));
-        router.Register("study.tutor.checkAnswer", Act(a =>
-            _study.CheckExerciseAnswer(Str(a, "questionJson"), Str(a, "userAnswer"))));
+        router.Register("study.tutor.checkAnswer", ActAsync(async (a, ct) =>
+            await _study.CheckExerciseAnswerAsync(Str(a, "questionJson"), Str(a, "userAnswer"), ct)));
 
         // ---- Practice ----
         router.Register("study.practice.snapshot", Act(a =>
@@ -76,13 +74,10 @@ public sealed class StudyBridge
             _study.OpenSet(Int(a, "setId"), Str(a, "scope"))));
         router.Register("study.practice.answer", Act(a =>
             _study.Answer(Int(a, "setId"), Int(a, "questionId"), Str(a, "answer"), Bool(a, "flag"), Str(a, "scope"))));
-        router.Register("study.practice.submit", Act(a => _study.SubmitSet(Int(a, "setId"), Str(a, "scope"))));
+        router.Register("study.practice.submit", ActAsync(async (a, ct) =>
+            await _study.SubmitSetAsync(Int(a, "setId"), Str(a, "scope"), ct)));
         router.Register("study.practice.explain", ActAsync(async (a, ct) =>
             await _study.ExplainAsync(Int(a, "questionId"), ct)));
-
-        // ---- Materials / Lessons ----
-        router.Register("study.materials.snapshot", Act(a =>
-            _study.MaterialSnapshot(Str(a, "unit"), Str(a, "sectionId"), Str(a, "topic"), Str(a, "skill"))));
 
         // ---- Vocabulary ----
         router.Register("study.vocab.snapshot", Act(a =>

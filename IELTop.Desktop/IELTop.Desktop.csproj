@@ -102,6 +102,51 @@
     <Warning Condition="'$(NpmCommand)' == ''" Text="npm was not found, so the web UI was not rebuilt. Run 'npm install' then 'npm run build' in IELTop.Desktop/UserInterface, or the app will start on the bundle left in wwwroot by the last build." />
   </Target>
 
+  <!-- Pre-populated papers database, generated from the repo JSON seeds on
+       every build. The app copies this template when no database exists yet,
+       so a fresh install starts with the library already present. The file is
+       derived (*.db is gitignored); the JSON seeds stay the source of truth.
+       Without python the target is skipped and the app seeds from JSON at
+       first run instead. -->
+  <PropertyGroup>
+    <SeedScript>$(MSBuildProjectDirectory)\..\tools\seed-db\seed.py</SeedScript>
+    <SeedExamsDir>$(MSBuildProjectDirectory)\..\Content\Assets\Exams</SeedExamsDir>
+    <SeedDb>$(MSBuildProjectDirectory)\seed\papers-seed.db</SeedDb>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SeedExamsJson Include="$(SeedExamsDir)\*.json" />
+  </ItemGroup>
+
+  <Target Name="SeedPaperDbFindPython">
+    <Exec Command="where python"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="low"
+          ContinueOnError="true">
+      <Output TaskParameter="ExitCode" PropertyName="PythonProbeExitCode" />
+    </Exec>
+    <PropertyGroup>
+      <PythonCommand Condition="'$(PythonProbeExitCode)' == '0'">python</PythonCommand>
+    </PropertyGroup>
+  </Target>
+
+  <Target Name="SeedPaperDb"
+          DependsOnTargets="SeedPaperDbFindPython"
+          BeforeTargets="AssignTargetPaths"
+          Inputs="$(SeedScript);@(SeedExamsJson)"
+          Outputs="$(SeedDb)">
+    <Exec Command="$(PythonCommand) &quot;$(SeedScript)&quot; &quot;$(SeedExamsDir)&quot; &quot;$(SeedDb)&quot;"
+          Condition="'$(PythonCommand)' != ''" />
+    <Warning Condition="'$(PythonCommand)' == ''" Text="python was not found, so the papers seed database was not rebuilt. The app still seeds its library from JSON on first run." />
+    <ItemGroup>
+      <Content Include="$(SeedDb)" Condition="Exists('$(SeedDb)')">
+        <Link>papers-seed.db</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      </Content>
+    </ItemGroup>
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />

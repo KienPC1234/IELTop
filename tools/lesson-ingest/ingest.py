@@ -169,7 +169,9 @@ def read_xlsx(path: Path, report: Report) -> list[list[str]] | None:
     for sheet in workbook.worksheets:
         for row in sheet.iter_rows(values_only=True):
             cells = ["" if c is None else str(c).strip() for c in row]
-            if any(cells):
+            while cells and not cells[-1]:
+                cells.pop()
+            if cells:
                 rows.append(cells)
     workbook.close()
     report.files_read += 1

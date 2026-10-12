@@ -3,9 +3,7 @@ import {
   ArrowLeftRight,
   Maximize2,
   Menu as MenuIcon,
-  Moon,
   Pencil,
-  Sun,
   Volume2,
   VolumeX,
 } from 'lucide-react'

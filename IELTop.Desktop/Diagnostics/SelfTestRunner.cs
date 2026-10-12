@@ -100,7 +100,7 @@ public sealed class SelfTestRunner
         {
             var papers = _papers.LoadPapers();
             if (papers.Count == 0)
-                throw new InvalidOperationException("no exam papers found under Assets/Exams.");
+                throw new InvalidOperationException("no exam papers in the library database.");
             return $"{papers.Count} paper(s), first '{papers[0].Title}'";
         }));
 

@@ -5,6 +5,9 @@
 *.pt
 *.sqlite
 *.db
+# Generated papers template, tracked on purpose (AGENTS.md section 4):
+# rebuilt from the JSON seeds on every build, shipped papers only.
+!IELTop.Desktop/seed/papers-seed.db
 settings.json
 **/Assets/Models/*.onnx
 **/Assets/Models/mdd-labels.json

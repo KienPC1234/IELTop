@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "katex/dist/katex.min.css";
 
 /* Dark mode is a class on <html>, set by the theme store, not the OS query,
    so the user's explicit choice wins over the system setting. */

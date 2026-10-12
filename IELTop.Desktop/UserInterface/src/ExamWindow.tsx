@@ -21,7 +21,7 @@ import ExamResult from './pages/exam/ExamResult'
 /// dark from the top bar. That choice stays in this window only.
 interface MediaRefState {
   player?: HTMLAudioElement | null
-  recorder?: { cancel: () => void } | null
+  recorder?: { cancel: () => void; stop?: () => void } | null
   recorderTimer?: any
 }
 
@@ -101,6 +101,7 @@ export default function ExamWindow() {
       const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
       recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data)
       recorder.onstop = async () => {
+        delete (window as any).__ieltop_stop_recording
         stream.getTracks().forEach((t) => t.stop())
         // Stopping because the test was left is not a recording result.
         if (cancelled) return
@@ -118,8 +119,25 @@ export default function ExamWindow() {
         }
       }
       mediaRef.current.recorder = {
+        stop: () => {
+          delete (window as any).__ieltop_stop_recording
+          if (mediaRef.current.recorderTimer) {
+            clearTimeout(mediaRef.current.recorderTimer)
+            mediaRef.current.recorderTimer = null
+          }
+          try {
+            recorder.stop()
+          } catch {
+            /* already stopped */
+          }
+        },
         cancel: () => {
+          delete (window as any).__ieltop_stop_recording
           cancelled = true
+          if (mediaRef.current.recorderTimer) {
+            clearTimeout(mediaRef.current.recorderTimer)
+            mediaRef.current.recorderTimer = null
+          }
           try {
             recorder.stop()
           } catch {
@@ -127,6 +145,7 @@ export default function ExamWindow() {
           }
         },
       }
+      ;(window as any).__ieltop_stop_recording = mediaRef.current.recorder.stop
       recorder.start()
       mediaRef.current.recorderTimer = setTimeout(() => {
         try {
@@ -136,6 +155,7 @@ export default function ExamWindow() {
         }
       }, Math.max(10, seconds) * 1000)
     } catch {
+      delete (window as any).__ieltop_stop_recording
       try {
         apply(await call('exam.recordingFailed'))
       } catch {

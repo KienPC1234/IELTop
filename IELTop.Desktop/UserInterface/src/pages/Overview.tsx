@@ -4,9 +4,6 @@ import {
   Brain,
   CheckCircle2,
   ChevronRight,
-  Clock,
-  Compass,
-  FileText,
   Flame,
   Headphones,
   Mic,
@@ -15,7 +12,6 @@ import {
   RefreshCw,
   Sparkles,
   TrendingUp,
-  Zap,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

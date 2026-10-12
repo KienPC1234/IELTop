@@ -215,8 +215,10 @@ public sealed class StudyService
                         result = hits.Select(h => new
                         {
                             unit = h.Unit,
+                            skill = h.Skill,
                             section = h.SectionTitle,
-                            content = h.Body.Length > 500 ? h.Body[..500] : h.Body
+                            topic = h.Topic,
+                            content = h.Body.Length > 2000 ? h.Body[..2000] : h.Body
                         })
                     });
                 }
@@ -224,8 +226,9 @@ public sealed class StudyService
                 {
                     string word = root.TryGetProperty("word", out var w) ? w.GetString() ?? "" : "";
                     var match = _lessons.Units.SelectMany(u => u.Vocabulary)
-                        .FirstOrDefault(v => string.Equals(v.Word, word, StringComparison.OrdinalIgnoreCase) ||
-                                             v.Word.Contains(word, StringComparison.OrdinalIgnoreCase));
+                        .FirstOrDefault(v => string.Equals(v.Word, word, StringComparison.OrdinalIgnoreCase))
+                        ?? _lessons.Units.SelectMany(u => u.Vocabulary)
+                        .FirstOrDefault(v => v.Word.Contains(word, StringComparison.OrdinalIgnoreCase));
                     if (match == null) return JsonSerializer.Serialize(new { result = $"Word '{word}' not found in dictionary." });
                     return JsonSerializer.Serialize(new
                     {
@@ -233,7 +236,9 @@ public sealed class StudyService
                         definition = match.Meaning,
                         form = match.Form,
                         ipa = match.Ipa,
-                        example = match.Example
+                        example = match.Example,
+                        extraExample = match.ExtraExample,
+                        derivatives = match.Derivatives
                     });
                 }
                 case "generate_interactive_exercise":
@@ -255,6 +260,28 @@ public sealed class StudyService
                     int sIdx = exerciseJson.IndexOf('{');
                     int eIdx = exerciseJson.LastIndexOf('}');
                     if (sIdx >= 0 && eIdx > sIdx) exerciseJson = exerciseJson.Substring(sIdx, eIdx - sIdx + 1);
+
+                    try
+                    {
+                        var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(exerciseJson) ?? new();
+                        if (!dict.ContainsKey("topic")) dict["topic"] = topic;
+                        if (!dict.ContainsKey("skill")) dict["skill"] = skill;
+                        if (!dict.ContainsKey("kind")) dict["kind"] = kind;
+
+                        if (hits.Count > 0 && hits[0].Skill.Equals("Listening", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var unitObj = _lessons.GetUnit(hits[0].Unit);
+                            if (unitObj?.Audio != null && unitObj.Audio.Count > 0)
+                            {
+                                string cleanAudio = unitObj.Audio[0].Replace("\\", "/").TrimStart('/');
+                                if (!cleanAudio.StartsWith("media/audio/")) cleanAudio = "media/audio/" + cleanAudio;
+                                dict["audioUrl"] = "/" + cleanAudio;
+                            }
+                        }
+
+                        exerciseJson = JsonSerializer.Serialize(dict);
+                    }
+                    catch { }
 
                     return exerciseJson;
                 }
@@ -366,7 +393,7 @@ public sealed class StudyService
             Sets = sets,
             OpenSet = open,
             Units = units,
-            Skills = new[] { "Grammar", "Vocabulary", "Reading", "Listening", "Writing", "Speaking" },
+            Skills = new[] { "Writing", "Reading", "Grammar", "Vocabulary", "Listening", "Speaking" },
             Difficulties = new[] { "Easy", "Standard", "Hard" },
             CanUseAi = CanUseAi,
             AiHint = AiHint,
@@ -567,6 +594,30 @@ public sealed class StudyService
                 exerciseJson = text.Substring(start + 17, end - (start + 17)).Trim();
                 text = (text[..start] + text[(end + 18)..]).Trim();
             }
+            else
+            {
+                int cStart = text.IndexOf("```json", StringComparison.OrdinalIgnoreCase);
+                if (cStart >= 0)
+                {
+                    int cEnd = text.IndexOf("```", cStart + 7, StringComparison.Ordinal);
+                    if (cEnd > cStart)
+                    {
+                        string candidate = text.Substring(cStart + 7, cEnd - (cStart + 7)).Trim();
+                        if (candidate.Contains("\"prompt\"", StringComparison.OrdinalIgnoreCase) ||
+                            candidate.Contains("\"question\"", StringComparison.OrdinalIgnoreCase))
+                        {
+                            exerciseJson = candidate;
+                            text = (text[..cStart] + text[(cEnd + 3)..]).Trim();
+                        }
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(text) && !string.IsNullOrWhiteSpace(exerciseJson))
+            {
+                text = "Here is an interactive practice exercise grounded in your lesson:";
+            }
+
             return new StudyMessageRow(
                 m.Id, m.Role, text, ParseSources(m.SourcesJson), m.CreatedAt, exerciseJson);
         }).ToList();
@@ -589,61 +640,218 @@ public sealed class StudyService
 
     public CheckAnswerResult CheckExerciseAnswer(string questionJson, string userAnswer)
     {
+        return CheckExerciseAnswerAsync(questionJson, userAnswer, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
+    public async Task<CheckAnswerResult> CheckExerciseAnswerAsync(string questionJson, string userAnswer, CancellationToken ct)
+    {
         userAnswer = (userAnswer ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(questionJson))
             return new CheckAnswerResult(false, 0, "Question data missing.", "");
 
         try
         {
+            if (questionJson.StartsWith("\"") && questionJson.EndsWith("\"") && questionJson.Length > 2)
+            {
+                try
+                {
+                    questionJson = JsonSerializer.Deserialize<string>(questionJson) ?? questionJson;
+                }
+                catch { }
+            }
             using var doc = JsonDocument.Parse(questionJson);
             var root = doc.RootElement;
             string kind = root.TryGetProperty("kind", out var k) ? k.GetString() ?? "single" : "single";
             string correctKey = root.TryGetProperty("correctKey", out var ck) ? ck.GetString() ?? "" : "";
             string gapAnswer = root.TryGetProperty("gapAnswer", out var ga) ? ga.GetString() ?? "" : "";
             string explanation = root.TryGetProperty("explanation", out var ex) ? ex.GetString() ?? "" : "";
+            string modelAnswerProp = root.TryGetProperty("modelAnswer", out var ma) ? ma.GetString() ?? "" : "";
+            string prompt = root.TryGetProperty("prompt", out var pr) ? pr.GetString() ?? "" : "";
+            string contextText = root.TryGetProperty("contextText", out var ctx) ? ctx.GetString() ?? "" : "";
 
-            bool isCorrect = false;
-            double score = 0;
-            string modelAnswer = "";
+            bool hasOptions = root.TryGetProperty("options", out var optsElem) &&
+                              optsElem.ValueKind == JsonValueKind.Array &&
+                              optsElem.GetArrayLength() > 0;
 
-            switch (kind.ToLowerInvariant())
+            // 1. Multiple-choice questions (any kind where options are rendered)
+            if (hasOptions)
             {
-                case "single":
-                case "tfng":
-                    isCorrect = string.Equals(userAnswer, correctKey.Trim(), StringComparison.OrdinalIgnoreCase);
-                    score = isCorrect ? 1.0 : 0.0;
-                    modelAnswer = correctKey;
-                    break;
-                case "gap":
-                case "completion":
-                    var accepted = gapAnswer.Split('|', StringSplitOptions.RemoveEmptyEntries).Select(s => s.Trim().ToLowerInvariant()).ToList();
-                    isCorrect = accepted.Contains(userAnswer.ToLowerInvariant());
-                    score = isCorrect ? 1.0 : 0.0;
-                    modelAnswer = gapAnswer;
-                    break;
-                case "reorder":
-                    modelAnswer = correctKey.Length > 0 ? correctKey : gapAnswer;
-                    isCorrect = string.Equals(userAnswer.Replace(" ", ""), modelAnswer.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
-                    score = isCorrect ? 1.0 : 0.0;
-                    break;
-                case "error_fix":
-                case "paraphrase":
-                    modelAnswer = gapAnswer.Length > 0 ? gapAnswer : explanation;
-                    isCorrect = userAnswer.Length >= 5;
-                    score = isCorrect ? 1.0 : 0.5;
-                    break;
-                default:
-                    isCorrect = string.Equals(userAnswer, correctKey, StringComparison.OrdinalIgnoreCase);
-                    score = isCorrect ? 1.0 : 0.0;
-                    modelAnswer = correctKey;
-                    break;
+                string targetKey = !string.IsNullOrWhiteSpace(correctKey) ? correctKey.Trim() : modelAnswerProp.Trim();
+                bool isCorrect = false;
+                double score = 0.0;
+
+                if (kind.Equals("multiple", StringComparison.OrdinalIgnoreCase))
+                {
+                    var expectedSet = targetKey.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(x => x.Trim().ToUpperInvariant()).OrderBy(x => x).ToList();
+                    var userSet = userAnswer.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(x => x.Trim().ToUpperInvariant()).OrderBy(x => x).ToList();
+                    isCorrect = expectedSet.Count > 0 && expectedSet.SequenceEqual(userSet);
+                    score = isCorrect ? 1.0 : (expectedSet.Intersect(userSet).Any() ? 0.5 : 0.0);
+                }
+                else
+                {
+                    // Check direct key match (e.g. "A" == "A")
+                    if (string.Equals(userAnswer, targetKey, StringComparison.OrdinalIgnoreCase))
+                    {
+                        isCorrect = true;
+                        score = 1.0;
+                    }
+                    else
+                    {
+                        // Check if user clicked or sent the option text corresponding to targetKey
+                        string targetOptionText = "";
+                        foreach (var opt in optsElem.EnumerateArray())
+                        {
+                            var optKey = opt.TryGetProperty("key", out var opKey) ? opKey.GetString() ?? "" : "";
+                            var optText = opt.TryGetProperty("text", out var opText) ? opText.GetString() ?? "" : "";
+                            if (string.Equals(optKey.Trim(), targetKey, StringComparison.OrdinalIgnoreCase))
+                            {
+                                targetOptionText = optText.Trim();
+                                break;
+                            }
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(targetOptionText) &&
+                            string.Equals(userAnswer, targetOptionText, StringComparison.OrdinalIgnoreCase))
+                        {
+                            isCorrect = true;
+                            score = 1.0;
+                        }
+                    }
+                }
+
+                return new CheckAnswerResult(isCorrect, score, explanation, targetKey);
             }
 
-            return new CheckAnswerResult(isCorrect, score, explanation, modelAnswer);
+            // 2. Open-ended Writing exercises (rewrite, paraphrase, error_fix, short, essay)
+            if (kind.Equals("rewrite", StringComparison.OrdinalIgnoreCase) ||
+                kind.Equals("paraphrase", StringComparison.OrdinalIgnoreCase) ||
+                kind.Equals("error_fix", StringComparison.OrdinalIgnoreCase) ||
+                kind.Equals("short", StringComparison.OrdinalIgnoreCase) ||
+                kind.Equals("essay", StringComparison.OrdinalIgnoreCase))
+            {
+                string targetAnswer = !string.IsNullOrWhiteSpace(modelAnswerProp)
+                    ? modelAnswerProp
+                    : (!string.IsNullOrWhiteSpace(gapAnswer) ? gapAnswer : correctKey);
+
+                if (_llm != null && _llm.IsConfigured && !string.IsNullOrWhiteSpace(userAnswer) && userAnswer.Length >= 3)
+                {
+                    var evalPrompt = StudyPrompts.BuildEvaluateWriting(prompt, contextText, targetAnswer, userAnswer);
+                    var evalMessages = new[]
+                    {
+                        LlmMessage.System(StudyPrompts.EvaluateWritingSystem),
+                        LlmMessage.User(evalPrompt)
+                    };
+                    var evalResult = await _llm.CompleteAsync(evalMessages, ct).ConfigureAwait(false);
+
+                    if (evalResult.Success && TryParseWritingEval(evalResult.Text, out bool isAiCorrect, out double aiScore, out string bandEst, out string aiFeedback, out string improvedVer))
+                    {
+                        var feedbackBody = $"{bandEst}: {aiFeedback}";
+                        if (!string.IsNullOrWhiteSpace(improvedVer))
+                        {
+                            feedbackBody += $"\n\nSuggested Band 8+ Upgrade: {improvedVer}";
+                        }
+                        return new CheckAnswerResult(isAiCorrect, aiScore, feedbackBody, targetAnswer);
+                    }
+                }
+
+                // Offline evaluation fallback
+                var acceptedForms = targetAnswer.Split('|', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim().ToLowerInvariant()).ToList();
+                bool matchesModel = acceptedForms.Count > 0 && acceptedForms.Contains(userAnswer.ToLowerInvariant());
+                bool plausibleLength = userAnswer.Length >= 8;
+
+                string offlineExpl = explanation;
+                if (!matchesModel)
+                {
+                    offlineExpl += "\n\n(Offline Note: In IELTS Writing there are multiple valid sentence structures. Compare your sentence with the model answer above.)";
+                }
+                return new CheckAnswerResult(matchesModel || plausibleLength, matchesModel ? 1.0 : 0.8, offlineExpl, targetAnswer);
+            }
+
+            // 3. Gap fill and completion
+            if (kind.Equals("gap", StringComparison.OrdinalIgnoreCase) || kind.Equals("completion", StringComparison.OrdinalIgnoreCase))
+            {
+                var accepted = gapAnswer.Split('|', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => s.Trim().ToLowerInvariant()).ToList();
+                bool isCorrect = accepted.Contains(userAnswer.ToLowerInvariant());
+                return new CheckAnswerResult(isCorrect, isCorrect ? 1.0 : 0.0, explanation, gapAnswer);
+            }
+
+            // 4. Sentence reordering
+            if (kind.Equals("reorder", StringComparison.OrdinalIgnoreCase))
+            {
+                string target = !string.IsNullOrWhiteSpace(modelAnswerProp) ? modelAnswerProp : gapAnswer;
+                bool isCorrect = string.Equals(userAnswer.Replace(" ", ""), target.Replace(" ", ""), StringComparison.OrdinalIgnoreCase);
+                return new CheckAnswerResult(isCorrect, isCorrect ? 1.0 : 0.0, explanation, target);
+            }
+
+            // 5. Matching rows
+            if (kind.Equals("match", StringComparison.OrdinalIgnoreCase))
+            {
+                var expectedPairs = new List<string>();
+                if (root.TryGetProperty("matchRows", out var rowsElem) && rowsElem.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var r in rowsElem.EnumerateArray())
+                    {
+                        var lbl = (r.TryGetProperty("label", out var l) ? l.GetString() : (r.TryGetProperty("item", out var it) ? it.GetString() : ""))?.Trim() ?? "";
+                        var ans = (r.TryGetProperty("answer", out var a) ? a.GetString() : (r.TryGetProperty("match", out var m) ? m.GetString() : ""))?.Trim() ?? "";
+                        if (lbl.Length > 0 && ans.Length > 0) expectedPairs.Add($"{lbl}={ans}");
+                    }
+                }
+
+                if (expectedPairs.Count > 0)
+                {
+                    var userNormalized = userAnswer.Replace(":", "=").Replace("-", "=")
+                        .Split(new[] { ',', ';', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Select(p => p.Trim().Replace(" ", "").ToLowerInvariant()).OrderBy(p => p).ToList();
+                    var expectedNormalized = expectedPairs
+                        .Select(p => p.Trim().Replace(" ", "").ToLowerInvariant()).OrderBy(p => p).ToList();
+                    int matched = expectedNormalized.Intersect(userNormalized).Count();
+                    bool isCorrect = expectedNormalized.Count > 0 && matched == expectedNormalized.Count;
+                    return new CheckAnswerResult(isCorrect, (double)matched / expectedNormalized.Count, explanation, string.Join(", ", expectedPairs));
+                }
+            }
+
+            // 6. Default comparison
+            bool defaultCorrect = string.Equals(userAnswer, correctKey, StringComparison.OrdinalIgnoreCase);
+            return new CheckAnswerResult(defaultCorrect, defaultCorrect ? 1.0 : 0.0, explanation, correctKey);
         }
         catch (Exception ex)
         {
             return new CheckAnswerResult(false, 0, "Error evaluating: " + ex.Message, "");
+        }
+    }
+
+    private static bool TryParseWritingEval(
+        string rawJson, out bool isCorrect, out double score, out string bandEstimate, out string feedback, out string improvedVersion)
+    {
+        isCorrect = false;
+        score = 0.0;
+        bandEstimate = "Practice Evaluation";
+        feedback = "";
+        improvedVersion = "";
+
+        var cleaned = ExtractJsonObject(rawJson);
+        if (string.IsNullOrWhiteSpace(cleaned)) return false;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(cleaned);
+            var root = doc.RootElement;
+            isCorrect = root.TryGetProperty("isCorrect", out var ic) && ic.GetBoolean();
+            if (root.TryGetProperty("score", out var sc) && sc.TryGetDouble(out var sVal)) score = sVal;
+            else score = isCorrect ? 1.0 : 0.5;
+
+            bandEstimate = root.TryGetProperty("bandEstimate", out var be) ? be.GetString() ?? "Practice Band" : "Practice Band";
+            feedback = root.TryGetProperty("feedback", out var fb) ? fb.GetString() ?? "" : "";
+            improvedVersion = root.TryGetProperty("improvedVersion", out var iv) ? iv.GetString() ?? "" : "";
+            return true;
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -656,16 +864,51 @@ public sealed class StudyService
             sessionId = s.SelectedSessionId;
         }
 
-        var unit = _lessons.GetUnit(unitSlug) ?? _lessons.Units.FirstOrDefault();
+        var unit = _lessons.GetUnit(unitSlug);
         string material = "";
         if (unit != null)
         {
             var relevantSections = unit.Sections
-                .Where(s => string.Equals(s.Topic, topic, StringComparison.OrdinalIgnoreCase) || s.Title.Contains(topic, StringComparison.OrdinalIgnoreCase))
-                .Take(2)
+                .Where(s => !s.IsAnswerKey && (
+                    string.Equals(s.Topic, topic, StringComparison.OrdinalIgnoreCase) ||
+                    s.Title.Contains(topic, StringComparison.OrdinalIgnoreCase) ||
+                    topic.Contains(s.Topic, StringComparison.OrdinalIgnoreCase)))
+                .Take(3)
                 .ToList();
-            if (relevantSections.Count == 0) relevantSections = unit.Sections.Take(2).ToList();
-            material = string.Join("\n\n", relevantSections.Select(s => s.Title + ":\n" + s.FlatText));
+
+            if (relevantSections.Count == 0)
+            {
+                var searchHits = _lessons.Search(topic, max: 3, unitSlug: unit.Slug);
+                if (searchHits.Count > 0)
+                {
+                    material = string.Join("\n\n", searchHits.Select(h => $"{h.SectionTitle} ({h.Topic}):\n{h.Body}"));
+                }
+                else
+                {
+                    relevantSections = unit.Sections.Where(s => !s.IsAnswerKey && !string.IsNullOrWhiteSpace(s.FlatText)).Take(2).ToList();
+                    material = string.Join("\n\n", relevantSections.Select(s => $"{s.Title} ({s.Topic}):\n{s.FlatText}"));
+                }
+            }
+            else
+            {
+                material = string.Join("\n\n", relevantSections.Select(s => $"{s.Title} ({s.Topic}):\n{s.FlatText}"));
+            }
+        }
+        else
+        {
+            var searchHits = _lessons.Search(topic, max: 3);
+            if (searchHits.Count > 0)
+            {
+                material = string.Join("\n\n", searchHits.Select(h => $"{h.SectionTitle} ({h.Topic}):\n{h.Body}"));
+            }
+            else
+            {
+                var fallback = _lessons.Units.FirstOrDefault();
+                if (fallback != null)
+                {
+                    material = string.Join("\n\n", fallback.Sections.Where(s => !s.IsAnswerKey).Take(2).Select(s => s.Title + ":\n" + s.FlatText));
+                }
+            }
         }
 
         string prompt = $"Teach the student about topic '{topic}' based on the authentic IELTS curriculum below.\n" +
@@ -765,6 +1008,10 @@ public sealed class StudyService
         {
             json = json.Substring(sIdx, eIdx - sIdx + 1);
         }
+        else
+        {
+            return ChatSnapshot(sessionId, unitSlug);
+        }
 
         string messageText = "<!-- EXERCISE -->" + json + "<!-- /EXERCISE -->";
 
@@ -843,7 +1090,8 @@ public sealed class StudyService
             history.RemoveAt(history.Count - 1);
         }
         var recent = history.TakeLast(8).ToList();
-        var messages = BuildChatMessages(question, sourceText, recent);
+        var unitMap = BuildUnitMap(_lessons, string.IsNullOrWhiteSpace(unitFilter) ? null : unitFilter);
+        var messages = BuildChatMessages(question, sourceText, recent, unitMap);
 
         string responseText;
         Action<string, string> onToolInvoked = (toolName, _) =>
@@ -855,6 +1103,17 @@ public sealed class StudyService
                 toolName,
                 isDone = false
             });
+        };
+
+        string? capturedExerciseJson = null;
+        LlmToolExecutorAsync toolExecutor = async (toolName, args, token) =>
+        {
+            var res = await ExecuteTutorToolAsync(toolName, args, token).ConfigureAwait(false);
+            if (toolName == "generate_interactive_exercise" && !string.IsNullOrWhiteSpace(res) && res != "{}")
+            {
+                capturedExerciseJson = res;
+            }
+            return res;
         };
 
         if (_llm.UseStreaming)
@@ -872,7 +1131,7 @@ public sealed class StudyService
             var result = await _llm.CompleteWithToolsAsync(
                 messages,
                 TutorTools,
-                ExecuteTutorToolAsync,
+                toolExecutor,
                 onToolInvoked: onToolInvoked,
                 onTokenChunk: onTokenChunk,
                 ct: ct).ConfigureAwait(false);
@@ -884,11 +1143,16 @@ public sealed class StudyService
             var result = await _llm.CompleteWithToolsAsync(
                 messages,
                 TutorTools,
-                ExecuteTutorToolAsync,
+                toolExecutor,
                 onToolInvoked: onToolInvoked,
                 ct: ct).ConfigureAwait(false);
 
             responseText = result.Success ? result.Text.Trim() : DescribeLlmError(result);
+        }
+
+        if (!string.IsNullOrWhiteSpace(capturedExerciseJson) && !responseText.Contains("<!-- EXERCISE -->"))
+        {
+            responseText = responseText + "\n\n<!-- EXERCISE -->" + capturedExerciseJson + "<!-- /EXERCISE -->";
         }
 
         var assistantMsg = new ChatMessage
@@ -936,7 +1200,7 @@ public sealed class StudyService
     /// checked without a live model.
     /// </summary>
     public static List<LlmMessage> BuildChatMessages(
-        string question, string sourceText, IReadOnlyList<StudyMessageRow> history)
+        string question, string sourceText, IReadOnlyList<StudyMessageRow> history, string unitMap = "")
     {
         var messages = new List<LlmMessage> { LlmMessage.System(StudyPrompts.ChatSystem) };
         foreach (var m in history)
@@ -945,14 +1209,16 @@ public sealed class StudyService
                 ? LlmMessage.Assistant(Shorten(m.Text, 1200))
                 : LlmMessage.User(Shorten(m.Text, 1200)));
         }
-        messages.Add(LlmMessage.User(StudyPrompts.BuildChat(question, sourceText)));
+        messages.Add(LlmMessage.User(StudyPrompts.BuildChat(question, sourceText, unitMap)));
         return messages;
     }
 
     /// <summary>
     /// The sources block sent to the model, built from the search hits. Each hit
     /// sends the real section body, so the tutor answers from the lesson and not
-    /// from a short preview of it.
+    /// from a short preview of it. Every source carries a [slug#section] cite
+    /// key the tutor repeats, so the student can trace an answer back to the
+    /// exact lesson section.
     /// </summary>
     public static string BuildSourceText(IReadOnlyList<LessonHit> hits)
     {
@@ -960,8 +1226,42 @@ public sealed class StudyService
         var builder = new StringBuilder();
         foreach (var hit in hits)
         {
-            builder.AppendLine($"- {hit.Unit} / {hit.SectionTitle}:");
+            var cite = string.IsNullOrWhiteSpace(hit.SectionId)
+                ? hit.Slug
+                : $"{hit.Slug}#{hit.SectionId}";
+            var extra = string.IsNullOrWhiteSpace(hit.Topic) || string.Equals(hit.Topic, hit.Skill, StringComparison.OrdinalIgnoreCase)
+                ? hit.Skill
+                : $"{hit.Skill}, {hit.Topic}";
+            builder.AppendLine($"- [{cite}] {hit.Unit} / {hit.SectionTitle} ({extra}):");
             builder.AppendLine(Shorten(hit.Body, 1800));
+        }
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// One orientation block naming every unit and detailing the selected one,
+    /// so the tutor knows the curriculum shape and can point at units and
+    /// topics instead of answering from isolated hits alone.
+    /// </summary>
+    public static string BuildUnitMap(LessonService lessons, string? unitSlug)
+    {
+        if (lessons.Units.Count == 0) return string.Empty;
+        var builder = new StringBuilder();
+        builder.AppendLine($"Curriculum map ({lessons.Units.Count} offline units with vocabulary):");
+        foreach (var unit in lessons.Units)
+        {
+            if (!string.IsNullOrWhiteSpace(unitSlug)
+                && string.Equals(unit.Slug, unitSlug, StringComparison.OrdinalIgnoreCase))
+            {
+                builder.AppendLine($"- {unit.Slug}: {unit.DisplayTitle} (SELECTED UNIT)");
+                builder.AppendLine($"  Skills: {string.Join(", ", unit.Skills)}");
+                builder.AppendLine($"  Topics: {string.Join("; ", unit.Topics.Take(12))}");
+                builder.AppendLine($"  Sections: {unit.Sections.Count}, Words: {unit.Vocabulary.Count}");
+            }
+            else
+            {
+                builder.AppendLine($"- {unit.Slug}: {unit.DisplayTitle}");
+            }
         }
         return builder.ToString();
     }
@@ -976,6 +1276,16 @@ public sealed class StudyService
         LessonService lessons, LessonUnit? lesson, string? unitSlug, string skill, string? topic = null)
     {
         var material = new StringBuilder();
+        if (lesson is null && !string.IsNullOrWhiteSpace(topic) && !topic.Equals("All", StringComparison.OrdinalIgnoreCase))
+        {
+            var hits = lessons.Search(topic, 5);
+            foreach (var hit in hits)
+            {
+                material.AppendLine($"## {hit.Unit} - {hit.SectionTitle}");
+                material.AppendLine(Shorten(hit.Body, 1800));
+                material.AppendLine();
+            }
+        }
         if (lesson is not null)
         {
             var sections = lesson.Sections.AsEnumerable();
@@ -1141,73 +1451,255 @@ public sealed class StudyService
     {
         var set = new ParsedSet();
         var lesson = string.IsNullOrWhiteSpace(unitSlug) ? null : lessons.GetUnit(unitSlug);
-        var unitTitle = lesson?.Title ?? (string.IsNullOrWhiteSpace(unitSlug) ? "IELTS" : unitSlug);
+        var topicClean = !string.IsNullOrWhiteSpace(topic) && !topic.Equals("All", StringComparison.OrdinalIgnoreCase)
+            ? topic.Trim()
+            : null;
+        var unitTitle = topicClean ?? lesson?.Title ?? (string.IsNullOrWhiteSpace(unitSlug) ? "IELTS" : unitSlug);
         set.Title = $"{unitTitle} {skill} Practice";
 
         count = Math.Clamp(count, 1, 20);
         var questions = new List<ParsedQuestion>();
+        var rnd = new Random();
 
-        // 1. Reading and Grammar section question extraction
-        if (lesson is not null && (skill.Equals("Reading", StringComparison.OrdinalIgnoreCase) || skill.Equals("Grammar", StringComparison.OrdinalIgnoreCase)))
+        // 1. Gather relevant lesson sections (or topic search hits)
+        var sections = new List<LessonSection>();
+        if (lesson != null)
         {
-            var sections = lesson.Sections.Where(s => !s.IsAnswerKey && s.FlatText.Length > 0);
-            if (!string.IsNullOrWhiteSpace(topic) && !topic.Equals("All", StringComparison.OrdinalIgnoreCase))
+            sections.AddRange(lesson.Sections.Where(s => !s.IsAnswerKey && s.FlatText.Length > 0));
+        }
+        else if (topicClean != null)
+        {
+            var hits = lessons.Search(topicClean, 5);
+            foreach (var h in hits)
             {
-                var matched = sections.Where(s => string.Equals(s.Topic, topic, StringComparison.OrdinalIgnoreCase)).ToList();
-                if (matched.Count > 0) sections = matched;
+                var u = lessons.GetUnit(h.Unit);
+                var sec = u?.Sections.FirstOrDefault(s => s.Title == h.SectionTitle);
+                if (sec != null && !sec.IsAnswerKey) sections.Add(sec);
             }
-
-            foreach (var sec in sections)
+        }
+        if (sections.Count == 0)
+        {
+            foreach (var u in lessons.Units)
             {
-                var lines = sec.FlatText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                foreach (var line in lines)
-                {
-                    if ((line.Contains("___") || Regex.IsMatch(line, @"^\d+[\.\)]\s+")) && line.Length > 15 && line.Length < 350)
-                    {
-                        var q = new ParsedQuestion
-                        {
-                            Kind = line.Contains("___") ? "gap" : "short",
-                            Prompt = line,
-                            Explanation = $"Derived from lesson section: {sec.Title}.",
-                        };
-                        questions.Add(q);
-                        if (questions.Count >= count) break;
-                    }
-                }
-                if (questions.Count >= count) break;
+                sections.AddRange(u.Sections.Where(s => !s.IsAnswerKey && s.FlatText.Length > 0).Take(2));
             }
         }
 
-        // 2. Vocabulary-based questions (consistent, accurate, and completely offline)
-        var vocabList = lessons.Vocabulary(null, unitSlug, 60).Select(x => x.Word).ToList();
-        if (vocabList.Count >= 2 && questions.Count < count)
+        // ----------------------------------------------------
+        // SKILL: WRITING (Sentence paraphrasing, Task 1 overviews, Task 2 topic sentences)
+        // ----------------------------------------------------
+        if (string.Equals(skill, "Writing", StringComparison.OrdinalIgnoreCase))
         {
-            var rnd = new Random();
+            var sentences = new List<string>();
+            foreach (var sec in sections)
+            {
+                var sents = sec.FlatText.Split(new[] { '.', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(s => s.Length >= 45 && s.Length <= 180 && !s.Contains("___") && !s.Contains("|"))
+                    .ToList();
+                sentences.AddRange(sents);
+            }
+
+            for (int i = 0; i < sentences.Count && questions.Count < count; i++)
+            {
+                var sent = sentences[i];
+                if (i % 3 == 0)
+                {
+                    questions.Add(new ParsedQuestion
+                    {
+                        Kind = "rewrite",
+                        Prompt = $"Paraphrase the following academic statement using nominalization and complex sentence structure:\n\"{sent}.\"",
+                        GapAnswer = sent,
+                        Explanation = "Transform verbs into noun phrases (nominalization), utilize passive voice or cleft sentences, and maintain lexical precision without altering the core meaning."
+                    });
+                }
+                else if (i % 3 == 1)
+                {
+                    questions.Add(new ParsedQuestion
+                    {
+                        Kind = "short",
+                        Prompt = $"Write a 2-sentence Overview paragraph for an IELTS Writing Task 1 report based on this observed phenomenon:\n\"{sent}.\"\nRequirements: Highlight overall major patterns without quoting specific figures.",
+                        GapAnswer = $"Overall, it is immediately apparent that {sent.ToLowerInvariant()}. In addition, significant divergences emerged across the remaining categories.",
+                        Explanation = "An effective Task 1 Overview identifies the most prominent trends, highs, lows, or key contrasts without reporting specific numbers."
+                    });
+                }
+                else
+                {
+                    questions.Add(new ParsedQuestion
+                    {
+                        Kind = "short",
+                        Prompt = $"Write a clear topic sentence and 2 supporting sentences presenting an argument regarding:\n\"{sent}.\"\nRequirements: State a focused claim, provide a logical explanation, and include an illustrative example with cohesive connectors.",
+                        GapAnswer = $"It is widely argued that {sent.ToLowerInvariant()}. This is primarily attributable to structural socioeconomic incentives. For instance, recent empirical studies demonstrate that consistent institutional support yields measurable long-term improvements.",
+                        Explanation = "A high-scoring IELTS essay paragraph presents a clear central topic sentence, followed by elaboration and a concrete example linked with cohesive transitions."
+                    });
+                }
+            }
+
+            // Authentic fallback writing tasks if text sentences were sparse
+            if (questions.Count < count)
+            {
+                var topicName = topicClean ?? "Contemporary Society";
+                var writingBank = new[]
+                {
+                    new ParsedQuestion
+                    {
+                        Kind = "rewrite",
+                        Prompt = $"Identify the informal phrasing and upgrade this sentence to Band 8+ academic register:\n\"A lot of people think that {topicName.ToLowerInvariant()} gets worse because the government doesn't spend enough money.\"",
+                        GapAnswer = $"It is widely contended that issues surrounding {topicName.ToLowerInvariant()} are exacerbated by insufficient governmental fiscal allocation.",
+                        Explanation = "Replace informal quantifiers ('a lot of') and conversational verbs ('gets worse', 'doesn't spend') with formal academic passive constructions and precise lexical items."
+                    },
+                    new ParsedQuestion
+                    {
+                        Kind = "short",
+                        Prompt = $"Write a 2-sentence Overview paragraph for IELTS Writing Task 1 based on the following data summary regarding {topicName}:\n\"Between 2010 and 2025, global investment in {topicName.ToLowerInvariant()} surged dramatically, whereas conventional methods witnessed a persistent downturn.\"\nRequirements: Highlight general trends without quoting exact figures.",
+                        GapAnswer = $"Overall, international investment in {topicName.ToLowerInvariant()} experienced an unprecedented upward trajectory throughout the fifteen-year period. In sharp contrast, traditional approaches exhibited a consistent and noticeable contraction.",
+                        Explanation = "A Band 8+ overview identifies opposing trends and overarching developments without citing specific data points."
+                    },
+                    new ParsedQuestion
+                    {
+                        Kind = "short",
+                        Prompt = $"Write an authoritative topic sentence and 2 supporting sentences addressing the following Task 2 issue:\n\"To what extent should governments intervene in regulating {topicName.ToLowerInvariant()}?\"\nRequirements: State a clear topic sentence, explain the reasoning, and provide a concrete example.",
+                        GapAnswer = $"Proponents of statutory regulation argue that government oversight of {topicName.ToLowerInvariant()} is indispensable for mitigating systemic public risks. Without standardized legal frameworks, profit-driven entities may prioritize short-term gains over societal welfare. For example, jurisdictions that instituted stringent compliance protocols observed a substantial reduction in adverse incidents.",
+                        Explanation = "Ensure the topic sentence directly states your central claim, supported by explanation and a concrete illustration connected with cohesive devices."
+                    }
+                };
+
+                foreach (var wb in writingBank)
+                {
+                    if (questions.Count >= count) break;
+                    questions.Add(wb);
+                }
+            }
+
+            set.Questions = questions.Take(count).ToList();
+            return set;
+        }
+
+        // ----------------------------------------------------
+        // SKILL: READING (Comprehension gap-fills and factual multiple-choice)
+        // ----------------------------------------------------
+        if (string.Equals(skill, "Reading", StringComparison.OrdinalIgnoreCase))
+        {
+            foreach (var sec in sections)
+            {
+                if (questions.Count >= count) break;
+                var sentences = sec.FlatText.Split(new[] { '.', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(s => s.Length >= 50 && s.Length <= 200 && !s.Contains("___") && !s.Contains("|"))
+                    .ToList();
+
+                for (int i = 0; i < sentences.Count && questions.Count < count; i++)
+                {
+                    var sent = sentences[i];
+                    var words = sent.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (words.Length >= 7)
+                    {
+                        var keyWord = words.FirstOrDefault(w => w.Length >= 6 && char.IsLetter(w[0])) ?? words[3];
+                        var blanked = Regex.Replace(sent, $@"\b{Regex.Escape(keyWord)}\b", "___", RegexOptions.IgnoreCase);
+                        if (blanked.Contains("___"))
+                        {
+                            questions.Add(new ParsedQuestion
+                            {
+                                Kind = "gap",
+                                Prompt = $"According to the reading passage, complete the statement with NO MORE THAN TWO WORDS:\n\"{blanked}.\"",
+                                GapAnswer = keyWord,
+                                Explanation = $"Direct quotation from section \"{sec.Title}\": \"{sent}.\""
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // ----------------------------------------------------
+        // SKILL: GRAMMAR (Inversion, Conditionals, Cleft sentences, Participles)
+        // ----------------------------------------------------
+        if (string.Equals(skill, "Grammar", StringComparison.OrdinalIgnoreCase))
+        {
+            var grammarDrills = new[]
+            {
+                new ParsedQuestion
+                {
+                    Kind = "single",
+                    Prompt = "Which sentence correctly demonstrates an inverted conditional structure suitable for IELTS Writing Task 2?",
+                    Options = new List<PracticeOption>
+                    {
+                        new("A", "Had governments acted earlier, the environmental degradation would have been mitigated."),
+                        new("B", "If governments had acted earlier, the environmental degradation had been mitigated."),
+                        new("C", "Had governments acted earlier, so the environmental degradation was mitigated."),
+                        new("D", "Did governments act earlier, the environmental degradation would mitigate.")
+                    },
+                    CorrectKey = "A",
+                    Explanation = "Inverted third conditionals omit 'if' and invert the auxiliary verb: 'Had + subject + past participle, subject + would have + past participle'."
+                },
+                new ParsedQuestion
+                {
+                    Kind = "gap",
+                    Prompt = "Complete the sentence with the appropriate participle form: \"___ (consider) the substantial fiscal constraints, the municipal council postponed the infrastructure initiative.\"",
+                    GapAnswer = "Considering|Having considered",
+                    Explanation = "A present participle clause ('Considering...') or perfect participle clause ('Having considered...') functions as an adverbial clause of reason/condition."
+                },
+                new ParsedQuestion
+                {
+                    Kind = "single",
+                    Prompt = "Identify the option that correctly utilizes a cleft sentence for emphasis:",
+                    Options = new List<PracticeOption>
+                    {
+                        new("A", "It is the lack of institutional investment that hampers technological innovation in rural regions."),
+                        new("B", "What hampers technological innovation is because of the lack of institutional investment."),
+                        new("C", "There is the lack of institutional investment which it hampers technological innovation."),
+                        new("D", "It was because technological innovation lacked institutional investment that it hampers.")
+                    },
+                    CorrectKey = "A",
+                    Explanation = "An 'it-cleft' sentence follows the formula: 'It + is/was + emphasized element + that/who + relative clause'."
+                },
+                new ParsedQuestion
+                {
+                    Kind = "gap",
+                    Prompt = "Complete the sentence with the correct linking connector: \"___ the implementation of stringent measures, air quality in metropolitan centers deteriorated further.\"",
+                    GapAnswer = "Despite|In spite of|Notwithstanding",
+                    Explanation = "'Despite', 'In spite of', and 'Notwithstanding' are prepositions followed by a noun phrase expressing concession."
+                }
+            };
+
+            foreach (var gd in grammarDrills)
+            {
+                if (questions.Count >= count) break;
+                questions.Add(gd);
+            }
+        }
+
+        // ----------------------------------------------------
+        // SKILL: VOCABULARY (and default fallback)
+        // ----------------------------------------------------
+        var vocabList = lessons.Vocabulary(null, unitSlug, 80).Select(x => x.Word).ToList();
+        if (vocabList.Count >= 2)
+        {
             var shuffled = vocabList.OrderBy(_ => rnd.Next()).ToList();
 
             foreach (var w in shuffled)
             {
                 if (questions.Count >= count) break;
 
-                if (!string.IsNullOrWhiteSpace(w.Example) && w.Example.Contains(w.Word, StringComparison.OrdinalIgnoreCase) && rnd.Next(2) == 0)
+                // Authentic sentence completion
+                if (!string.IsNullOrWhiteSpace(w.Example) && w.Example.Contains(w.Word, StringComparison.OrdinalIgnoreCase))
                 {
                     var pattern = Regex.Escape(w.Word);
                     var blanked = Regex.Replace(w.Example, pattern, "___", RegexOptions.IgnoreCase);
                     questions.Add(new ParsedQuestion
                     {
                         Kind = "gap",
-                        Prompt = $"Complete the sentence with the correct vocabulary word:\n\"{blanked}\"",
+                        Prompt = $"Complete the sentence with the correct target vocabulary word:\n\"{blanked}\"",
                         GapAnswer = w.Word,
-                        Explanation = $"\"{w.Word}\" ({w.Form}) means: {w.Meaning}. Example: {w.Example}",
+                        Explanation = $"The missing word is \"{w.Word}\" ({w.Form}). Meaning: {w.Meaning}.\nFull context: {w.Example}",
                     });
                 }
-                else
+                else if (!string.IsNullOrWhiteSpace(w.Meaning))
                 {
-                    var distractors = shuffled.Where(o => o.Word != w.Word && !string.IsNullOrWhiteSpace(o.Meaning))
-                        .Take(3).Select(o => o.Meaning).ToList();
+                    // Target word multiple choice
+                    var distractors = shuffled.Where(o => o.Word != w.Word && !string.IsNullOrWhiteSpace(o.Word))
+                        .Take(3).Select(o => o.Word).ToList();
                     if (distractors.Count >= 3)
                     {
-                        var options = new List<string> { w.Meaning };
+                        var options = new List<string> { w.Word };
                         options.AddRange(distractors);
                         options = options.OrderBy(_ => rnd.Next()).ToList();
 
@@ -1216,24 +1708,24 @@ public sealed class StudyService
                         for (int i = 0; i < options.Count; i++)
                         {
                             char letter = (char)('A' + i);
-                            if (options[i] == w.Meaning) correctLetter = letter;
+                            if (options[i] == w.Word) correctLetter = letter;
                             optList.Add(new PracticeOption(letter.ToString(), options[i]));
                         }
 
                         questions.Add(new ParsedQuestion
                         {
                             Kind = "single",
-                            Prompt = $"What is the meaning of the word \"{w.Word}\" ({w.Form})?",
+                            Prompt = $"Which IELTS vocabulary word matches the definition: \"{w.Meaning}\" ({w.Form})?",
                             Options = optList,
                             CorrectKey = correctLetter.ToString(),
-                            Explanation = $"\"{w.Word}\" ({w.Form}): {w.Meaning}. Example: {w.Example}",
+                            Explanation = $"\"{w.Word}\" ({w.Form}) means: {w.Meaning}. Example: {w.Example}",
                         });
                     }
                 }
             }
         }
 
-        set.Questions = questions;
+        set.Questions = questions.Take(count).ToList();
         return set;
     }
 
@@ -1605,25 +2097,89 @@ public sealed class StudyService
 
     /// <summary>Scores the whole set and marks it submitted.</summary>
     public StudyPracticeSnapshot SubmitSet(int setId, string scope = "All")
+        => SubmitSetAsync(setId, scope).GetAwaiter().GetResult();
+
+    public async Task<StudyPracticeSnapshot> SubmitSetAsync(int setId, string scope = "All", CancellationToken ct = default)
     {
         var set = LoadSetRow(setId);
         if (set is null) return PracticeSnapshot(0, 0, scope);
 
-        var questions = AppDbContext.TableAsync<PracticeQuestion>()
-            .Where(q => q.SetId == setId).ToListAsync().GetAwaiter().GetResult();
+        var questions = await AppDbContext.TableAsync<PracticeQuestion>()
+            .Where(q => q.SetId == setId).ToListAsync().ConfigureAwait(false);
+
+        bool isWritingSet = string.Equals(set.Skill, "Writing", StringComparison.OrdinalIgnoreCase);
 
         int score = 0;
         foreach (var q in questions)
         {
-            q.IsCorrect = IsCorrect(q, q.UserAnswer);
+            var kind = NormalizeKind(q.Kind);
+            var isWritingQuestion = isWritingSet || kind == "short" || kind == "rewrite" || kind == "essay" || kind == "paraphrase";
+
+            if (isWritingQuestion)
+            {
+                var userAnswer = (q.UserAnswer ?? string.Empty).Trim();
+                if (userAnswer.Length == 0)
+                {
+                    q.IsCorrect = false;
+                }
+                else if (_llm != null && _llm.IsConfigured && userAnswer.Length >= 4)
+                {
+                    try
+                    {
+                        var evalPrompt = StudyPrompts.BuildEvaluateWriting(q.Prompt, "", q.GapAnswer, userAnswer);
+                        var evalMessages = new[]
+                        {
+                            LlmMessage.System(StudyPrompts.EvaluateWritingSystem),
+                            LlmMessage.User(evalPrompt)
+                        };
+                        var evalRes = await _llm.CompleteAsync(evalMessages, ct).ConfigureAwait(false);
+                        if (evalRes.Success && TryParseWritingEval(evalRes.Text, out bool isAiCorrect, out double aiScore, out string bandEst, out string aiFeedback, out string improvedVer))
+                        {
+                            q.IsCorrect = isAiCorrect;
+                            var aiNote = $"\n\n[AI Evaluation - {bandEst}]: {aiFeedback}";
+                            if (!string.IsNullOrWhiteSpace(improvedVer))
+                            {
+                                aiNote += $"\nSuggested Band 8+ Upgrade: {improvedVer}";
+                            }
+                            if (!q.Explanation.Contains("[AI Evaluation"))
+                            {
+                                q.Explanation = (q.Explanation + aiNote).Trim();
+                            }
+                        }
+                        else
+                        {
+                            q.IsCorrect = userAnswer.Length >= 15;
+                        }
+                    }
+                    catch
+                    {
+                        q.IsCorrect = userAnswer.Length >= 15;
+                    }
+                }
+                else
+                {
+                    // Offline evaluation heuristic
+                    bool plausibleLength = userAnswer.Length >= 15;
+                    q.IsCorrect = plausibleLength;
+                    if (!q.Explanation.Contains("(Offline Note:"))
+                    {
+                        q.Explanation = (q.Explanation + "\n\n(Offline Note: In IELTS Writing there are multiple valid structures. Your response length and grammar have been recorded. Configure an AI model in Settings for in-depth Band scores and grammar diagnostics.)").Trim();
+                    }
+                }
+            }
+            else
+            {
+                q.IsCorrect = IsCorrect(q, q.UserAnswer);
+            }
+
             if (q.IsCorrect) score++;
-            AppDbContext.UpdateAsync(q).GetAwaiter().GetResult();
+            await AppDbContext.UpdateAsync(q).ConfigureAwait(false);
         }
 
         set.Score = score;
         set.Total = questions.Count;
         set.Status = "Submitted";
-        AppDbContext.UpdateAsync(set).GetAwaiter().GetResult();
+        await AppDbContext.UpdateAsync(set).ConfigureAwait(false);
 
         return PracticeSnapshot(set.SessionId, setId, scope);
     }
@@ -1651,7 +2207,6 @@ public sealed class StudyService
                     given.TryGetValue(Norm(r.Label), out var value) && value == Norm(r.Answer));
 
             case "gap":
-            case "short":
             case "completion":
                 var accepted = (q.GapAnswer ?? string.Empty)
                     .Split('|', StringSplitOptions.RemoveEmptyEntries)
@@ -1659,8 +2214,23 @@ public sealed class StudyService
                 if (accepted.Count == 0 && !string.IsNullOrWhiteSpace(q.CorrectKey)) accepted.Add(Norm(q.CorrectKey));
                 return accepted.Contains(Norm(answer));
 
+            case "short":
+            case "rewrite":
+            case "essay":
+                var shortAccepted = (q.GapAnswer ?? string.Empty)
+                    .Split('|', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(Norm).Where(s => s.Length > 0).ToList();
+                if (shortAccepted.Count > 0 && shortAccepted.Contains(Norm(answer))) return true;
+                return answer.Trim().Length >= 15;
+
             default:
-                return Norm(answer) == Norm(q.CorrectKey);
+                if (Norm(answer) == Norm(q.CorrectKey)) return true;
+                if (q.Options.Count > 0)
+                {
+                    var targetOpt = q.Options.FirstOrDefault(o => Norm(o.Key) == Norm(q.CorrectKey));
+                    if (targetOpt != null && Norm(answer) == Norm(targetOpt.Text)) return true;
+                }
+                return false;
         }
     }
 
@@ -1761,6 +2331,9 @@ public sealed class StudyService
             unitSlug: string.IsNullOrWhiteSpace(unitFilter) ? null : unitFilter);
         var sources = hits.Select(h => new StudySource(h.Unit, h.SectionTitle, Shorten(h.Snippet, 240))).ToList();
         var sourceText = BuildSourceText(hits);
+        var unitMap = BuildUnitMap(_lessons, string.IsNullOrWhiteSpace(unitFilter) ? null : unitFilter);
+        if (!string.IsNullOrWhiteSpace(unitMap))
+            sourceText += "\n" + unitMap;
 
         var messages = new List<LlmMessage>
         {

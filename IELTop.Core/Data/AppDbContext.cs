@@ -45,9 +45,11 @@ public sealed class AppDbContext : IDisposable
     }
 
     public static string DefaultDatabasePath() =>
-        _cachedDbPath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "IELTop", "ieltop.db");
+        _cachedDbPath ?? RealDefaultPath();
+
+    private static string RealDefaultPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "IELTop", "ieltop.db");
 
     public static void SetCustomPathForTesting(string? path)
     {
@@ -55,6 +57,21 @@ public sealed class AppDbContext : IDisposable
         {
             _asyncConnection = null;
             _cachedDbPath = path;
+        }
+    }
+
+    private static string? _userPapersOverride;
+
+    public static string UserPapersDbPath() =>
+        _userPapersOverride ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "IELTop", "user-papers.db");
+
+    public static void SetCustomUserPapersPathForTesting(string? path)
+    {
+        lock (SyncLock)
+        {
+            _userPapersOverride = path;
         }
     }
 

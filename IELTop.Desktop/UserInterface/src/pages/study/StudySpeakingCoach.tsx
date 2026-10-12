@@ -1,18 +1,16 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  Mic, Square, Sparkles, Play, Pause, RotateCcw, Volume2,
-  CheckCircle2, AlertTriangle, BookOpen, Clock, Award, ChevronRight,
-  TrendingUp, RefreshCw, Plus, Trash2, History
+  Mic, Square, Sparkles, Play, Pause, Volume2,
+  AlertTriangle, BookOpen, Clock, Award, ChevronRight,
+  TrendingUp, RefreshCw, History, X
 } from 'lucide-react'
 import { call } from '@/bridge'
 import { blobToWavBase64 } from '@/audio'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface SpeakingCoachProps {
   onError?: (msg: string) => void
@@ -177,7 +175,21 @@ export default function StudySpeakingCoach({ onError }: SpeakingCoachProps) {
         reason,
         drillType
       })
-      setActiveDrill({ sentence, drill: res })
+      let parsed = res
+      if (typeof res === 'string') {
+        try {
+          const sIdx = res.indexOf('{')
+          const eIdx = res.lastIndexOf('}')
+          if (sIdx >= 0 && eIdx > sIdx) {
+            parsed = JSON.parse(res.substring(sIdx, eIdx - sIdx + 1))
+          } else {
+            parsed = { explanation: res }
+          }
+        } catch {
+          parsed = { explanation: res }
+        }
+      }
+      setActiveDrill({ sentence, drill: parsed })
     } catch (e: any) {
       onError?.(e.message)
     } finally {
@@ -214,6 +226,8 @@ export default function StudySpeakingCoach({ onError }: SpeakingCoachProps) {
             variant="outline"
             size="sm"
             onClick={handleSuggestTopic}
+            disabled={!canUseAi}
+            title={canUseAi ? 'Suggest an IELTS topic' : 'Configure AI in Settings to suggest topics'}
             className="gap-1.5"
           >
             <Sparkles className="h-4 w-4 text-primary" />
@@ -546,10 +560,10 @@ export default function StudySpeakingCoach({ onError }: SpeakingCoachProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 w-6 p-0 text-muted-foreground"
+                className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
                 onClick={() => setActiveDrill(null)}
               >
-                ✕
+                <X className="h-4 w-4" />
               </Button>
             </div>
             <CardDescription className="text-xs font-medium text-foreground">
@@ -557,21 +571,30 @@ export default function StudySpeakingCoach({ onError }: SpeakingCoachProps) {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-4 pt-1 flex flex-col gap-2.5 text-xs">
-            {activeDrill.drill?.upgraded && (
+            {(activeDrill.drill?.modelAnswer || activeDrill.drill?.upgraded) && (
               <div className="rounded bg-primary/10 p-2.5 text-foreground font-medium">
                 <span className="text-primary font-semibold mr-1.5">Model Answer:</span>
-                {activeDrill.drill.upgraded}
+                {activeDrill.drill.modelAnswer || activeDrill.drill.upgraded}
+              </div>
+            )}
+            {(activeDrill.drill?.explanation || activeDrill.drill?.tip) && (
+              <div className="text-muted-foreground leading-relaxed">
+                <span className="font-semibold text-foreground mr-1">Coaching Tip:</span>
+                {activeDrill.drill.explanation || activeDrill.drill.tip}
+              </div>
+            )}
+            {activeDrill.drill?.gapExercise && (
+              <div className="rounded bg-muted/40 p-2.5 text-muted-foreground border">
+                <span className="font-semibold text-foreground mr-1">Practice Exercise:</span>
+                <span className="font-mono text-foreground">{activeDrill.drill.gapExercise}</span>
               </div>
             )}
             {activeDrill.drill?.collocations && (
               <div className="text-muted-foreground">
                 <span className="font-semibold text-foreground">Key collocations:</span>{' '}
-                {activeDrill.drill.collocations.join(', ')}
-              </div>
-            )}
-            {activeDrill.drill?.tip && (
-              <div className="text-muted-foreground italic">
-                Tip: {activeDrill.drill.tip}
+                {Array.isArray(activeDrill.drill.collocations)
+                  ? activeDrill.drill.collocations.join(', ')
+                  : activeDrill.drill.collocations}
               </div>
             )}
           </CardContent>

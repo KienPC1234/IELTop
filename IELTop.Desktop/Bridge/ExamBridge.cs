@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using IELTop.Desktop.Web;
+using IELTop.Services.Diagnostics;
 using IELTop.Services.Exam;
 
 namespace IELTop.Desktop.Bridge;
@@ -48,7 +49,7 @@ public sealed class ExamBridge
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[exam] push failed: {ex.Message}");
+            AppLog.Error("exam", "State push failed.", ex);
         }
     }
 
@@ -181,12 +182,22 @@ public sealed class ExamBridge
         int comma = base64.IndexOf(',');
         if (comma >= 0) base64 = base64[(comma + 1)..];
 
+        byte[] wav;
+        try
+        {
+            wav = Convert.FromBase64String(base64);
+        }
+        catch (FormatException)
+        {
+            throw new BridgeException("The recording could not be saved. Record again.");
+        }
+
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "IELTop", "recordings");
         Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"speaking_{DateTime.Now:yyyyMMdd_HHmmss}.wav");
-        await File.WriteAllBytesAsync(path, Convert.FromBase64String(base64));
+        await File.WriteAllBytesAsync(path, wav);
         return path;
     }
 

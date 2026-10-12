@@ -1,0 +1,62 @@
+IELTop Listening audio: verified download links
+===============================================
+Every link below was opened live and confirmed with a Firecrawl scrape.
+License: VOA is a US federal agency. Its own produced text, audio and
+video is public domain. Always re-check the terms on the source site
+before you redistribute anything. For personal study use, download the
+MP3, copy it to %LocalAppData%\IELTop\content\Audio, then set the
+Listening part audioFile to the file name in Exam Editor.
+
+[1] American Stories index: 57 stories, 15-minute MP3 plus full text
+  http://www.manythings.org/voa/stories/
+  Confirmed: index lists 57 stories by author, each with text and audio.
+
+[2] Shorter daily clips with transcripts (better IELTS part length)
+  http://www.manythings.org/voa/scripts/
+  http://www.manythings.org/voa/news/
+  Confirmed: topic-sorted VOA programs plus a daily 10-minute news page
+  with audio and text.
+
+[3] Single story verified end to end (transcript plus MP3 button)
+  Text: http://www.manythings.org/voa/stories/The_Gift_of_the_Magi_-_By_O_Henry.html
+  MP3:  http://www.archive.org/download/AmericanStories/The_Gift_of_the_Magi_-_By_O_Henry.mp3
+  Confirmed: the live story page shows the full transcript and a
+  Download MP3 button pointing at the archive.org file above. Other
+  stories follow the same pattern through their own Download MP3 button.
+
+[4] archive.org collection search (bulk MP3 set, same AmericanStories set)
+  https://archive.org/search.php?query=creator%3A%22VOA+Special+English%22
+  Confirmed: live link on the archive.org AmericanStories item page.
+
+[5] listenslice library: leveled VOA audio with transcripts
+  https://www.listenslice.com/library
+  Episodes confirmed on the live page:
+  https://www.listenslice.com/library/voa-3521-m3e-GHw7sbaW
+    The Brooklyn Bridge, Intermediate, 3:39
+  https://www.listenslice.com/library/voa-1579-ybyTOa8cpoCo
+    Barbara McClintock, Intermediate, 4:10
+  https://www.listenslice.com/library/lv-aliceinwonderland_1102_librivox-02
+    Full-cast drama, multi-voice dialogue texture, 12:20
+  Note: listenslice wraps VOA and Librivox audio. Check the credited
+  source on each episode page.
+
+[6] VOA Learning English (story pages with audio player)
+  https://learningenglish.voanews.com/
+  Story pages confirmed on the live homepage:
+  https://learningenglish.voanews.com/a/4272901.html
+  https://learningenglish.voanews.com/a/6654462.html
+  https://learningenglish.voanews.com/a/3849097.html
+  Note: open the story and use its audio player. Direct MP3 links were
+  not confirmed for these pages, so prefer sections [1]-[5] for downloads.
+
+[7] VOA structured course: Let's Learn English, leveled lessons
+  Course hub: https://learningenglish.voanews.com/p/5644.html
+  Level 1:    https://learningenglish.voanews.com/z/6324
+  Beginning:  https://learningenglish.voanews.com/p/5609.html
+  Lesson 1:   https://learningenglish.voanews.com/a/let-s-learn-english---level-1---lesson-1-welcome-/5781394.html
+  Confirmed: hub, level and lesson pages all live. Open any lesson for
+  its audio, transcript and practice. Work lessons in order, one level
+  at a time.
+
+Do NOT use BBC Learning English or British Council audio for shipped
+content. Free to listen, not licensed for redistribution.

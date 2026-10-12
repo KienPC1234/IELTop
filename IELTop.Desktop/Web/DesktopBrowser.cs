@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using IELTop.Services.Diagnostics;
 using Microsoft.Maui.Controls;
 
 namespace IELTop.Desktop.Web;
@@ -90,7 +91,8 @@ public sealed class DesktopBrowser : IDisposable
         // An engine that is missing will still be missing, and navigating again
         // would only repeat the same failure for the student to read twice.
         if (_engineMissing) return;
-        Load(_pendingUrl ?? string.Empty);
+        if (string.IsNullOrEmpty(_pendingUrl)) return;
+        Load(_pendingUrl);
     }
 
     /// <summary>Sends a message to the page. Does nothing once the view is gone.</summary>
@@ -270,7 +272,7 @@ public sealed class DesktopBrowser : IDisposable
         if (_loadFailed) return;
         _loadFailed = true;
 
-        Console.Error.WriteLine($"[WebView] {problem.Detail} ({detail})");
+        AppLog.Error("webview", $"{problem.Title} | {problem.Detail} | {detail}");
         WebViewLog.Write($"{problem.Title} | {problem.Detail} | {detail}");
         LoadFailed?.Invoke(problem);
     }
@@ -312,7 +314,7 @@ public sealed class DesktopBrowser : IDisposable
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[WebView] The page message failed: {ex.Message}");
+            AppLog.Error("webview", "The page message failed.", ex);
         }
     }
 }

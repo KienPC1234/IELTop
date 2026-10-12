@@ -6,7 +6,7 @@ export default function WritingPanel({
   part,
   busy,
   runCall,
-  run,
+  run: _run,
 }: {
   part: any
   busy?: boolean

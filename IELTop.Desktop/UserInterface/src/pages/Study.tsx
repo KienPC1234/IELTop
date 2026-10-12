@@ -1,43 +1,64 @@
-import { useState } from 'react'
-import { MessageSquare, Mic, AlertCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { MessageSquare, Mic, BookText, Layers } from 'lucide-react'
+import { call } from '@/bridge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ErrorBar, PageHeader } from '@/components/shared'
 import StudyChatTutor from '@/pages/study/StudyChatTutor'
 import StudySpeakingCoach from '@/pages/study/StudySpeakingCoach'
+import StudyVocab from '@/pages/study/StudyVocab'
+import StudyPractice from '@/pages/study/StudyPractice'
 
-/// The renovated Study screen: divided cleanly into two interactive tabs:
-/// 1. AI Study Tutor: an interactive chatbot grounded in the complete 14-unit lesson
-///    curriculum, capable of explaining concepts and generating 8 interactive exercise types.
-/// 2. Speaking Coach: an intelligent speaking partner with flexible topic suggestions,
-///    official 4-criteria IELTS evaluation (FC, LR, GRA, PR), and transcript-aligned audio slicing.
-export default function Study({ onNavigate }: { onNavigate?: (target: string) => void }) {
-  const [tab, setTab] = useState<'tutor' | 'speaking'>('tutor')
+/// Study screen: interactive AI Study Tutor & Speaking Coach paired with
+/// offline Vocabulary browser and Practice question sets.
+export default function Study({ onNavigate: _onNavigate }: { onNavigate?: (target: string) => void }) {
+  const [tab, setTab] = useState<'tutor' | 'speaking' | 'vocab' | 'practice'>('tutor')
+  const [units, setUnits] = useState<any[]>([])
+  const [canUseAi, setCanUseAi] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    call('study.chat.snapshot', { sessionId: 0, unit: '' })
+      .then((snap: any) => {
+        setUnits(snap?.units ?? [])
+        setCanUseAi(Boolean(snap?.canUseAi))
+      })
+      .catch((e: any) => setError(e.message))
+  }, [])
 
   return (
     <div className="flex flex-col gap-4">
       <ErrorBar message={error} onDismiss={() => setError('')} />
 
       <PageHeader
-        title="Study & Speaking"
-        description="Interactive IELTS AI tutor grounded in authentic curriculum, and Speaking coach with 4-criteria assessment and audio segment drills."
+        title="Study & Curriculum"
+        description="Interactive AI tutor grounded in 14 curriculum units, Speaking coach with 4-criteria evaluation, academic vocabulary browser, and practice sets."
       />
 
       <Tabs value={tab} onValueChange={(val: any) => setTab(val)}>
-        <TabsList className="grid w-full max-w-[400px] grid-cols-2">
+        <TabsList className="grid w-full max-w-[640px] grid-cols-4">
           <TabsTrigger value="tutor" className="gap-2">
             <MessageSquare className="h-4 w-4" />
-            AI Study Tutor
+            AI Tutor
           </TabsTrigger>
           <TabsTrigger value="speaking" className="gap-2">
             <Mic className="h-4 w-4" />
             Speaking Coach
+          </TabsTrigger>
+          <TabsTrigger value="vocab" className="gap-2">
+            <BookText className="h-4 w-4" />
+            Vocabulary
+          </TabsTrigger>
+          <TabsTrigger value="practice" className="gap-2">
+            <Layers className="h-4 w-4" />
+            Practice Sets
           </TabsTrigger>
         </TabsList>
       </Tabs>
 
       {tab === 'tutor' && <StudyChatTutor onError={setError} />}
       {tab === 'speaking' && <StudySpeakingCoach onError={setError} />}
+      {tab === 'vocab' && <StudyVocab units={units} onError={setError} />}
+      {tab === 'practice' && <StudyPractice units={units} canUseAi={canUseAi} onError={setError} />}
     </div>
   )
 }

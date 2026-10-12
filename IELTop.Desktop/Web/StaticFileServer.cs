@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using IELTop.Desktop.Bridge;
+using IELTop.Services.Diagnostics;
 
 namespace IELTop.Desktop.Web;
 
@@ -172,7 +173,7 @@ public sealed class StaticFileServer : IDisposable
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[StaticFileServer] Accept error: {ex.Message}");
+                AppLog.Error("server", "Accept failed.", ex);
             }
         }
     }
@@ -285,9 +286,23 @@ public sealed class StaticFileServer : IDisposable
                 return;
             }
 
-            // Media folder streaming (audio clips, diagrams, exam images)
+            // Media folder streaming (audio clips, diagrams, exam images).
+            // Gated by the same key as /api/*: an <audio> or <img> tag still
+            // sends the cookie, so the page keeps working while another local
+            // process that only knows the port cannot read the files.
             if (relative.StartsWith("media/", StringComparison.OrdinalIgnoreCase))
             {
+                if (!IsAuthorized(context, out bool mediaGranted))
+                {
+                    WritePlainText(context, HttpStatusCode.Forbidden, "IELTop is already running. Open the app window instead of this page.");
+                    return;
+                }
+
+                if (mediaGranted)
+                {
+                    GrantAccess(response);
+                }
+
                 await HandleMediaAsync(context, relative["media/".Length..]).ConfigureAwait(false);
                 return;
             }
@@ -319,7 +334,7 @@ public sealed class StaticFileServer : IDisposable
                 response.Close();
             }
             catch { }
-            Console.Error.WriteLine($"[StaticFileServer] Request processing error: {ex.Message}");
+            AppLog.Error("server", "Request failed.", ex);
         }
     }
 
@@ -426,7 +441,7 @@ public sealed class StaticFileServer : IDisposable
         // Restrict CORS precisely to loopback origin on this instance
         response.Headers["Access-Control-Allow-Origin"] = BaseUrl;
         response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
-        response.Headers["Access-Control-Allow-Headers"] = "Content-Type, Range, Authorization";
+        response.Headers["Access-Control-Allow-Headers"] = "Content-Type, Range, Authorization, X-ILTop-Key";
         response.Headers["Access-Control-Expose-Headers"] = "Content-Range, Content-Length, Accept-Ranges";
         response.Headers["Vary"] = "Origin";
 

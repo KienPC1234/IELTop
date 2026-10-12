@@ -15,8 +15,10 @@ public static class StudyPrompts
     public const string ChatSystem =
         "You are an interactive, encouraging, and highly competent personal IELTS tutor. " +
         "You actively teach the student using authentic IELTS lesson materials provided in the context. " +
+        "Language adaptation: Respond naturally in the same language the student communicates in (e.g., if the student asks in Vietnamese, explain clearly in Vietnamese while preserving IELTS terminology, target vocabulary, and practice examples in English; if the student asks in English, respond in English). " +
         "Keep explanations concise, well-structured, and practical (maximum 3 to 5 clear points with real examples). " +
-        "Whenever appropriate, conclude with a quick interactive check question or invite the student to practice. " +
+        "Format your answer using clean Markdown (headers, bullet lists, bold text, tables). " +
+        "Interactive tools: When the student asks to practice, take a quiz, test their understanding, or when completing an explanation of an IELTS concept, call the tool `generate_interactive_exercise` to provide an interactive exercise card. You may also call `search_curriculum` to retrieve authentic lessons and `get_vocabulary_entry` for dictionary definitions. " +
         "Bands mentioned are practice estimates, never official IELTS scores.";
 
     /// <summary>System prompt for official 4-criteria speaking evaluation.</summary>
@@ -114,6 +116,7 @@ public static class StudyPrompts
             {"label": "Item 2", "answer": "Match 2"}
           ],
           "reorderTokens": ["words", "in", "scrambled", "order"],
+          "modelAnswer": "Complete correct target sentence (especially for reorder)",
           "correctKey": "A",
           "gapAnswer": "accepted answer|alternative accepted answer",
           "explanation": "Detailed explanation citing evidence from the material."
@@ -141,9 +144,14 @@ public static class StudyPrompts
         """;
     }
 
-    public static string BuildChat(string question, string sources)
+    public static string BuildChat(string question, string sources, string unitMap = "")
     {
         var sb = new StringBuilder();
+        if (!string.IsNullOrWhiteSpace(unitMap))
+        {
+            sb.AppendLine(unitMap.TrimEnd());
+            sb.AppendLine();
+        }
         if (!string.IsNullOrWhiteSpace(sources))
         {
             sb.AppendLine("Authentic lesson curriculum context (ground your explanation on this):");
@@ -153,7 +161,8 @@ public static class StudyPrompts
         sb.AppendLine("Student query:");
         sb.AppendLine(question);
         sb.AppendLine();
-        sb.AppendLine("Answer as the tutor in clear, friendly English. Structure your response with bullet points where helpful.");
+        sb.AppendLine("Answer as the tutor naturally matching the student's query language (e.g., in Vietnamese if the user asked in Vietnamese, in English if asked in English). Keep English quotations and IELTS target vocabulary accurate. Structure your response with clean markdown and bullet points where helpful.");
+        sb.AppendLine("When you use a lesson source, name it with its cite key like [unit-5#grammar-1] so the student can open that exact section. When the question fits a unit topic better than the quoted sources, say which unit to read next.");
         return sb.ToString();
     }
 
@@ -174,52 +183,53 @@ public static class StudyPrompts
             _ => "standard exam application: authentic IELTS question style.",
         };
 
-        return new StringBuilder()
+        var isWriting = string.Equals(skill, "Writing", StringComparison.OrdinalIgnoreCase);
+
+        var sb = new StringBuilder()
             .AppendLine($"Generate {count} IELTS practice questions based SOLELY on the lesson text below.")
             .AppendLine($"Skill: {skill}. Topic: {topic}. Difficulty: {depth}")
             .AppendLine("Rules:")
-            .AppendLine("1. Grounding: Every question and answer must be strictly supported by the text below.")
-            .AppendLine("2. Allowed question kinds:")
-            .AppendLine("   - single: Multiple-choice question with 4 options labeled A, B, C, D in options array, and correctKey set to the letter.")
-            .AppendLine("   - gap: Sentence with ___ (three underscores) for the blank. Put the exact word(s) in gapAnswer. Separate alternative accepted forms with |.")
-            .AppendLine("   - completion: Short summary or note with ___. Put accepted answers in gapAnswer.")
-            .AppendLine("   - match: Matching exercise. Fill rows with objects containing label and answer.")
-            .AppendLine("3. Explanations: Every question must include a concise explanation quoting evidence from the text.")
-            .AppendLine("4. Output: Return ONLY raw JSON. No markdown code blocks, no backticks, no comments.")
-            .AppendLine()
-            .AppendLine("Lesson material:")
-            .AppendLine(clipped)
-            .AppendLine()
-            .AppendLine("Required JSON Schema:")
-            .AppendLine("{")
-            .AppendLine("  \"title\": \"Descriptive Set Title\",")
-            .AppendLine("  \"questions\": [")
-            .AppendLine("    {")
-            .AppendLine("      \"kind\": \"single\",")
-            .AppendLine("      \"prompt\": \"According to the text, why did the author conclude...?\",")
-            .AppendLine("      \"options\": [")
-            .AppendLine("        {\"key\": \"A\", \"text\": \"First option\"},")
-            .AppendLine("        {\"key\": \"B\", \"text\": \"Second option\"},")
-            .AppendLine("        {\"key\": \"C\", \"text\": \"Third option\"},")
-            .AppendLine("        {\"key\": \"D\", \"text\": \"Fourth option\"}")
-            .AppendLine("      ],")
-            .AppendLine("      \"rows\": [],")
-            .AppendLine("      \"correctKey\": \"B\",")
-            .AppendLine("      \"gapAnswer\": \"\",")
-            .AppendLine("      \"explanation\": \"Paragraph 3 states that...\"")
-            .AppendLine("    },")
-            .AppendLine("    {")
-            .AppendLine("      \"kind\": \"gap\",")
-            .AppendLine("      \"prompt\": \"The total number of surveyed students was ___.\",")
-            .AppendLine("      \"options\": [],")
-            .AppendLine("      \"rows\": [],")
-            .AppendLine("      \"correctKey\": \"\",")
-            .AppendLine("      \"gapAnswer\": \"450|four hundred and fifty\",")
-            .AppendLine("      \"explanation\": \"Section 2 explicitly mentions 450 participants.\"")
-            .AppendLine("    }")
-            .AppendLine("  ]")
-            .AppendLine("}")
-            .ToString();
+            .AppendLine("1. Grounding: Every question and answer must be strictly supported by the text below.");
+
+        if (isWriting)
+        {
+            sb.AppendLine("2. Target Skill is IELTS WRITING:");
+            sb.AppendLine("   - Use 'short' or 'rewrite' kinds where candidates must practice writing sentences or short paragraphs according to specific task criteria.");
+            sb.AppendLine("   - Exercises must include: paraphrasing a prompt using complex grammar, writing an overview for Task 1, writing a clear topic sentence for a Task 2 body paragraph, writing a supporting explanation with cohesion, or upgrading informal sentences to Band 8+ academic register.");
+            sb.AppendLine("   - In 'gapAnswer', provide a Band 8.5+ model response sentence or paragraph.");
+        }
+        else
+        {
+            sb.AppendLine("2. Allowed question kinds:");
+            sb.AppendLine("   - single: Multiple-choice question with 4 options labeled A, B, C, D in options array, and correctKey set to the letter.");
+            sb.AppendLine("   - gap: Sentence with ___ (three underscores) for the blank. Put the exact word(s) in gapAnswer. Separate alternative accepted forms with |.");
+            sb.AppendLine("   - completion: Short summary or note with ___. Put accepted answers in gapAnswer.");
+            sb.AppendLine("   - match: Matching exercise. Fill rows with objects containing label and answer.");
+        }
+
+        sb.AppendLine("3. Explanations: Every question must include a concise explanation quoting evidence from the text.")
+          .AppendLine("4. Output: Return ONLY raw JSON. No markdown code blocks, no backticks, no comments.")
+          .AppendLine()
+          .AppendLine("Lesson material:")
+          .AppendLine(clipped)
+          .AppendLine()
+          .AppendLine("Required JSON Schema:")
+          .AppendLine("{")
+          .AppendLine("  \"title\": \"Descriptive Set Title\",")
+          .AppendLine("  \"questions\": [")
+          .AppendLine("    {")
+          .AppendLine("      \"kind\": \"" + (isWriting ? "short" : "single") + "\",")
+          .AppendLine("      \"prompt\": \"" + (isWriting ? "Write a Band 8+ overview sentence summarizing the key trend shown in the data: ..." : "According to the text, why did the author conclude...?") + "\",")
+          .AppendLine("      \"options\": [],")
+          .AppendLine("      \"rows\": [],")
+          .AppendLine("      \"correctKey\": \"" + (isWriting ? "" : "B") + "\",")
+          .AppendLine("      \"gapAnswer\": \"" + (isWriting ? "Overall, it is immediately evident that while renewable energy consumption grew markedly, fossil fuel reliance exhibited a consistent downward trajectory." : "") + "\",")
+          .AppendLine("      \"explanation\": \"A Band 8+ overview identifies major opposing trends without citing specific figures.\"")
+          .AppendLine("    }")
+          .AppendLine("  ]")
+          .AppendLine("}");
+
+        return sb.ToString();
     }
 
     public const string ToolSystem =
@@ -241,6 +251,37 @@ public static class StudyPrompts
         Question: {prompt}
         Correct answer: {correct}. Student wrote: {chosen}.
         Explain in two concise lines why the correct answer is right and one tip.
+        """;
+    }
+
+    /// <summary>System prompt for grading open-ended IELTS writing responses.</summary>
+    public const string EvaluateWritingSystem =
+        "You are an expert IELTS Writing Examiner. Evaluate the student's answer accurately, " +
+        "remembering that multiple grammatical structures and paraphrases can be valid. " +
+        "Return ONLY a JSON object. No preamble, no markdown fences.";
+
+    public static string BuildEvaluateWriting(string prompt, string contextText, string targetAnswer, string studentResponse)
+    {
+        return $$"""
+        You are an expert IELTS Writing Examiner. Evaluate the following student's response for an IELTS writing exercise.
+        Exercise Prompt: {{prompt}}
+        {{(string.IsNullOrWhiteSpace(contextText) ? "" : $"Context / Source sentence: {contextText}\n")}}
+        Model Answer / Target Pattern: {{targetAnswer}}
+        Student's Submitted Response: "{{studentResponse}}"
+
+        Instructions:
+        1. Check if the student's response accurately answers the prompt with acceptable grammar, vocabulary, and IELTS academic style.
+        2. In IELTS Writing, multiple valid paraphrases or grammatical variations exist. Do not mark an answer wrong simply because it uses different words from the model answer, as long as the meaning is accurate and grammar is sound.
+        3. Provide specific, constructive feedback and an estimated band level.
+
+        Return ONLY a JSON object:
+        {
+          "isCorrect": true,
+          "score": 1.0,
+          "bandEstimate": "Band 7.5",
+          "feedback": "Concise feedback on grammar, structure, and vocabulary choice.",
+          "improvedVersion": "An enhanced Band 8+ version if applicable"
+        }
         """;
     }
 }

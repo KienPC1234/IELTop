@@ -10,7 +10,7 @@ import { EmptyState, ErrorBar, PageHeader } from '@/components/shared'
 
 /// Browse IELTop content servers, connect, and download papers. Servers can be
 /// anonymous, need an access code, or need a login. Secrets stay on this machine.
-export default function Servers({ onNavigate }) {
+export default function Servers({ onNavigate: _onNavigate }) {
   const page = usePage('servers.snapshot')
   const d = page.data
   if (page.loading && !d) return <div className="text-muted-foreground">Loading servers...</div>

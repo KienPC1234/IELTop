@@ -1,5 +1,6 @@
 using System;
 using System.Text.Json;
+using IELTop.Services.Diagnostics;
 using Microsoft.JSInterop;
 
 namespace IELTop.Desktop.Bridge;
@@ -37,10 +38,12 @@ public sealed class JsBridge
                 using var document = JsonDocument.Parse(argsJson);
                 args = document.RootElement.Clone();
             }
-            catch (JsonException)
+            catch (JsonException ex)
             {
-                // A malformed argument bag is treated as "no arguments" rather
-                // than failing the whole call with a technical message.
+                // A malformed bag cannot run as "no arguments": a truncated
+                // base64 payload would then look like an empty recording.
+                AppLog.Warn("bridge", $"Bad args for '{method}' (id {id}): {ex.Message}");
+                return BridgeRouter.Serialize(new BridgeResponse { Id = id, Error = "The action arguments were invalid." });
             }
         }
 
@@ -72,7 +75,7 @@ public sealed class JsBridge
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"[bridge] event '{eventName}' could not be serialized: {ex}");
+                AppLog.Error("bridge", $"Event '{eventName}' could not be serialized.", ex);
                 return;
             }
         }

@@ -182,6 +182,61 @@ public sealed class StudyToolCallingAndStreamingTests : IDisposable
         Assert.Contains("Relative Clauses", u1.GrammarFocus);
     }
 
+    [Fact]
+    public void CheckTutorAnswer_Evaluates_Matching_Question_From_MatchRows()
+    {
+        var study = new StudyService(_lessons, new FakeLlm("Mock"));
+        string questionJson = """
+        {
+          "kind": "match",
+          "matchRows": [
+            { "label": "1", "answer": "B" },
+            { "label": "2", "answer": "A" }
+          ],
+          "correctKey": "",
+          "gapAnswer": "",
+          "explanation": "1 matches B and 2 matches A."
+        }
+        """;
+
+        var resFull = study.CheckExerciseAnswer(questionJson, "1=B, 2=A");
+        Assert.True(resFull.IsCorrect);
+        Assert.Equal(1.0, resFull.Score);
+        Assert.Contains("1=B", resFull.ModelAnswer);
+
+        var resAltPunctuation = study.CheckExerciseAnswer(questionJson, "1:B; 2:A");
+        Assert.True(resAltPunctuation.IsCorrect);
+        Assert.Equal(1.0, resAltPunctuation.Score);
+
+        var resPartial = study.CheckExerciseAnswer(questionJson, "1=B, 2=C");
+        Assert.False(resPartial.IsCorrect);
+        Assert.Equal(0.5, resPartial.Score);
+    }
+
+    [Fact]
+    public void CheckExerciseAnswer_Evaluates_Reorder_Question_Using_ModelAnswer()
+    {
+        var study = new StudyService(_lessons, new FakeLlm("Mock"));
+        string questionJson = """
+        {
+          "kind": "reorder",
+          "reorderTokens": ["climate", "change", "is", "accelerating"],
+          "modelAnswer": "climate change is accelerating",
+          "correctKey": "A",
+          "gapAnswer": "",
+          "explanation": "Correct order."
+        }
+        """;
+
+        var res = study.CheckExerciseAnswer(questionJson, "climate change is accelerating");
+        Assert.True(res.IsCorrect);
+        Assert.Equal(1.0, res.Score);
+
+        var resWrong = study.CheckExerciseAnswer(questionJson, "change climate is accelerating");
+        Assert.False(resWrong.IsCorrect);
+        Assert.Equal(0.0, resWrong.Score);
+    }
+
     private sealed class StreamingMockLlm : ILlmService
     {
         private readonly IReadOnlyList<string> _tokens;
